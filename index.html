@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restaurant Management System</title>
+
+    <!-- Essential dependencies -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Add Babel Standalone -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#FF5A5F',
+                        secondary: '#00A699',
+                        dark: '#484848',
+                        light: '#767676'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F7F7F7;
+        }
+
+        .active-tab {
+            color: #FF5A5F;
+            border-bottom: 2px solid #FF5A5F;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Add styles for the scrollable tab bar */
+        .scroll-tabs {
+            -webkit-overflow-scrolling: touch;
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .scroll-tabs::-webkit-scrollbar {
+            display: none;
+        }
+
+        .tab-indicator {
+            position: absolute;
+            bottom: 0;
+            height: 2px;
+            background-color: #2563eb;
+            transition: all 0.3s ease;
+        }
+    </style>
+
+    <!-- Shopto SDK -->
+    <script src="https://shopto.app/sdk/dist/sdk.v0.1.0.min.js"></script>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <!-- Load our modular scripts -->
+    <script type="text/babel" src="js/utils.js"></script>
+    <script type="text/babel" src="js/sdk.js"></script>
+    <script type="text/babel" src="js/components/DashboardCard.js"></script>
+    <script type="text/babel" src="js/components/TableCard.js"></script>
+    <script type="text/babel" src="js/components/ProductCard.js"></script>
+    <script type="text/babel" src="js/components/InventoryCard.js"></script>
+    <script type="text/babel" src="js/components/Modals.js"></script>
+    <script type="text/babel" src="js/components/Navigation.js"></script>
+    <script type="text/babel" src="js/pages/Dashboard.js"></script>
+    <script type="text/babel" src="js/pages/Products.js"></script>
+    <script type="text/babel" src="js/pages/Customers.js"></script>
+    <script type="text/babel" src="js/pages/Passbook.js"></script>
+    <script type="text/babel" src="js/pages/Analytics.js"></script>
+    <script type="text/babel" src="js/App.js"></script>
+    <script type="text/babel" src="js/main.js"></script>
+</body>
+
+</html>
