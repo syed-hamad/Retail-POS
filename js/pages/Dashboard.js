@@ -4,8 +4,7 @@ function Dashboard({ seller }) {
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState(null);
     const [isProfileOpen, setIsProfileOpen] = React.useState(false);
-    const [activeHomeTab, setActiveHomeTab] = React.useState('qr_orders'); // Default to QR Orders tab
-    const [isCompletedOrdersOpen, setIsCompletedOrdersOpen] = React.useState(false);
+    const [activeTab, setActiveTab] = React.useState('dashboard'); // Default to Dashboard tab
     const [completedOrders, setCompletedOrders] = React.useState([]);
     const [qrOrders, setQrOrders] = React.useState([]);
     const [loadingQrOrders, setLoadingQrOrders] = React.useState(true);
@@ -17,6 +16,16 @@ function Dashboard({ seller }) {
     const [isRenameRoomModalOpen, setIsRenameRoomModalOpen] = React.useState(false);
     const [selectedTableId, setSelectedTableId] = React.useState(null);
     const [selectedVariant, setSelectedVariant] = React.useState(null);
+    const [orders, setOrders] = React.useState([]);
+    const [loadingCompletedOrders, setLoadingCompletedOrders] = React.useState(true);
+    const [errorCompletedOrders, setErrorCompletedOrders] = React.useState(null);
+
+    // State for date filtering in completed orders
+    const [dateFilter, setDateFilter] = React.useState('7days'); // Options: today, yesterday, 7days, custom
+    const [customDateRange, setCustomDateRange] = React.useState({
+        startDate: null,
+        endDate: null
+    });
 
     // Function to show the add table modal
     const showAddTableModal = () => {
@@ -59,57 +68,55 @@ function Dashboard({ seller }) {
         }
     };
 
+    // Helper function to calculate start date based on filter
+    const calculateStartDate = (filter, customStart = null) => {
+        const now = new Date();
+
+        switch (filter) {
+            case 'today':
+                return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            case 'yesterday':
+                const yesterday = new Date(now);
+                yesterday.setDate(yesterday.getDate() - 1);
+                return new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
+            case '7days':
+                const sevenDaysAgo = new Date(now);
+                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+                return new Date(sevenDaysAgo.getFullYear(), sevenDaysAgo.getMonth(), sevenDaysAgo.getDate());
+            case 'custom':
+                return customStart || now;
+            default:
+                return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        }
+    };
+
+    // Helper function to calculate end date based on filter
+    const calculateEndDate = (filter, customEnd = null) => {
+        const now = new Date();
+
+        switch (filter) {
+            case 'today':
+                return now;
+            case 'yesterday':
+                const yesterday = new Date(now);
+                yesterday.setDate(yesterday.getDate() - 1);
+                return new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59);
+            case '7days':
+                return now;
+            case 'custom':
+                return customEnd || now;
+            default:
+                return now;
+        }
+    };
+
     // Handle room click
     const handleRoomClick = (tableId, variant) => {
         pp(`Room clicked: ${tableId || variant}`);
         // In a real implementation, this would navigate to the room details page
     };
 
-    // Completed Orders Side Panel
-    const CompletedOrdersPanel = ({ isOpen, onClose }) => {
-        if (!isOpen) return null;
-
-        return (
-            <div className="fixed inset-0 z-50 bg-black bg-opacity-50" onClick={onClose}>
-                <div className="absolute right-0 top-0 h-full w-96 bg-white shadow-lg overflow-y-auto" onClick={e => e.stopPropagation()}>
-                    <div className="p-6">
-                        {/* Profile Header */}
-                        <div className="flex items-center gap-4 mb-6">
-                            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border-2 border-gray-200">
-                                {seller?.avatar ? (
-                                    <img src={seller.avatar} alt={seller?.businessName} className="w-full h-full object-cover" />
-                                ) : (
-                                    <i className="ph ph-storefront text-4xl text-gray-400" />
-                                )}
-                            </div>
-                            <div className="flex-1">
-                                <h3 className="text-lg font-medium text-gray-900">
-                                    {seller?.businessName || 'Loading...'}
-                                </h3>
-                                {seller?.phone && (
-                                    <p className="text-sm text-gray-500">{seller.phone}</p>
-                                )}
-                            </div>
-                            <button className="p-2 hover:bg-gray-100 rounded-full" onClick={onClose}>
-                                <i className="ph ph-x text-xl text-gray-600" />
-                            </button>
-                        </div>
-
-                        {/* Profile Details */}
-                        <div className="space-y-4">
-                            {seller?.address && (
-                                <div className="flex items-start gap-3">
-                                    <i className="ph ph-map-pin text-gray-400" />
-                                    <p className="text-sm text-gray-600">{seller.address}</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    };
-
+    // Load tables and orders data
     React.useEffect(() => {
         async function fetchData() {
             try {
@@ -143,6 +150,7 @@ function Dashboard({ seller }) {
                 pp('Completed orders:', completed.length);
 
                 setCompletedOrders(completed);
+                setLoadingCompletedOrders(false);
 
                 // Get kitchen orders (orders with KITCHEN status)
                 const kitchenOrders = activeOrders.filter(order => {
@@ -265,48 +273,95 @@ function Dashboard({ seller }) {
         fetchData();
     }, [seller]);
 
-    // Fetch QR Orders (PLACED status from last 7 days)
+    // Fetch QR orders
     React.useEffect(() => {
-        async function fetchQrOrders() {
+        // Initial fetch
+        fetchOrders();
+
+        // Set up interval to fetch orders every 30 seconds
+        const interval = setInterval(fetchOrders, 30000);
+
+        // Cleanup interval on component unmount
+        return () => clearInterval(interval);
+    }, []); // Empty dependency array means this runs once on mount
+
+    // Fetch orders based on current filter
+    React.useEffect(() => {
+        fetchCompletedOrders();
+    }, [dateFilter, customDateRange]);
+
+    const fetchOrders = async () => {
+        try {
             setLoadingQrOrders(true);
-            try {
-                // Calculate date range for last 7 days
-                const now = new Date();
-                const startDate = new Date(now);
-                startDate.setDate(now.getDate() - 6); // Last 7 days (including today)
-                startDate.setHours(0, 0, 0, 0); // Start of the day
+            // Fetch last 100 orders to ensure we don't miss any
+            const fetchedOrders = await sdk.orders.list(100);
 
-                // For now, we'll use the SDK's mock data
-                const allOrders = await sdk.orders.list(loadedItemCount);
+            // Filter QR orders (orders with status "PLACED")
+            const filteredQrOrders = fetchedOrders.filter(order =>
+                order.currentStatus?.label === "PLACED"
+            );
 
-                // Filter orders by status and date
-                const placedOrders = allOrders.filter(order => {
-                    const orderDate = order.date?.toDate ? order.date.toDate() : new Date(order.date);
-                    return order.currentStatus?.label === "PLACED" &&
-                        orderDate >= startDate &&
-                        orderDate <= now;
-                });
+            setQrOrders(filteredQrOrders);
+            setLoadingQrOrders(false);
 
-                // Sort by date (newest first)
-                placedOrders.sort((a, b) => {
-                    const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date);
-                    const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date);
-                    return dateB - dateA;
-                });
-
-                setQrOrders(placedOrders);
-                setLoadingQrOrders(false);
-            } catch (err) {
-                console.error('Error fetching QR orders:', err);
-                setErrorQrOrders('Failed to load QR orders');
-                setLoadingQrOrders(false);
-            }
+            // Debug log
+            console.log('All orders:', fetchedOrders);
+            console.log('QR orders:', filteredQrOrders);
+        } catch (err) {
+            console.error('Error fetching orders:', err);
+            setErrorQrOrders('Failed to fetch orders');
+            setLoadingQrOrders(false);
         }
+    };
 
-        if (activeHomeTab === 'qr_orders') {
-            fetchQrOrders();
+    // Fetch completed orders with date filtering
+    const fetchCompletedOrders = async () => {
+        try {
+            setLoadingCompletedOrders(true);
+
+            // Calculate date range based on selected filter
+            const startDate = calculateStartDate(dateFilter, customDateRange.startDate);
+            const endDate = calculateEndDate(dateFilter, customDateRange.endDate);
+
+            // Fetch orders
+            const fetchedOrders = await sdk.orders.list(100);
+
+            // Filter by completion status and date range
+            const filteredOrders = fetchedOrders.filter(order => {
+                // Check if completed
+                if (!order.completed) return false;
+
+                // Get order date
+                const orderDate = order.date ?
+                    (order.date.toDate ? order.date.toDate() : new Date(order.date)) :
+                    null;
+
+                // Skip if no date
+                if (!orderDate) return false;
+
+                // Check if within date range
+                return orderDate >= startDate && orderDate <= endDate;
+            });
+
+            setCompletedOrders(filteredOrders);
+            setLoadingCompletedOrders(false);
+        } catch (err) {
+            console.error('Error fetching completed orders:', err);
+            setErrorCompletedOrders('Failed to fetch completed orders');
+            setLoadingCompletedOrders(false);
         }
-    }, [activeHomeTab, loadedItemCount]);
+    };
+
+    // Handle date range selection for custom filter
+    const handleDateRangeSelect = (startDate, endDate) => {
+        setCustomDateRange({ startDate, endDate });
+        setDateFilter('custom');
+    };
+
+    // Add a refresh function
+    const refreshOrders = () => {
+        fetchOrders();
+    };
 
     // Handle scroll to load more items
     const handleScroll = (e) => {
@@ -326,30 +381,61 @@ function Dashboard({ seller }) {
         }
     };
 
-    const filteredTables = React.useMemo(() => {
-        switch (activeHomeTab) {
-            case 'dining':
-                return tables.filter(table => table.type === 'dine_in');
-            case 'qr':
-                return tables.filter(table => table.type === 'qr');
-            case 'delivery':
-                return tables.filter(table => table.type === 'aggregator');
-            default:
-                return tables;
+    // Add order handling functions
+    const handleAcceptOrder = async (orderId) => {
+        try {
+            await sdk.orders.updateStatus(orderId, 'processing');
+            refreshOrders();
+        } catch (err) {
+            console.error('Error accepting order:', err);
         }
-    }, [tables, activeHomeTab]);
+    };
+
+    const handleRejectOrder = async (orderId) => {
+        try {
+            await sdk.orders.updateStatus(orderId, 'cancelled');
+            refreshOrders();
+        } catch (err) {
+            console.error('Error rejecting order:', err);
+        }
+    };
+
+    const handleDeleteOrder = async (orderId) => {
+        try {
+            if (confirm('Are you sure you want to delete this order?')) {
+                await sdk.orders.delete(orderId);
+                refreshOrders();
+            }
+        } catch (err) {
+            console.error('Error deleting order:', err);
+        }
+    };
+
+    const handlePrintBill = (orderId) => {
+        console.log('Print bill for order:', orderId);
+        // Implement print bill functionality
+    };
+
+    const filteredTables = React.useMemo(() => {
+        return tables.filter(table => {
+            if (table.type === 'dine_in') return true;
+            if (table.type === 'qr' && table.orders.length > 0) return true;
+            if (table.type === 'aggregator' && table.orders.length > 0) return true;
+            return false;
+        });
+    }, [tables]);
 
     // Group dining tables by section
     const groupedDiningTables = React.useMemo(() => {
-        if (activeHomeTab !== 'dining') return null;
         return filteredTables.reduce((acc, table) => {
+            if (table.type !== 'dine_in') return acc;
             if (!acc[table.section]) {
                 acc[table.section] = [];
             }
             acc[table.section].push(table);
             return acc;
         }, {});
-    }, [filteredTables, activeHomeTab]);
+    }, [filteredTables]);
 
     if (loading) {
         return (
@@ -366,46 +452,67 @@ function Dashboard({ seller }) {
     }
 
     return (
-        <div className="p-4">
+        <div className="flex flex-col h-screen">
             {/* Header with tabs */}
-            <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-2">
+            <div className="bg-white border-b">
+                <div className="flex items-center px-2">
                     <button
-                        onClick={() => setActiveHomeTab('qr_orders')}
-                        className={`px-4 py-2 rounded-full text-sm font-medium transition-colors flex items-center gap-2 ${activeHomeTab === 'qr_orders' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                        onClick={() => setIsProfileOpen(true)}
+                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-full"
                     >
-                        <i className="ph ph-qr-code text-lg" />
-                        QR Orders
+                        <i className="ph ph-list text-xl"></i>
                     </button>
+
+                    <div className="flex-1 overflow-x-auto py-2 px-2">
+                        <div className="flex space-x-2">
+                            <button
+                                onClick={() => setActiveTab('qr_orders')}
+                                className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-2 ${activeTab === 'qr_orders'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'text-gray-600 hover:bg-gray-100'
+                                    }`}
+                            >
+                                <i className="ph ph-sparkle text-lg"></i>
+                                QR Orders
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('dashboard')}
+                                className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-2 ${activeTab === 'dashboard'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'text-gray-600 hover:bg-gray-100'
+                                    }`}
+                            >
+                                <i className="ph ph-bowl-food text-lg"></i>
+                                Dashboard
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('completed')}
+                                className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-2 ${activeTab === 'completed'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'text-gray-600 hover:bg-gray-100'
+                                    }`}
+                            >
+                                <i className="ph ph-check-circle text-lg"></i>
+                                Completed
+                            </button>
+                        </div>
+                    </div>
+
                     <button
-                        onClick={() => setActiveHomeTab('dashboard')}
-                        className={`px-4 py-2 rounded-full text-sm font-medium transition-colors flex items-center gap-2 ${activeHomeTab === 'dashboard' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                        className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden hover:bg-gray-200 transition-colors border border-gray-200"
+                        onClick={() => setIsProfileOpen(true)}
                     >
-                        <i className="ph ph-layout-dashboard text-lg" />
-                        Dashboard
+                        {seller?.avatar ? (
+                            <img
+                                src={seller.avatar}
+                                alt={seller?.businessName}
+                                className="w-full h-full object-cover"
+                            />
+                        ) : (
+                            <i className="ph ph-storefront text-xl text-gray-400" />
+                        )}
                     </button>
                 </div>
-                <button
-                    onClick={() => setIsCompletedOrdersOpen(true)}
-                    className="px-3 py-1.5 text-sm text-gray-600 hover:text-blue-600 flex items-center gap-1.5"
-                >
-                    <i className="ph ph-check-circle text-lg" />
-                    {`${completedOrders.length}`}
-                </button>
-                <button
-                    className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden hover:bg-gray-200 transition-colors border border-gray-200"
-                    onClick={() => setIsProfileOpen(true)}
-                >
-                    {seller?.avatar ? (
-                        <img
-                            src={seller.avatar}
-                            alt={seller?.businessName}
-                            className="w-full h-full object-cover"
-                        />
-                    ) : (
-                        <i className="ph ph-storefront text-xl text-gray-400" />
-                    )}
-                </button>
             </div>
 
             {/* Profile Menu */}
@@ -413,12 +520,6 @@ function Dashboard({ seller }) {
                 seller={seller}
                 isOpen={isProfileOpen}
                 onClose={() => setIsProfileOpen(false)}
-            />
-
-            {/* Completed Orders Panel */}
-            <CompletedOrdersPanel
-                isOpen={isCompletedOrdersOpen}
-                onClose={() => setIsCompletedOrdersOpen(false)}
             />
 
             {/* Add Table Modal */}
@@ -438,38 +539,45 @@ function Dashboard({ seller }) {
             />
 
             {/* Content based on active tab */}
-            {activeHomeTab === 'qr_orders' ? (
-                <div
-                    className="overflow-y-auto px-2"
-                    style={{ maxHeight: 'calc(100vh - 150px)' }}
-                    onScroll={handleScroll}
-                    ref={qrOrdersScrollRef}
-                >
-                    {loadingQrOrders ? (
-                        <div className="p-4 text-center">
-                            <div className="animate-spin inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
-                        </div>
-                    ) : errorQrOrders ? (
-                        <div className="p-4 text-center text-red-600">{errorQrOrders}</div>
-                    ) : qrOrders.length === 0 ? (
-                        <NoOrdersFound />
-                    ) : (
-                        <div>
-                            {qrOrders.map(order => (
-                                <OrderGroupTile key={order.id} order={order} />
-                            ))}
-                            {isLoadingMore && (
-                                <div className="p-4 text-center">
-                                    <div className="animate-spin inline-block w-6 h-6 border-3 border-primary border-t-transparent rounded-full" />
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-            ) : (
-                <div className="overflow-y-auto px-2" style={{ maxHeight: 'calc(100vh - 150px)' }}>
-                    <div className="py-4">
-                        {/* Orders Dashboard - Price Variants */}
+            <div className="flex-1 overflow-hidden">
+                {activeTab === 'qr_orders' && (
+                    <div
+                        className="h-full overflow-y-auto px-4 py-2"
+                        onScroll={handleScroll}
+                        ref={qrOrdersScrollRef}
+                    >
+                        {loadingQrOrders ? (
+                            <div className="p-4 text-center">
+                                <div className="animate-spin inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+                            </div>
+                        ) : errorQrOrders ? (
+                            <div className="p-4 text-center text-red-600">{errorQrOrders}</div>
+                        ) : qrOrders.length === 0 ? (
+                            <NoOrdersFound />
+                        ) : (
+                            <div>
+                                {qrOrders.map(order => (
+                                    <OrderGroupTile
+                                        key={order.id}
+                                        order={order}
+                                        onAccept={() => handleAcceptOrder(order.id)}
+                                        onReject={() => handleRejectOrder(order.id)}
+                                        onDelete={() => handleDeleteOrder(order.id)}
+                                        onPrintBill={() => handlePrintBill(order.id)}
+                                    />
+                                ))}
+                                {isLoadingMore && (
+                                    <div className="p-4 text-center">
+                                        <div className="animate-spin inline-block w-6 h-6 border-3 border-primary border-t-transparent rounded-full" />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {activeTab === 'dashboard' && (
+                    <div className="h-full overflow-y-auto px-4 py-4">
                         <div className="mb-6">
                             <div className="grid grid-cols-2 gap-4">
                                 {['Default', ...(seller?.priceVariants?.map(v => v.title) || [])].map(variant => (
@@ -523,8 +631,151 @@ function Dashboard({ seller }) {
                             </button>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+
+                {activeTab === 'completed' && (
+                    <div className="h-full flex flex-col overflow-hidden">
+                        {/* Date filter tabs */}
+                        <div className="border-b">
+                            <div className="flex overflow-x-auto px-2">
+                                <button
+                                    onClick={() => setDateFilter('today')}
+                                    className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${dateFilter === 'today'
+                                        ? 'border-blue-600 text-blue-600'
+                                        : 'border-transparent text-gray-600 hover:text-gray-800'
+                                        }`}
+                                >
+                                    Today
+                                </button>
+                                <button
+                                    onClick={() => setDateFilter('yesterday')}
+                                    className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${dateFilter === 'yesterday'
+                                        ? 'border-blue-600 text-blue-600'
+                                        : 'border-transparent text-gray-600 hover:text-gray-800'
+                                        }`}
+                                >
+                                    Yesterday
+                                </button>
+                                <button
+                                    onClick={() => setDateFilter('7days')}
+                                    className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${dateFilter === '7days'
+                                        ? 'border-blue-600 text-blue-600'
+                                        : 'border-transparent text-gray-600 hover:text-gray-800'
+                                        }`}
+                                >
+                                    7 Days
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setDateFilter('custom');
+                                        // If no custom date range is set, initialize with today
+                                        if (!customDateRange.startDate) {
+                                            const today = new Date();
+                                            setCustomDateRange({
+                                                startDate: today,
+                                                endDate: today
+                                            });
+                                        }
+                                    }}
+                                    className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${dateFilter === 'custom'
+                                        ? 'border-blue-600 text-blue-600'
+                                        : 'border-transparent text-gray-600 hover:text-gray-800'
+                                        }`}
+                                >
+                                    Custom
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Custom date range selector */}
+                        {dateFilter === 'custom' && (
+                            <div className="bg-gray-50 p-4 flex flex-wrap items-center gap-4">
+                                <div>
+                                    <label className="block text-sm text-gray-600 mb-1">Start Date</label>
+                                    <input
+                                        type="date"
+                                        className="px-3 py-2 border rounded-lg"
+                                        value={customDateRange.startDate ? customDateRange.startDate.toISOString().split('T')[0] : ''}
+                                        onChange={(e) => {
+                                            const date = e.target.value ? new Date(e.target.value) : null;
+                                            setCustomDateRange(prev => ({
+                                                ...prev,
+                                                startDate: date
+                                            }));
+                                        }}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm text-gray-600 mb-1">End Date</label>
+                                    <input
+                                        type="date"
+                                        className="px-3 py-2 border rounded-lg"
+                                        value={customDateRange.endDate ? customDateRange.endDate.toISOString().split('T')[0] : ''}
+                                        onChange={(e) => {
+                                            const date = e.target.value ? new Date(e.target.value) : null;
+                                            setCustomDateRange(prev => ({
+                                                ...prev,
+                                                endDate: date
+                                            }));
+                                        }}
+                                    />
+                                </div>
+                                <div className="flex-1"></div>
+                                <button
+                                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                                    onClick={() => fetchCompletedOrders()}
+                                >
+                                    Apply
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Orders list */}
+                        <div className="flex-1 overflow-y-auto px-4 py-2">
+                            {loadingCompletedOrders ? (
+                                <div className="p-4 text-center">
+                                    <div className="animate-spin inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+                                </div>
+                            ) : errorCompletedOrders ? (
+                                <div className="p-4 text-center text-red-600">{errorCompletedOrders}</div>
+                            ) : completedOrders.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-20">
+                                    <i className="ph ph-inbox text-5xl text-gray-300 mb-5"></i>
+                                    <p className="text-xl text-gray-500 text-center">
+                                        No orders found for the selected date range.
+                                    </p>
+                                    {dateFilter === 'custom' && (
+                                        <button
+                                            className="mt-6 px-4 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
+                                            onClick={() => {
+                                                // Reset custom date range to today
+                                                const today = new Date();
+                                                setCustomDateRange({
+                                                    startDate: today,
+                                                    endDate: today
+                                                });
+                                            }}
+                                        >
+                                            Change Date
+                                        </button>
+                                    )}
+                                </div>
+                            ) : (
+                                <div>
+                                    {completedOrders.map(order => (
+                                        <OrderGroupTile
+                                            key={order.id}
+                                            order={order}
+                                            onDelete={() => handleDeleteOrder(order.id)}
+                                            onPrintBill={() => handlePrintBill(order.id)}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
     );
 } 

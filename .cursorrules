@@ -1,0 +1,4 @@
+Use Phosphor Icons library for all icons (prefix: ph ph-*)
+For missing images, use semantic Phosphor icons (ph ph-user, ph ph-storefront, ph ph-image)
+Avoid NPM package dependencies - instead, load JavaScript libraries directly from trusted CDNs using script tags in the HTML.
+Always fetch real data from the Shopto SDK instead of using placeholder or mock data
