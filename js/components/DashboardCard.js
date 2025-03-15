@@ -22,8 +22,11 @@ function DashboardCard({ icon, title, value, trend }) {
 function DashboardTile({ tableId, variant, orders, onTap, onLongPress }) {
     // Find the oldest order for this table/variant
     const lastPlacedDate = orders.length > 0
-        ? orders.map(o => o.currentStatus?.date).reduce((a, b) =>
-            new Date(a) < new Date(b) ? a : b, orders[0].currentStatus?.date)
+        ? orders.map(o => o.currentStatus?.date).reduce((a, b) => {
+            const dateA = parseDate(a);
+            const dateB = parseDate(b);
+            return dateA && dateB && dateA < dateB ? a : b;
+        }, orders[0].currentStatus?.date)
         : null;
 
     // Get duration object from the getTimeDuration function
@@ -62,14 +65,6 @@ function DashboardTile({ tableId, variant, orders, onTap, onLongPress }) {
     // Display duration if available
     const durationDisplay = duration ? duration.display : '';
 
-    // Handle remove button click
-    const handleRemove = (e) => {
-        e.stopPropagation(); // Prevent triggering the tile's onClick
-        if (tableId && !isAggregator) {
-            removeTable(tableId);
-        }
-    };
-
     return (
         <div
             className={`relative rounded-lg shadow-sm ${color} cursor-pointer transition-all duration-300 transform hover:scale-105 hover:shadow-md`}
@@ -79,16 +74,6 @@ function DashboardTile({ tableId, variant, orders, onTap, onLongPress }) {
                 onLongPress && onLongPress();
             }}
         >
-            {/* Remove button - only show for tables, not variants or aggregators */}
-            {tableId && !variant && !isAggregator && (
-                <button
-                    className="absolute top-1 right-1 text-gray-500 hover:text-red-500 p-1 rounded-full hover:bg-white hover:bg-opacity-30 z-10"
-                    onClick={handleRemove}
-                    title="Remove table"
-                >
-                    <i className="ph ph-trash text-sm"></i>
-                </button>
-            )}
             <div className="flex flex-col items-center justify-between h-full py-2">
                 <h3 className="text-lg font-bold text-center mb-2">
                     {isAggregator ? (

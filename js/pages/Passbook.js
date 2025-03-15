@@ -64,8 +64,25 @@ function Passbook() {
     React.useEffect(() => {
         async function fetchData() {
             try {
-                const orders = await sdk.orders.list(100);
-                const customersList = await sdk.customers.list(100);
+                const ordersSnapshot = await sdk.collection("Orders")
+                    .orderBy("date", "desc")
+                    .limit(100)
+                    .get();
+
+                const orders = ordersSnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+
+                const customersSnapshot = await sdk.collection("Customers")
+                    .orderBy("lastOrderDate", "desc")
+                    .limit(100)
+                    .get();
+
+                const customersList = customersSnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
 
                 pp('Fetched orders:', orders); // Debug log
 
@@ -119,7 +136,7 @@ function Passbook() {
                 pp('Processed transactions:', transactionsList); // Debug log
 
                 setTransactions(transactionsList);
-                setCustomers(customersList || []);
+                setCustomers(customersList);
                 setLoading(false);
             } catch (err) {
                 console.error('Error fetching transactions:', err);

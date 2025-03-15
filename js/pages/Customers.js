@@ -11,26 +11,17 @@ function Customers() {
         async function fetchCustomers() {
             try {
                 // Fetch customers from SDK
-                const customersList = await sdk.customers.list(100);
-                setCustomers(customersList || [
-                    // Fallback demo data if SDK method doesn't exist
-                    {
-                        id: '1',
-                        name: 'John Doe',
-                        phone: '+91 98765 43210',
-                        totalSpent: 4500,
-                        lastOrderDate: new Date().toISOString(),
-                        walletBalance: 0
-                    },
-                    {
-                        id: '2',
-                        name: 'Jane Smith',
-                        phone: '+91 98765 43211',
-                        totalSpent: 1200,
-                        lastOrderDate: new Date(Date.now() - 86400000).toISOString(),
-                        walletBalance: -500
-                    }
-                ]);
+                const customersSnapshot = await sdk.collection("Customers")
+                    .orderBy("lastOrderDate", "desc")
+                    .limit(100)
+                    .get();
+
+                const customersList = customersSnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+
+                setCustomers(customersList);
                 setLoading(false);
             } catch (err) {
                 console.error('Error fetching customers:', err);

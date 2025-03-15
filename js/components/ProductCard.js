@@ -34,10 +34,17 @@ function ProductCard({ product }) {
                             <span className="text-gray-500">Price: </span>
                             <span className="font-medium">₹{product.price}</span>
                         </div>
-                        <div className="text-sm">
-                            <span className="text-gray-500">MRP: </span>
-                            <span className="line-through text-gray-400">₹{product.mrp}</span>
-                        </div>
+                        {product.hasDiscount && (
+                            <>
+                                <div className="text-sm">
+                                    <span className="text-gray-500">MRP: </span>
+                                    <span className="line-through text-gray-400">₹{product.mrp}</span>
+                                </div>
+                                <div className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded-full">
+                                    {product.discount}% off
+                                </div>
+                            </>
+                        )}
                         {product.conv > 0 && (
                             <div className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
                                 {product.conv}% conversion

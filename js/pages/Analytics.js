@@ -2,6 +2,7 @@
 function Analytics() {
     const [metrics, setMetrics] = React.useState(null);
     const [loading, setLoading] = React.useState(true);
+    const [error, setError] = React.useState(null);
     const [dateFilter, setDateFilter] = React.useState('last30');
     const [customDateRange, setCustomDateRange] = React.useState({ start: null, end: null });
 
@@ -13,64 +14,195 @@ function Analytics() {
         { id: 'custom', label: 'Custom' }
     ];
 
+    // Get date range based on filter
+    const getDateRange = (filter) => {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        switch (filter) {
+            case 'yesterday':
+                return {
+                    start: new Date(today.getTime() - 24 * 60 * 60 * 1000),
+                    end: today
+                };
+            case 'last7':
+                return {
+                    start: new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000),
+                    end: now
+                };
+            case 'last30':
+                return {
+                    start: new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000),
+                    end: now
+                };
+            case 'custom':
+                return {
+                    start: customDateRange.start,
+                    end: customDateRange.end
+                };
+            default:
+                return { start: null, end: null };
+        }
+    };
+
+    // Check if a date is within the selected range
+    const isDateInRange = (date, range) => {
+        if (!range.start || !range.end) return true;
+
+        // Handle Firebase Timestamp or regular date
+        const orderDate = date?.toDate ? date.toDate() : new Date(date);
+        return orderDate >= range.start && orderDate <= range.end;
+    };
+
+    // Calculate trends by comparing with previous period
+    const calculateTrends = (currentOrders, previousOrders) => {
+        // If no previous data, return 0 (no change)
+        if (!previousOrders || previousOrders.length === 0) {
+            return {
+                sales: 0,
+                orders: 0,
+                turnAround: 0,
+                orderValue: 0
+            };
+        }
+
+        // Calculate current metrics
+        const currentSales = currentOrders.reduce((sum, order) =>
+            sum + (order.items || []).reduce((itemSum, item) =>
+                itemSum + ((Number(item.price) || 0) * (Number(item.quantity || item.qnt || 0))), 0), 0);
+
+        const currentOrderCount = currentOrders.length;
+
+        const currentTurnAround = currentOrders.reduce((sum, order) => {
+            if (!order.date || !order.completedAt) return sum;
+            const start = order.date?.toDate ? order.date.toDate() : new Date(order.date);
+            const end = order.completedAt?.toDate ? order.completedAt.toDate() : new Date(order.completedAt);
+            return sum + (end - start) / (1000 * 60); // in minutes
+        }, 0) / (currentOrders.filter(o => o.date && o.completedAt).length || 1);
+
+        const currentOrderValue = currentSales / (currentOrderCount || 1);
+
+        // Calculate previous metrics
+        const previousSales = previousOrders.reduce((sum, order) =>
+            sum + (order.items || []).reduce((itemSum, item) =>
+                itemSum + ((Number(item.price) || 0) * (Number(item.quantity || item.qnt || 0))), 0), 0);
+
+        const previousOrderCount = previousOrders.length;
+
+        const previousTurnAround = previousOrders.reduce((sum, order) => {
+            if (!order.date || !order.completedAt) return sum;
+            const start = order.date?.toDate ? order.date.toDate() : new Date(order.date);
+            const end = order.completedAt?.toDate ? order.completedAt.toDate() : new Date(order.completedAt);
+            return sum + (end - start) / (1000 * 60); // in minutes
+        }, 0) / (previousOrders.filter(o => o.date && o.completedAt).length || 1);
+
+        const previousOrderValue = previousSales / (previousOrderCount || 1);
+
+        // Calculate percentage changes
+        const calculatePercentChange = (current, previous) => {
+            if (previous === 0) return current > 0 ? 100 : 0;
+            return ((current - previous) / previous) * 100;
+        };
+
+        return {
+            sales: calculatePercentChange(currentSales, previousSales),
+            orders: calculatePercentChange(currentOrderCount, previousOrderCount),
+            turnAround: calculatePercentChange(currentTurnAround, previousTurnAround),
+            orderValue: calculatePercentChange(currentOrderValue, previousOrderValue)
+        };
+    };
+
     React.useEffect(() => {
         async function fetchAnalytics() {
             try {
-                const orders = await sdk.orders.list(100);
-                const now = new Date();
+                setLoading(true);
+                setError(null);
 
-                // Calculate metrics
-                const totalRevenue = orders.reduce((sum, order) =>
+                // Get current date range
+                const currentRange = getDateRange(dateFilter);
+
+                // Fetch all orders for analysis
+                const ordersSnapshot = await sdk.collection("Orders")
+                    .orderBy("date", "desc")
+                    .limit(200) // Increased limit to get more historical data for trends
+                    .get();
+
+                const allOrders = ordersSnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+
+                // Filter orders for current period
+                const currentPeriodOrders = allOrders.filter(order =>
+                    isDateInRange(order.date, currentRange));
+
+                // Calculate previous period range (same duration, earlier dates)
+                const previousRange = {
+                    start: currentRange.start ? new Date(currentRange.start.getTime() - (currentRange.end - currentRange.start)) : null,
+                    end: currentRange.start ? new Date(currentRange.start) : null
+                };
+
+                // Filter orders for previous period
+                const previousPeriodOrders = allOrders.filter(order =>
+                    isDateInRange(order.date, previousRange));
+
+                // Calculate trends
+                const trends = calculateTrends(currentPeriodOrders, previousPeriodOrders);
+
+                // Calculate metrics for current period
+                const totalRevenue = currentPeriodOrders.reduce((sum, order) =>
                     sum + (order.items || []).reduce((itemSum, item) =>
-                        itemSum + ((Number(item.price) || 0) * (Number(item.qnt) || 0)), 0), 0);
+                        itemSum + ((Number(item.price) || 0) * (Number(item.quantity || item.qnt || 0))), 0), 0);
 
-                const totalOrders = orders.length;
+                const totalOrders = currentPeriodOrders.length;
 
-                // Calculate average turn around time (assuming there's a completed timestamp)
-                const avgTurnAroundTime = orders.reduce((sum, order) => {
-                    const start = new Date(order.date?.toDate?.() || order.date);
-                    const end = new Date(order.completedAt?.toDate?.() || order.completedAt || start);
+                // Calculate average turn around time
+                const completedOrders = currentPeriodOrders.filter(order => order.date && order.completedAt);
+                const avgTurnAroundTime = completedOrders.reduce((sum, order) => {
+                    const start = order.date?.toDate ? order.date.toDate() : new Date(order.date);
+                    const end = order.completedAt?.toDate ? order.completedAt.toDate() : new Date(order.completedAt);
                     return sum + (end - start) / (1000 * 60); // in minutes
-                }, 0) / (orders.length || 1);
+                }, 0) / (completedOrders.length || 1);
 
                 // Split orders by type
-                const offlineOrders = orders.filter(order => !order.isOnline);
-                const onlineOrders = orders.filter(order => order.isOnline);
-                const zomatoOrders = orders.filter(order => order.source === 'zomato');
+                const offlineOrders = currentPeriodOrders.filter(order => !order.isOnline);
+                const onlineOrders = currentPeriodOrders.filter(order => order.isOnline);
+                const zomatoOrders = currentPeriodOrders.filter(order => order.source === 'zomato');
+                const dineInOrders = offlineOrders.filter(order => order.orderType === 'dine-in');
 
                 // Calculate revenues by type
                 const offlineSales = offlineOrders.reduce((sum, order) =>
                     sum + (order.items || []).reduce((itemSum, item) =>
-                        itemSum + ((Number(item.price) || 0) * (Number(item.qnt) || 0)), 0), 0);
+                        itemSum + ((Number(item.price) || 0) * (Number(item.quantity || item.qnt || 0))), 0), 0);
 
                 const onlineSales = onlineOrders.reduce((sum, order) =>
                     sum + (order.items || []).reduce((itemSum, item) =>
-                        itemSum + ((Number(item.price) || 0) * (Number(item.qnt) || 0)), 0), 0);
+                        itemSum + ((Number(item.price) || 0) * (Number(item.quantity || item.qnt || 0))), 0), 0);
 
                 const zomatoSales = zomatoOrders.reduce((sum, order) =>
                     sum + (order.items || []).reduce((itemSum, item) =>
-                        itemSum + ((Number(item.price) || 0) * (Number(item.qnt) || 0)), 0), 0);
+                        itemSum + ((Number(item.price) || 0) * (Number(item.quantity || item.qnt || 0))), 0), 0);
+
+                const dineInSales = dineInOrders.reduce((sum, order) =>
+                    sum + (order.items || []).reduce((itemSum, item) =>
+                        itemSum + ((Number(item.price) || 0) * (Number(item.quantity || item.qnt || 0))), 0), 0);
 
                 setMetrics({
                     totalSales: totalRevenue,
                     totalOrders,
                     avgTurnAroundTime,
-                    avgOrderValue: totalRevenue / totalOrders,
+                    avgOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0,
                     offlineSales,
                     onlineSales,
                     zomatoSales,
-                    // Mock trends for now - in real app, calculate from historical data
-                    trends: {
-                        sales: -85.98,
-                        orders: -68.42,
-                        turnAround: 180.0,
-                        orderValue: -55.6
-                    }
+                    dineInSales,
+                    trends
                 });
 
                 setLoading(false);
             } catch (err) {
                 console.error('Error fetching analytics:', err);
+                setError('Failed to load analytics data');
                 setLoading(false);
             }
         }
@@ -227,7 +359,7 @@ function Analytics() {
                     <div className="mt-2 flex items-baseline gap-2">
                         <span className="text-2xl font-bold text-gray-900">{formattedValue}</span>
                         <span className={`text-sm font-medium ${trendColor}`}>
-                            {trendIcon} {Math.abs(trend)}%
+                            {trendIcon} {Math.abs(trend).toFixed(1)}%
                         </span>
                     </div>
                 </div>
@@ -242,6 +374,20 @@ function Analytics() {
         return (
             <div className="p-4 text-center">
                 <div className="animate-spin inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="p-4 text-center text-red-600">
+                {error}
+                <button
+                    className="block mx-auto mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    onClick={() => window.location.reload()}
+                >
+                    Try Again
+                </button>
             </div>
         );
     }
@@ -324,25 +470,25 @@ function Analytics() {
                 <MetricCard
                     title="Offline Sales"
                     value={metrics.offlineSales}
-                    trend={-85.98}
+                    trend={metrics.trends.sales}
                     className="bg-gray-50"
                 />
                 <MetricCard
                     title="Online Sales"
                     value={metrics.onlineSales}
-                    trend={0}
+                    trend={metrics.trends.sales}
                     className="bg-gray-50"
                 />
                 <MetricCard
                     title="Dine-in Sales"
-                    value={metrics.offlineSales * 0.6}
-                    trend={22.17}
+                    value={metrics.dineInSales}
+                    trend={metrics.trends.sales}
                     className="bg-gray-50"
                 />
                 <MetricCard
                     title="Zomato"
                     value={metrics.zomatoSales}
-                    trend={-95.78}
+                    trend={metrics.trends.sales}
                     className="bg-gray-50"
                 />
             </div>

@@ -1,7 +1,5 @@
 // Initialize SDK
-const sdk = window.shoptoTools.initialize({
-    userId: 'AtBtXdOK6p1KwswKhEA6'
-});
+const sdk = new window.ShoptoSDK("AtBtXdOK6p1KwswKhEA6");
 
 // Helper function to show toast messages
 function showToast(message, type = 'success') {
@@ -21,4 +19,8 @@ function showToast(message, type = 'success') {
             document.body.removeChild(toast);
         }, 500);
     }, 3000);
-} 
+}
+
+// Export the SDK and showToast utility
+window.sdk = sdk;
+window.showToast = showToast; 

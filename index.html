@@ -7,11 +7,13 @@
     <title>Restaurant Management System</title>
 
     <!-- Essential dependencies -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script crossorigin src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+
     <!-- Add Babel Standalone -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/@phosphor-icons/web"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -84,12 +86,18 @@
     <!-- Load our modular scripts -->
     <script type="text/babel" src="js/utils.js"></script>
     <script type="text/babel" src="js/sdk.js"></script>
+    <script type="text/babel" src="js/utils/UserSession.js"></script>
+    <script type="text/babel" src="js/models/Role.js"></script>
+    <script type="text/babel" src="js/models/ProfileInfo.js"></script>
+    <script type="text/babel" src="js/models/Product.js"></script>
+    <script type="text/babel" src="js/contexts/ProfileContext.js"></script>
+    <script type="text/babel" src="js/components/Navigation.js"></script>
     <script type="text/babel" src="js/components/DashboardCard.js"></script>
     <script type="text/babel" src="js/components/TableCard.js"></script>
     <script type="text/babel" src="js/components/ProductCard.js"></script>
     <script type="text/babel" src="js/components/InventoryCard.js"></script>
     <script type="text/babel" src="js/components/Modals.js"></script>
-    <script type="text/babel" src="js/components/Navigation.js"></script>
+    <script type="text/babel" src="js/pages/ProfilePage.js"></script>
     <script type="text/babel" src="js/pages/Dashboard.js"></script>
     <script type="text/babel" src="js/pages/Products.js"></script>
     <script type="text/babel" src="js/pages/Customers.js"></script>

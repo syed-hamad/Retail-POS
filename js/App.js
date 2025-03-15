@@ -1,19 +1,6 @@
 // Main App Component
 function App() {
     const [activeTab, setActiveTab] = React.useState('dashboard');
-    const [seller, setSeller] = React.useState(null);
-
-    React.useEffect(() => {
-        async function fetchSellerProfile() {
-            try {
-                const sellerData = await sdk.getSeller();
-                setSeller(sellerData);
-            } catch (err) {
-                console.error('Error fetching seller profile:', err);
-            }
-        }
-        fetchSellerProfile();
-    }, []);
 
     const tabs = [
         { id: 'dashboard', icon: 'house', label: 'Home' },
@@ -25,7 +12,7 @@ function App() {
 
     const renderContent = () => {
         switch (activeTab) {
-            case 'dashboard': return <Dashboard seller={seller} />;
+            case 'dashboard': return <Dashboard />;
             case 'products': return <Products />;
             case 'customers': return <Customers />;
             case 'passbook': return <Passbook />;

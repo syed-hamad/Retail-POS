@@ -16,30 +16,32 @@ function Products() {
     React.useEffect(() => {
         async function fetchData() {
             try {
-                const productsList = await sdk.products.list(100);
+                // Fetch products
+                const productsSnapshot = await sdk.collection("Product")
+                    .orderBy("date", "desc")
+                    .limit(100)
+                    .get();
+
+                const productsList = productsSnapshot.docs.map(doc =>
+                    Product.fromDoc(doc)
+                ).filter(Boolean);
+
                 setProducts(productsList);
 
-                // Fetch inventory items (assuming the SDK has this method)
-                const inventoryList = await sdk.inventory.list(100);
-                setInventory(inventoryList || [
-                    // Fallback demo data if SDK method doesn't exist
-                    {
-                        id: '1',
-                        name: 'Tomato',
-                        quantity: 50,
-                        unit: 'kg',
-                        minQuantity: 20,
-                        lastUpdated: new Date().toISOString()
-                    },
-                    {
-                        id: '2',
-                        name: 'Onion',
-                        quantity: 15,
-                        unit: 'kg',
-                        minQuantity: 25,
-                        lastUpdated: new Date().toISOString()
-                    }
-                ]);
+                // Fetch inventory items
+                const inventorySnapshot = await sdk.collection("Inventory")
+                    .orderBy("updatedAt", "desc")
+                    .limit(100)
+                    .get();
+
+                const inventoryList = inventorySnapshot.docs.map(doc =>
+                    InventoryItem.fromJson({
+                        id: doc.id,
+                        ...doc.data()
+                    })
+                );
+
+                setInventory(inventoryList);
 
                 // Extract unique categories and count products in each
                 const categoryCounts = productsList.reduce((acc, product) => {
@@ -92,33 +94,42 @@ function Products() {
         try {
             if (editingItem) {
                 // Update existing item
+                const updatedItem = new InventoryItem({
+                    ...editingItem,
+                    ...itemData,
+                    updatedAt: new Date()
+                });
+
                 const updatedInventory = inventory.map(item =>
-                    item.id === editingItem.id ? { ...item, ...itemData } : item
+                    item.id === editingItem.id ? updatedItem : item
                 );
                 setInventory(updatedInventory);
 
-                // Update in SDK if available
-                if (sdk.inventory?.update) {
-                    await sdk.inventory.update(editingItem.id, itemData);
-                }
+                // Update in Firestore
+                await sdk.collection("Inventory").doc(editingItem.id).update({
+                    ...itemData,
+                    updatedAt: new Date()
+                });
             } else {
                 // Add new item
-                const newItem = {
-                    id: Date.now().toString(),
-                    ...itemData
-                };
-                setInventory([...inventory, newItem]);
+                const newItemData = new InventoryItem({
+                    ...itemData,
+                    date: new Date(),
+                    updatedAt: new Date()
+                });
 
-                // Add to SDK if available
-                if (sdk.inventory?.add) {
-                    await sdk.inventory.add(newItem);
-                }
+                // Add to Firestore
+                const newItemRef = sdk.collection("Inventory").doc();
+                await newItemRef.set(newItemData.toJson());
+
+                newItemData.id = newItemRef.id;
+                setInventory([...inventory, newItemData]);
             }
             setIsAddModalOpen(false);
             setEditingItem(null);
         } catch (err) {
             console.error('Error saving inventory:', err);
-            alert('Failed to save inventory item');
+            showToast('Failed to save inventory item', 'error');
         }
     };
 
@@ -129,13 +140,12 @@ function Products() {
             const updatedInventory = inventory.filter(item => item.id !== itemId);
             setInventory(updatedInventory);
 
-            // Delete from SDK if available
-            if (sdk.inventory?.delete) {
-                await sdk.inventory.delete(itemId);
-            }
+            // Delete from Firestore
+            await sdk.collection("Inventory").doc(itemId).delete();
+            showToast('Inventory item deleted successfully', 'success');
         } catch (err) {
             console.error('Error deleting inventory:', err);
-            alert('Failed to delete inventory item');
+            showToast('Failed to delete inventory item', 'error');
         }
     };
 

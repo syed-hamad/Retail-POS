@@ -62,6 +62,10 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
     const totalItems = order.items?.reduce((sum, item) => sum + (item.quantity || 1), 0) || 0;
     const totalAmount = order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0) || 0;
 
+    // Get time ago duration
+    const duration = getTimeDuration(order.date);
+    const timeAgo = duration ? duration.display + ' ago' : 'Just now';
+
     return (
         <div className="my-3">
             <div
@@ -79,11 +83,7 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
                                     {order.customer?.name || "Your Customer"}
                                 </h3>
                                 <p className="text-sm text-gray-500">
-                                    {new Date(order.date).toLocaleTimeString('en-US', {
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                        hour12: true
-                                    })}
+                                    {timeAgo}
                                 </p>
                             </div>
                         </div>
@@ -120,12 +120,32 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
 
 // Order Details Modal Component
 function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPrintBill }) {
-    const totalAmount = order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0) || 0;
+    const [isCustomerSearchOpen, setIsCustomerSearchOpen] = React.useState(false);
+    const totalAmount = order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || item.qnt || 1)), 0) || 0;
     const taxAmount = totalAmount * 0.18; // Assuming 18% tax
     const finalAmount = totalAmount + taxAmount;
 
     // Determine if this is a new order that can be accepted/rejected
     const isNewOrder = order.currentStatus?.label === "PLACED";
+
+    // Handle selecting a customer
+    const handleSelectCustomer = async (customer) => {
+        try {
+            // Update the order with the selected customer
+            await sdk.orders.setCustomer(order.id, customer);
+
+            // Show success message
+            showToast(`Customer ${customer.name} assigned to order`);
+
+            // Refresh the order data
+            // In a real implementation, you would update the order state
+            // For now, we'll just close and reopen the modal
+            onClose();
+        } catch (err) {
+            console.error('Error assigning customer:', err);
+            showToast('Failed to assign customer', 'error');
+        }
+    };
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-end">
@@ -145,18 +165,27 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                 <div className="p-4">
                     {/* Customer Info */}
                     <div className="bg-gray-50 rounded-xl p-4 mb-6">
-                        <div className="flex items-center gap-3 mb-3">
-                            <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-                                <i className="ph ph-user text-2xl text-gray-500"></i>
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
+                                    <i className="ph ph-user text-2xl text-gray-500"></i>
+                                </div>
+                                <div>
+                                    <h3 className="font-medium text-gray-900">
+                                        {order.customer?.name || "Your Customer"}
+                                    </h3>
+                                    <p className="text-sm text-gray-500">
+                                        {order.customer?.phone || "No phone"}
+                                    </p>
+                                </div>
                             </div>
-                            <div>
-                                <h3 className="font-medium text-gray-900">
-                                    {order.customer?.name || "Your Customer"}
-                                </h3>
-                                <p className="text-sm text-gray-500">
-                                    {order.customer?.phone || "No phone"}
-                                </p>
-                            </div>
+                            <button
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-full"
+                                onClick={() => setIsCustomerSearchOpen(true)}
+                                title="Assign Customer"
+                            >
+                                <i className="ph ph-user-plus text-xl"></i>
+                            </button>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
@@ -166,13 +195,7 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                             <div>
                                 <p className="text-sm text-gray-500">Date & Time</p>
                                 <p className="font-medium">
-                                    {new Date(order.date).toLocaleString('en-US', {
-                                        month: 'short',
-                                        day: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                        hour12: true
-                                    })}
+                                    {formatDate(order.date, 'full')}
                                 </p>
                             </div>
                         </div>
@@ -291,6 +314,15 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                     )}
                 </div>
             </div>
+
+            {/* Customer Search Modal */}
+            {isCustomerSearchOpen && (
+                <CustomerSearch
+                    isOpen={isCustomerSearchOpen}
+                    onClose={() => setIsCustomerSearchOpen(false)}
+                    onSelectCustomer={handleSelectCustomer}
+                />
+            )}
         </div>
     );
 }

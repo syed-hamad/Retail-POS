@@ -1,5 +1,6 @@
 // Dashboard Component
-function Dashboard({ seller }) {
+function Dashboard() {
+    const { profile: seller, tables: profileTables } = window.useProfile ? window.useProfile() : { profile: null, tables: [] };
     const [tables, setTables] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState(null);
@@ -19,6 +20,9 @@ function Dashboard({ seller }) {
     const [orders, setOrders] = React.useState([]);
     const [loadingCompletedOrders, setLoadingCompletedOrders] = React.useState(true);
     const [errorCompletedOrders, setErrorCompletedOrders] = React.useState(null);
+    const [isOrderRoomOpen, setIsOrderRoomOpen] = React.useState(false);
+    const [selectedRoomTableId, setSelectedRoomTableId] = React.useState(null);
+    const [selectedRoomVariant, setSelectedRoomVariant] = React.useState(null);
 
     // State for date filtering in completed orders
     const [dateFilter, setDateFilter] = React.useState('7days'); // Options: today, yesterday, 7days, custom
@@ -54,7 +58,7 @@ function Dashboard({ seller }) {
             const updatedTables = currentTables.filter(table => table.title !== tableId);
 
             // Update seller document in Firestore
-            await sdk.sellers.update(seller.id, {
+            await sdk.profile.update({
                 tables: updatedTables
             });
 
@@ -71,6 +75,7 @@ function Dashboard({ seller }) {
     // Helper function to calculate start date based on filter
     const calculateStartDate = (filter, customStart = null) => {
         const now = new Date();
+        const customStartDate = parseDate(customStart);
 
         switch (filter) {
             case 'today':
@@ -84,7 +89,7 @@ function Dashboard({ seller }) {
                 sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
                 return new Date(sevenDaysAgo.getFullYear(), sevenDaysAgo.getMonth(), sevenDaysAgo.getDate());
             case 'custom':
-                return customStart || now;
+                return customStartDate || now;
             default:
                 return new Date(now.getFullYear(), now.getMonth(), now.getDate());
         }
@@ -93,6 +98,7 @@ function Dashboard({ seller }) {
     // Helper function to calculate end date based on filter
     const calculateEndDate = (filter, customEnd = null) => {
         const now = new Date();
+        const customEndDate = parseDate(customEnd);
 
         switch (filter) {
             case 'today':
@@ -104,7 +110,7 @@ function Dashboard({ seller }) {
             case '7days':
                 return now;
             case 'custom':
-                return customEnd || now;
+                return customEndDate || now;
             default:
                 return now;
         }
@@ -112,59 +118,66 @@ function Dashboard({ seller }) {
 
     // Handle room click
     const handleRoomClick = (tableId, variant) => {
-        pp(`Room clicked: ${tableId || variant}`);
-        // In a real implementation, this would navigate to the room details page
+        setSelectedRoomTableId(tableId);
+        setSelectedRoomVariant(variant);
+        setIsOrderRoomOpen(true);
+
+        // Log analytics event
+        console.log(`Opening OrderRoom for ${tableId ? `Table ${tableId}` : variant}`);
     };
 
     // Load tables and orders data
     React.useEffect(() => {
         async function fetchData() {
             try {
-                const allOrders = await sdk.orders.list(100);
+                const ordersSnapshot = await sdk.collection("Orders")
+                    .orderBy("date", "desc")
+                    .limit(100)
+                    .get();
 
-                // Filter orders by date - only show orders from the last 7 days
-                const sevenDaysAgo = new Date();
-                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                const allOrders = ordersSnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
 
-                // Filter orders by date and completion status
-                const recentOrders = allOrders.filter(order => {
-                    // Get the order date
-                    const orderDate = order.date ?
-                        (order.date.toDate ? order.date.toDate() : new Date(order.date)) :
-                        null;
-
-                    // If no date, skip this order
-                    if (!orderDate) return false;
-
-                    // Check if the order is from the last 7 days
-                    return orderDate >= sevenDaysAgo;
+                // Filter orders by status - only show orders with KITCHEN status
+                // This matches the Flutter implementation: .where("currentStatus.label", isEqualTo: OrderStatus.KITCHEN.name)
+                const kitchenOrders = allOrders.filter(order => {
+                    return order.currentStatus?.label === 'KITCHEN';
                 });
 
                 pp('All orders:', allOrders.length);
-                pp('Recent orders (last 7 days):', recentOrders.length);
+                pp('Kitchen orders:', kitchenOrders.length);
 
-                const activeOrders = recentOrders.filter(order => !order.completed);
-                const completed = recentOrders.filter(order => order.completed);
+                // Use real tables from seller object instead of fake data
+                const realTables = seller?.tables || [];
 
-                pp('Active orders:', activeOrders.length);
-                pp('Completed orders:', completed.length);
+                // Convert seller tables to the format we need
+                const formattedTables = realTables.map(table => ({
+                    id: table.id || table.title,
+                    title: table.title,
+                    desc: table.desc,
+                    type: table.type || 'dine_in',
+                    section: table.section || 'ac'
+                }));
 
-                setCompletedOrders(completed);
-                setLoadingCompletedOrders(false);
+                // Add default tables for aggregators if they don't exist
+                const defaultAggregators = [
+                    { id: 'default', title: 'Default', type: 'qr' },
+                    { id: 'zomato', title: 'Zomato', type: 'aggregator' },
+                    { id: 'swiggy', title: 'Swiggy', type: 'aggregator' }
+                ];
 
-                // Get kitchen orders (orders with KITCHEN status)
-                const kitchenOrders = activeOrders.filter(order => {
-                    // Check if the order has a currentStatus property
-                    if (!order.currentStatus || !order.currentStatus.label) {
-                        return false;
-                    }
-
-                    // Check if the status is KITCHEN
-                    return order.currentStatus.label === 'KITCHEN';
-                });
+                // Combine real tables with default aggregators
+                // Only add default aggregators if they don't already exist in real tables
+                const combinedTables = [
+                    ...formattedTables,
+                    ...defaultAggregators.filter(agg =>
+                        !formattedTables.some(t => t.id === agg.id)
+                    )
+                ];
 
                 // Group orders by table ID and also by order source for aggregators
-                // Only include KITCHEN status orders in the dashboard
                 const tableOrders = kitchenOrders.reduce((acc, order) => {
                     // First, handle regular table assignments
                     if (order.tableId) {
@@ -214,34 +227,6 @@ function Dashboard({ seller }) {
                     return acc;
                 }, {});
 
-                // Use real tables from seller object instead of fake data
-                const realTables = seller?.tables || [];
-
-                // Convert seller tables to the format we need
-                const formattedTables = realTables.map(table => ({
-                    id: table.id || table.title,
-                    title: table.title,
-                    desc: table.desc,
-                    type: table.type || 'dine_in',
-                    section: table.section || 'ac'
-                }));
-
-                // Add default tables for aggregators if they don't exist
-                const defaultAggregators = [
-                    { id: 'default', title: 'Default', type: 'qr' },
-                    { id: 'zomato', title: 'Zomato', type: 'aggregator' },
-                    { id: 'swiggy', title: 'Swiggy', type: 'aggregator' }
-                ];
-
-                // Combine real tables with default aggregators
-                // Only add default aggregators if they don't already exist in real tables
-                const combinedTables = [
-                    ...formattedTables,
-                    ...defaultAggregators.filter(agg =>
-                        !formattedTables.some(t => t.id === agg.id)
-                    )
-                ];
-
                 const tablesWithOrders = combinedTables.map(table => {
                     // Get orders for this table
                     const tableOrdersList = tableOrders[table.id] || [];
@@ -251,7 +236,11 @@ function Dashboard({ seller }) {
                     if (tableOrdersList.length > 0) {
                         oldestOrderDate = tableOrdersList
                             .map(o => o.currentStatus?.date)
-                            .reduce((a, b) => new Date(a) < new Date(b) ? a : b, tableOrdersList[0].currentStatus?.date);
+                            .reduce((a, b) => {
+                                const dateA = parseDate(a);
+                                const dateB = parseDate(b);
+                                return dateA && dateB && dateA < dateB ? a : b;
+                            }, tableOrdersList[0].currentStatus?.date);
                     }
 
                     return {
@@ -271,6 +260,12 @@ function Dashboard({ seller }) {
         }
 
         fetchData();
+
+        // Set up interval to fetch orders every 30 seconds
+        const interval = setInterval(fetchData, 30000);
+
+        // Cleanup interval on component unmount
+        return () => clearInterval(interval);
     }, [seller]);
 
     // Fetch QR orders
@@ -294,7 +289,15 @@ function Dashboard({ seller }) {
         try {
             setLoadingQrOrders(true);
             // Fetch last 100 orders to ensure we don't miss any
-            const fetchedOrders = await sdk.orders.list(100);
+            const ordersSnapshot = await sdk.collection("Orders")
+                .orderBy("date", "desc")
+                .limit(100)
+                .get();
+
+            const fetchedOrders = ordersSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
 
             // Filter QR orders (orders with status "PLACED")
             const filteredQrOrders = fetchedOrders.filter(order =>
@@ -324,7 +327,15 @@ function Dashboard({ seller }) {
             const endDate = calculateEndDate(dateFilter, customDateRange.endDate);
 
             // Fetch orders
-            const fetchedOrders = await sdk.orders.list(100);
+            const ordersSnapshot = await sdk.collection("Orders")
+                .orderBy("date", "desc")
+                .limit(100)
+                .get();
+
+            const fetchedOrders = ordersSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
 
             // Filter by completion status and date range
             const filteredOrders = fetchedOrders.filter(order => {
@@ -332,11 +343,7 @@ function Dashboard({ seller }) {
                 if (!order.completed) return false;
 
                 // Get order date
-                const orderDate = order.date ?
-                    (order.date.toDate ? order.date.toDate() : new Date(order.date)) :
-                    null;
-
-                // Skip if no date
+                const orderDate = parseDate(order.date);
                 if (!orderDate) return false;
 
                 // Check if within date range
@@ -384,7 +391,27 @@ function Dashboard({ seller }) {
     // Add order handling functions
     const handleAcceptOrder = async (orderId) => {
         try {
-            await sdk.orders.updateStatus(orderId, 'processing');
+            const orderRef = sdk.collection("Orders").doc(orderId);
+            const orderDoc = await orderRef.get();
+
+            if (!orderDoc.exists) {
+                throw new Error('Order not found');
+            }
+
+            const order = orderDoc.data();
+
+            // Create status entry
+            const statusEntry = {
+                label: 'processing',
+                date: new Date()
+            };
+
+            // Update the order status
+            await orderRef.update({
+                currentStatus: statusEntry,
+                status: [...(order.status || []), statusEntry]
+            });
+
             refreshOrders();
         } catch (err) {
             console.error('Error accepting order:', err);
@@ -393,7 +420,27 @@ function Dashboard({ seller }) {
 
     const handleRejectOrder = async (orderId) => {
         try {
-            await sdk.orders.updateStatus(orderId, 'cancelled');
+            const orderRef = sdk.collection("Orders").doc(orderId);
+            const orderDoc = await orderRef.get();
+
+            if (!orderDoc.exists) {
+                throw new Error('Order not found');
+            }
+
+            const order = orderDoc.data();
+
+            // Create status entry
+            const statusEntry = {
+                label: 'cancelled',
+                date: new Date()
+            };
+
+            // Update the order status
+            await orderRef.update({
+                currentStatus: statusEntry,
+                status: [...(order.status || []), statusEntry]
+            });
+
             refreshOrders();
         } catch (err) {
             console.error('Error rejecting order:', err);
@@ -403,7 +450,7 @@ function Dashboard({ seller }) {
     const handleDeleteOrder = async (orderId) => {
         try {
             if (confirm('Are you sure you want to delete this order?')) {
-                await sdk.orders.delete(orderId);
+                await sdk.collection("Orders").doc(orderId).delete();
                 refreshOrders();
             }
         } catch (err) {
@@ -538,6 +585,15 @@ function Dashboard({ seller }) {
                 seller={seller}
             />
 
+            {/* OrderRoom Modal */}
+            <OrderRoom
+                isOpen={isOrderRoomOpen}
+                onClose={() => setIsOrderRoomOpen(false)}
+                tableId={selectedRoomTableId}
+                variant={selectedRoomVariant}
+                seller={seller}
+            />
+
             {/* Content based on active tab */}
             <div className="flex-1 overflow-hidden">
                 {activeTab === 'qr_orders' && (
@@ -579,15 +635,15 @@ function Dashboard({ seller }) {
                 {activeTab === 'dashboard' && (
                     <div className="h-full overflow-y-auto px-4 py-4">
                         <div className="mb-6">
+                            <h2 className="text-xl font-bold mb-4">Orders Dashboard</h2>
                             <div className="grid grid-cols-2 gap-4">
                                 {['Default', ...(seller?.priceVariants?.map(v => v.title) || [])].map(variant => (
                                     <DashboardTile
                                         key={variant}
                                         variant={variant}
                                         orders={tables
-                                            .filter(t => t.type === 'dine_in')
                                             .flatMap(t => t.orders)
-                                            .filter(o => o.priceVariant === variant && o.currentStatus?.label === 'KITCHEN')
+                                            .filter(o => o.priceVariant === variant)
                                         }
                                         onTap={() => handleRoomClick(null, variant)}
                                         onLongPress={() => showRenameRoomModal(null, variant)}
@@ -611,7 +667,7 @@ function Dashboard({ seller }) {
                                         <DashboardTile
                                             key={table.id}
                                             tableId={table.title}
-                                            orders={table.orders.filter(o => o.currentStatus?.label === 'KITCHEN')}
+                                            orders={table.orders}
                                             onTap={() => handleRoomClick(table.title, null)}
                                             onLongPress={() => showRenameRoomModal(table.title, null)}
                                         />
@@ -695,9 +751,9 @@ function Dashboard({ seller }) {
                                     <input
                                         type="date"
                                         className="px-3 py-2 border rounded-lg"
-                                        value={customDateRange.startDate ? customDateRange.startDate.toISOString().split('T')[0] : ''}
+                                        value={customDateRange.startDate ? formatDate(customDateRange.startDate, 'short') : ''}
                                         onChange={(e) => {
-                                            const date = e.target.value ? new Date(e.target.value) : null;
+                                            const date = parseDate(e.target.value);
                                             setCustomDateRange(prev => ({
                                                 ...prev,
                                                 startDate: date
@@ -710,9 +766,9 @@ function Dashboard({ seller }) {
                                     <input
                                         type="date"
                                         className="px-3 py-2 border rounded-lg"
-                                        value={customDateRange.endDate ? customDateRange.endDate.toISOString().split('T')[0] : ''}
+                                        value={customDateRange.endDate ? formatDate(customDateRange.endDate, 'short') : ''}
                                         onChange={(e) => {
-                                            const date = e.target.value ? new Date(e.target.value) : null;
+                                            const date = parseDate(e.target.value);
                                             setCustomDateRange(prev => ({
                                                 ...prev,
                                                 endDate: date
