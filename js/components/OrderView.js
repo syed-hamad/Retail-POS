@@ -161,29 +161,38 @@ function OrderView({ order, tableId, variant, onClose }) {
                                 src={item.thumb}
                                 alt={item.title}
                                 className="w-full h-full object-cover"
+                                onError={(e) => {
+                                    e.target.onerror = null;
+                                    e.target.src = 'https://via.placeholder.com/150';
+                                }}
                             />
                         </div>
 
                         <div className="flex-1">
                             <div className="font-medium">{item.title}</div>
                             <div className="text-sm text-gray-600">
-                                Qty: {item.qnt} • Price: ₹{item.price}
+                                <span className="font-medium text-blue-600">₹{item.price}</span> • {item.cat || 'Uncategorized'}
                             </div>
                         </div>
 
                         <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => handleQuantityChange(item, false)}
-                                className="p-1 hover:bg-gray-100 rounded-full"
-                            >
-                                <i className="ph ph-minus text-lg" />
-                            </button>
-                            <button
-                                onClick={() => handleQuantityChange(item, true)}
-                                className="p-1 hover:bg-gray-100 rounded-full"
-                            >
-                                <i className="ph ph-plus text-lg" />
-                            </button>
+                            <div className="bg-gray-100 rounded-full px-1 py-0.5 flex items-center gap-1">
+                                <button
+                                    onClick={() => handleQuantityChange(item, false)}
+                                    className="w-7 h-7 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded-full"
+                                >
+                                    <i className="ph ph-minus text-lg" />
+                                </button>
+                                <span className="w-8 text-center font-medium">
+                                    {item.qnt}
+                                </span>
+                                <button
+                                    onClick={() => handleQuantityChange(item, true)}
+                                    className="w-7 h-7 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded-full"
+                                >
+                                    <i className="ph ph-plus text-lg" />
+                                </button>
+                            </div>
                         </div>
                     </div>
                 ))}

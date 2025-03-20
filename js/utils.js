@@ -48,9 +48,8 @@ function getTimeDuration(date) {
 
     // For very recent times (less than 1 minute)
     if (minutes < 1) {
-        const seconds = Math.floor(diffMs / 1000);
         return {
-            display: seconds < 30 ? 'just now' : `${seconds} seconds`,
+            display: 'Just now',
             minutes: 0
         };
     }

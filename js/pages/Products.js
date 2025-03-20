@@ -17,7 +17,7 @@ function Products() {
         async function fetchData() {
             try {
                 // Fetch products
-                const productsSnapshot = await sdk.collection("Product")
+                const productsSnapshot = await sdk.collection("Products")
                     .orderBy("date", "desc")
                     .limit(100)
                     .get();

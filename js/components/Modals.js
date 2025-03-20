@@ -665,7 +665,7 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
 
         // Create a container for the POS component
         const posContainer = document.createElement('div');
-        posContainer.id = 'pos-modal-container';
+        posContainer.id = 'pos-container';
         posContainer.className = 'fixed inset-0 z-50';
         document.body.appendChild(posContainer);
 
@@ -676,7 +676,7 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
             // Render the POS component
             root.render(
                 React.createElement(window.POS, {
-                    title: tableId ? `Table ${tableId}` : variant,
+                    title: "New Order",
                     tableId: tableId,
                     variant: variant,
                     onClose: () => {
@@ -946,19 +946,37 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
                                                 if (!orderDoc.exists) throw new Error('Order not found');
 
                                                 const orderData = orderDoc.data();
-                                                const updatedItems = orderData.items.map(i => {
-                                                    if (i.pid === item.pid) {
-                                                        const newQnt = Math.max(1, (i.quantity || i.qnt || 1) - 1);
-                                                        return { ...i, quantity: newQnt, qnt: newQnt };
-                                                    }
-                                                    return i;
-                                                });
 
-                                                await orderRef.update({ items: updatedItems });
-                                                return true;
-                                            } catch (error) {
-                                                console.error("Error removing item:", error);
-                                                throw error;
+                                                // Find the item in the current items array
+                                                const itemIndex = orderData.items.findIndex(i => i.pid === item.pid);
+                                                if (itemIndex === -1) {
+                                                    throw new Error('Item not found in order');
+                                                }
+
+                                                // Get current quantity
+                                                const currentQty = parseInt(orderData.items[itemIndex].qnt || 1);
+
+                                                // If quantity is 1, remove the item completely
+                                                if (currentQty <= 1) {
+                                                    // Remove the item from the items array
+                                                    const updatedItems = orderData.items.filter(i => i.pid !== item.pid);
+                                                    // Update the order with the modified items array
+                                                    await orderRef.update({ items: updatedItems });
+                                                    showToast(`${item.title} removed from order`);
+                                                } else {
+                                                    // Decrease quantity by 1
+                                                    const updatedItems = [...orderData.items];
+                                                    updatedItems[itemIndex] = {
+                                                        ...updatedItems[itemIndex],
+                                                        qnt: currentQty - 1
+                                                    };
+                                                    // Update the order with the modified items array
+                                                    await orderRef.update({ items: updatedItems });
+                                                    showToast(`Decreased ${item.title} quantity by 1`);
+                                                }
+                                            } catch (err) {
+                                                console.error('Error updating item quantity:', err);
+                                                showToast('Failed to update item quantity', 'error');
                                             }
                                         }
                                     };
@@ -1221,16 +1239,36 @@ function OrderView({ order, tableId, variant }) {
 
             const orderData = orderDoc.data();
 
-            // Remove the item from the items array
-            const updatedItems = orderData.items.filter(i => i.pid !== item.pid);
+            // Find the item in the current items array
+            const itemIndex = orderData.items.findIndex(i => i.pid === item.pid);
+            if (itemIndex === -1) {
+                throw new Error('Item not found in order');
+            }
 
-            // Update the order with the modified items array
-            await orderRef.update({ items: updatedItems });
+            // Get current quantity
+            const currentQty = parseInt(orderData.items[itemIndex].qnt || 1);
 
-            showToast(`${item.title} removed from order`);
+            // If quantity is 1, remove the item completely
+            if (currentQty <= 1) {
+                // Remove the item from the items array
+                const updatedItems = orderData.items.filter(i => i.pid !== item.pid);
+                // Update the order with the modified items array
+                await orderRef.update({ items: updatedItems });
+                showToast(`${item.title} removed from order`);
+            } else {
+                // Decrease quantity by 1
+                const updatedItems = [...orderData.items];
+                updatedItems[itemIndex] = {
+                    ...updatedItems[itemIndex],
+                    qnt: currentQty - 1
+                };
+                // Update the order with the modified items array
+                await orderRef.update({ items: updatedItems });
+                showToast(`Decreased ${item.title} quantity by 1`);
+            }
         } catch (err) {
-            console.error('Error removing item:', err);
-            showToast('Failed to remove item', 'error');
+            console.error('Error updating item quantity:', err);
+            showToast('Failed to update item quantity', 'error');
         }
     };
 

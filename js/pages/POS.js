@@ -101,9 +101,24 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
     // Handle removing item from cart
     const handleRemoveFromCart = (productId) => {
         setCart(prevCart => {
-            const newCart = { ...prevCart };
-            delete newCart[productId];
-            return newCart;
+            const existingItem = prevCart[productId];
+            if (!existingItem) return prevCart;
+
+            // If quantity is 1, remove the item completely
+            if (existingItem.quantity === 1) {
+                const newCart = { ...prevCart };
+                delete newCart[productId];
+                return newCart;
+            }
+
+            // Otherwise, decrease the quantity by 1
+            return {
+                ...prevCart,
+                [productId]: {
+                    ...existingItem,
+                    quantity: existingItem.quantity - 1
+                }
+            };
         });
     };
 
@@ -188,7 +203,35 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
                     const orderDoc = await order.ref.get();
                     if (orderDoc.exists) {
                         const existingItems = orderDoc.data().items || [];
-                        finalItems = [...existingItems, ...items];
+
+                        // Create a map of existing items by product ID
+                        const existingItemsMap = {};
+                        existingItems.forEach(item => {
+                            existingItemsMap[item.pid] = item;
+                        });
+
+                        // Merge items with the same product ID by adding quantities
+                        const mergedItems = [...existingItems];
+
+                        items.forEach(newItem => {
+                            const existingItem = existingItemsMap[newItem.pid];
+
+                            if (existingItem) {
+                                // Find the existing item in the array and update its quantity
+                                const index = mergedItems.findIndex(item => item.pid === newItem.pid);
+                                if (index !== -1) {
+                                    mergedItems[index] = {
+                                        ...mergedItems[index],
+                                        qnt: (parseInt(mergedItems[index].qnt) || 0) + (parseInt(newItem.qnt) || 0)
+                                    };
+                                }
+                            } else {
+                                // Add as a new item
+                                mergedItems.push(newItem);
+                            }
+                        });
+
+                        finalItems = mergedItems;
 
                         // Update only the items field in the existing order
                         await order.ref.update({ items: finalItems });
@@ -201,7 +244,35 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
                     // Fallback if no ref is provided
                     const existingItems = await window.sdk.collection("Orders").doc(orderId).get()
                         .then(doc => doc.exists ? doc.data().items : []);
-                    finalItems = [...existingItems, ...items];
+
+                    // Create a map of existing items by product ID
+                    const existingItemsMap = {};
+                    existingItems.forEach(item => {
+                        existingItemsMap[item.pid] = item;
+                    });
+
+                    // Merge items with the same product ID by adding quantities
+                    const mergedItems = [...existingItems];
+
+                    items.forEach(newItem => {
+                        const existingItem = existingItemsMap[newItem.pid];
+
+                        if (existingItem) {
+                            // Find the existing item in the array and update its quantity
+                            const index = mergedItems.findIndex(item => item.pid === newItem.pid);
+                            if (index !== -1) {
+                                mergedItems[index] = {
+                                    ...mergedItems[index],
+                                    qnt: (parseInt(mergedItems[index].qnt) || 0) + (parseInt(newItem.qnt) || 0)
+                                };
+                            }
+                        } else {
+                            // Add as a new item
+                            mergedItems.push(newItem);
+                        }
+                    });
+
+                    finalItems = mergedItems;
                 }
             }
 
@@ -464,66 +535,111 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
 
 // Product Card Component
 function ProductCard({ product, inCart = 0, onAdd, onRemove }) {
+    const [addAnimation, setAddAnimation] = React.useState(false);
+
+    // Animation effect when adding to cart
+    const handleAddWithAnimation = () => {
+        onAdd();
+        setAddAnimation(true);
+        setTimeout(() => setAddAnimation(false), 300);
+    };
+
     return (
-        <div className="bg-white rounded-lg border overflow-hidden hover:shadow-md transition-shadow">
-            <div className="aspect-square bg-gray-100 relative">
-                {product.imgs && product.imgs.length > 0 ? (
-                    <img
-                        src={product.imgs[0]}
-                        alt={product.title}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.src = 'https://via.placeholder.com/150';
-                        }}
-                    />
-                ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                        <i className="ph ph-image text-gray-400 text-3xl"></i>
-                    </div>
-                )}
-                {product.hasDiscount && (
-                    <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full">
-                        {product.discount}% OFF
-                    </div>
-                )}
-                {product.veg !== undefined && (
-                    <div className="absolute top-2 left-2 h-6 w-6 flex items-center justify-center">
-                        <div className={`h-5 w-5 border p-0.5 ${product.veg ? 'border-green-500' : 'border-red-500'}`}>
-                            <div className={`h-full w-full rounded-full ${product.veg ? 'bg-green-500' : 'bg-red-500'}`}></div>
+        <div className={`bg-white rounded-lg border overflow-hidden hover:shadow-md transition-shadow group ${addAnimation ? 'ring-2 ring-blue-500 scale-[1.02]' : ''}`}
+            style={{ transition: 'all 0.2s ease' }}>
+            {/* Make the main product area clickable for adding items */}
+            <div
+                className="cursor-pointer relative"
+                onClick={handleAddWithAnimation}
+            >
+                <div className="aspect-square bg-gray-100 relative overflow-hidden">
+                    {product.imgs && product.imgs.length > 0 ? (
+                        <img
+                            src={product.imgs[0]}
+                            alt={product.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src = 'https://via.placeholder.com/150';
+                            }}
+                        />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                            <i className="ph ph-image text-gray-400 text-3xl"></i>
+                        </div>
+                    )}
+                    {product.hasDiscount && (
+                        <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full">
+                            {product.discount}% OFF
+                        </div>
+                    )}
+                    {product.veg !== undefined && (
+                        <div className="absolute top-2 left-2 h-6 w-6 flex items-center justify-center">
+                            <div className={`h-5 w-5 border p-0.5 ${product.veg ? 'border-green-500' : 'border-red-500'}`}>
+                                <div className={`h-full w-full rounded-full ${product.veg ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Add overlay on hover */}
+                    {inCart === 0 && (
+                        <div className="absolute inset-0 bg-blue-500 bg-opacity-0 flex items-center justify-center group-hover:bg-opacity-20 transition-all duration-300">
+                            <div className="bg-blue-600 text-white px-3 py-1 rounded-full transform translate-y-4 opacity-0 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
+                                <i className="ph ph-plus mr-1"></i>
+                                Add
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Badge for items in cart */}
+                    {inCart > 0 && (
+                        <div className="absolute top-2 right-2 bg-blue-600 text-white text-xs px-2 py-1 rounded-full font-medium animate-fadeIn">
+                            {inCart} in cart
+                        </div>
+                    )}
+                </div>
+                <div className="p-3">
+                    <h3 className="font-medium text-gray-900 line-clamp-1">{product.title}</h3>
+                    <div className="flex items-center justify-between mt-1">
+                        <div>
+                            <span className="font-medium text-blue-600">₹{product.price}</span>
+                            {product.hasDiscount && (
+                                <span className="text-xs text-gray-500 line-through ml-1">₹{product.mrp}</span>
+                            )}
                         </div>
                     </div>
-                )}
+                </div>
             </div>
-            <div className="p-3">
-                <h3 className="font-medium text-gray-900 line-clamp-1">{product.title}</h3>
-                <div className="flex items-center justify-between mt-1">
-                    <div>
-                        <span className="font-medium text-blue-600">₹{product.price}</span>
-                        {product.hasDiscount && (
-                            <span className="text-xs text-gray-500 line-through ml-1">₹{product.mrp}</span>
-                        )}
-                    </div>
-                    <div className="flex items-center">
-                        {inCart > 0 ? (
-                            <>
-                                <button
-                                    className="w-8 h-8 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded-full"
-                                    onClick={onRemove}
-                                >
-                                    <i className="ph ph-minus"></i>
-                                </button>
-                                <span className="w-8 text-center font-medium">{inCart}</span>
-                            </>
-                        ) : null}
+
+            {/* Quantity controls in a separate div to prevent click event bubbling */}
+            <div className="px-3 pb-3 flex justify-end items-center" onClick={(e) => e.stopPropagation()}>
+                {inCart > 0 ? (
+                    <div className="flex items-center bg-gray-100 rounded-full px-1">
                         <button
-                            className="w-8 h-8 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded-full"
-                            onClick={onAdd}
+                            className="w-7 h-7 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded-full"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onRemove();
+                            }}
+                        >
+                            <i className="ph ph-minus"></i>
+                        </button>
+                        <span className="w-8 text-center font-medium">{inCart}</span>
+                        <button
+                            className="w-7 h-7 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded-full"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleAddWithAnimation();
+                            }}
                         >
                             <i className="ph ph-plus"></i>
                         </button>
                     </div>
-                </div>
+                ) : (
+                    <div className="inline-flex items-center justify-center px-3 py-1 rounded-full text-sm opacity-0">
+                        <i className="ph ph-check mr-1"></i> Add
+                    </div>
+                )}
             </div>
         </div>
     );
