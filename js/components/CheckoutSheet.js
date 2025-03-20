@@ -163,43 +163,45 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => onClose?.()}>
             <div className="bg-white rounded-xl shadow-lg w-full max-w-md md:max-w-lg overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b relative">
-                    <div className="flex items-center">
-                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                            <i className="ph ph-storefront text-blue-600"></i>
+                {/* Header - Fixed */}
+                <div className="sticky top-0 z-10 bg-white">
+                    <div className="flex items-center justify-between p-4 border-b relative">
+                        <div className="flex items-center">
+                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                                <i className="ph ph-storefront text-blue-600"></i>
+                            </div>
+                            <h2 className="text-xl font-semibold">Checkout</h2>
                         </div>
-                        <h2 className="text-xl font-semibold">Checkout</h2>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setShowDiscountModal(true)}
+                                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                            >
+                                <i className="ph ph-tag text-gray-600"></i>
+                            </button>
+                            <button
+                                onClick={() => onClose?.()}
+                                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                                aria-label="Close"
+                            >
+                                <i className="ph ph-x text-gray-600"></i>
+                            </button>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => setShowDiscountModal(true)}
-                            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                        >
-                            <i className="ph ph-tag text-gray-600"></i>
-                        </button>
-                        <button
-                            onClick={() => onClose?.()}
-                            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                            aria-label="Close"
-                        >
-                            <i className="ph ph-x text-gray-600"></i>
-                        </button>
+
+                    {/* Progress info - Fixed */}
+                    <div className="bg-gray-50 px-4 py-2 border-b flex justify-between items-center">
+                        <div className="text-sm text-gray-600">
+                            {Object.values(cart).reduce((total, item) => total + item.quantity, 0)} items
+                        </div>
+                        <div className="text-sm text-gray-600">
+                            Date: {formatDate(new Date())}
+                        </div>
                     </div>
                 </div>
 
-                {/* Progress info */}
-                <div className="bg-gray-50 px-4 py-2 border-b flex justify-between items-center">
-                    <div className="text-sm text-gray-600">
-                        {Object.values(cart).reduce((total, item) => total + item.quantity, 0)} items
-                    </div>
-                    <div className="text-sm text-gray-600">
-                        Date: {formatDate(new Date())}
-                    </div>
-                </div>
-
-                {/* Single scrollable content area */}
-                <div className="overflow-y-auto" style={{ maxHeight: "calc(80vh - 200px)" }}>
+                {/* Main content - Single scrollable area */}
+                <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 400px)" }}>
                     {/* Items list */}
                     <div className="p-4">
                         {Object.values(cart).map((item, index) => (
@@ -247,98 +249,100 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                     </div>
                 </div>
 
-                {/* Order summary */}
-                <div className="bg-white border-t p-4">
-                    <div className="space-y-2 mb-4">
-                        <div className="flex justify-between">
-                            <span className="text-gray-600">Sub Total</span>
-                            <span>₹{cartSubTotal.toFixed(2)}</span>
-                        </div>
+                {/* Order summary - Fixed at bottom */}
+                <div className="sticky bottom-0 bg-white border-t shadow-md">
+                    <div className="p-4">
+                        <div className="space-y-2 mb-4">
+                            <div className="flex justify-between">
+                                <span className="text-gray-600">Sub Total</span>
+                                <span>₹{cartSubTotal.toFixed(2)}</span>
+                            </div>
 
-                        {/* Charges */}
-                        {charges && charges.length > 0 && (
-                            <div className="flex justify-between text-gray-600">
-                                <span>Tax & Charges</span>
-                                <div className="text-right">
-                                    {charges.map((charge, index) => (
-                                        <div key={index}>
-                                            ₹{charge.value}
-                                        </div>
-                                    ))}
+                            {/* Charges */}
+                            {charges && charges.length > 0 && (
+                                <div className="flex justify-between text-gray-600">
+                                    <span>Tax & Charges</span>
+                                    <div className="text-right">
+                                        {charges.map((charge, index) => (
+                                            <div key={index}>
+                                                ₹{charge.value}
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
+                            )}
 
-                        {discount > 0 && (
-                            <div className="flex justify-between text-green-600">
-                                <span>Discount</span>
-                                <span>- ₹{discount.toFixed(2)}</span>
-                            </div>
-                        )}
+                            {discount > 0 && (
+                                <div className="flex justify-between text-green-600">
+                                    <span>Discount</span>
+                                    <span>- ₹{discount.toFixed(2)}</span>
+                                </div>
+                            )}
 
-                        <div className="flex justify-between font-bold text-lg pt-2 border-t mt-2">
-                            <span>Total:</span>
-                            <span className="text-primary">₹{cartTotal.toFixed(2)}</span>
+                            <div className="flex justify-between font-bold text-lg pt-2 border-t mt-2">
+                                <span>Total:</span>
+                                <span className="text-indigo-600">₹{cartTotal.toFixed(2)}</span>
+                            </div>
                         </div>
-                    </div>
 
-                    {/* Action buttons */}
-                    <div className="flex gap-3 mt-4">
-                        {!checkout ? (
-                            <button
-                                onClick={handleCheckout}
-                                className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-medium flex items-center justify-center hover:bg-blue-700 transition-colors"
-                            >
-                                <span>Place Order</span>
-                                <i className="ph ph-arrow-right ml-2" />
-                            </button>
-                        ) : (
-                            <>
+                        {/* Action buttons */}
+                        <div className="flex gap-3 mt-4">
+                            {!checkout ? (
                                 <button
-                                    onClick={() => {
-                                        try {
-                                            // Print KOT
-                                            if (window.UserSession?.seller?.kotEnabled) {
-                                                window.sdk.kot.print(orderId);
-                                            }
-                                            showToast("KOT Printed");
-                                        } catch (error) {
-                                            console.error("Error printing KOT:", error);
-                                            showToast("Failed to print KOT", "error");
-                                        }
-                                    }}
-                                    className="px-5 py-3 border border-blue-600 text-blue-600 rounded-lg font-medium hover:bg-blue-50 transition-colors"
+                                    onClick={handleCheckout}
+                                    className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-medium flex items-center justify-center hover:bg-indigo-700 transition-colors"
                                 >
-                                    Print KOT
+                                    <span>Place Order</span>
+                                    <i className="ph ph-arrow-right ml-2" />
+                                </button>
+                            ) : (
+                                <>
+                                    <button
+                                        onClick={() => {
+                                            try {
+                                                // Print KOT
+                                                if (window.UserSession?.seller?.kotEnabled) {
+                                                    window.sdk.kot.print(orderId);
+                                                }
+                                                showToast("KOT Printed");
+                                            } catch (error) {
+                                                console.error("Error printing KOT:", error);
+                                                showToast("Failed to print KOT", "error");
+                                            }
+                                        }}
+                                        className="px-5 py-3 border border-indigo-600 text-indigo-600 rounded-lg font-medium hover:bg-indigo-50 transition-colors"
+                                    >
+                                        Print KOT
+                                    </button>
+                                    <button
+                                        onClick={handleCheckout}
+                                        className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 transition-colors"
+                                    >
+                                        Checkout
+                                    </button>
+                                </>
+                            )}
+                        </div>
+
+                        {checkout && (
+                            <div className="flex gap-3 mt-3">
+                                <button
+                                    onClick={handleCheckout}
+                                    className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-medium flex items-center justify-center hover:bg-indigo-700 transition-colors"
+                                >
+                                    <i className="ph ph-credit-card mr-2" />
+                                    <span>UPI/Card</span>
                                 </button>
                                 <button
                                     onClick={handleCheckout}
-                                    className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                                    className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-medium flex items-center justify-center hover:bg-indigo-700 transition-colors"
                                 >
-                                    Checkout
+                                    <i className="ph ph-money mr-2" />
+                                    <span>Cash</span>
                                 </button>
-                            </>
+                            </div>
                         )}
                     </div>
-
-                    {checkout && (
-                        <div className="flex gap-3 mt-3">
-                            <button
-                                onClick={handleCheckout}
-                                className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-medium flex items-center justify-center hover:bg-blue-700 transition-colors"
-                            >
-                                <i className="ph ph-credit-card mr-2" />
-                                <span>UPI/Card</span>
-                            </button>
-                            <button
-                                onClick={handleCheckout}
-                                className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-medium flex items-center justify-center hover:bg-blue-700 transition-colors"
-                            >
-                                <i className="ph ph-money mr-2" />
-                                <span>Cash</span>
-                            </button>
-                        </div>
-                    )}
                 </div>
             </div>
 
@@ -359,13 +363,13 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                         <div className="flex items-center gap-2 mb-4">
                             <div className="flex border rounded-lg overflow-hidden">
                                 <button
-                                    className={`px-4 py-2 ${percentMode ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}
+                                    className={`px-4 py-2 ${percentMode ? 'bg-indigo-600 text-white' : 'bg-gray-100'}`}
                                     onClick={() => setPercentMode(true)}
                                 >
                                     %
                                 </button>
                                 <button
-                                    className={`px-4 py-2 ${!percentMode ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}
+                                    className={`px-4 py-2 ${!percentMode ? 'bg-indigo-600 text-white' : 'bg-gray-100'}`}
                                     onClick={() => setPercentMode(false)}
                                 >
                                     ₹
@@ -377,7 +381,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                                 value={discountInput}
                                 onChange={(e) => setDiscountInput(e.target.value)}
                                 placeholder={`Discount ${percentMode ? '%' : '₹'}`}
-                                className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             />
                         </div>
 
@@ -397,7 +401,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                                         applyDiscount(amount);
                                     }
                                 }}
-                                className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                className="flex-1 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
                             >
                                 Apply
                             </button>

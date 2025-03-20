@@ -882,7 +882,7 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
                             </div>
                         </div>
                     ) : (
-                        <div className="flex flex-col h-full">
+                        <div className="flex flex-col">
                             <div className="space-y-6 flex-1 overflow-y-auto p-4">
                                 {orders.map(order => {
                                     // Create an MOrder-like object with the necessary methods
