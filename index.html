@@ -75,6 +75,90 @@
             background-color: #2563eb;
             transition: all 0.3s ease;
         }
+
+        /* Slide-in animations for modals */
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+            }
+
+            to {
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes slideInBottom {
+            from {
+                transform: translateY(100%);
+            }
+
+            to {
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        /* Mobile-specific styles */
+        @media (max-width: 767px) {
+            .mobile-bottom-sheet {
+                border-top-left-radius: 16px;
+                border-top-right-radius: 16px;
+                box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+            }
+
+            .mobile-drag-handle {
+                width: 40px;
+                height: 5px;
+                background-color: #E5E7EB;
+                border-radius: 3px;
+                margin: 8px auto;
+            }
+        }
+
+        /* Desktop-specific styles */
+        @media (min-width: 768px) {
+            .desktop-slide-in {
+                animation: slideInRight 0.3s ease-out;
+                box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+            }
+        }
+
+        /* Smooth transitions */
+        .transition-transform {
+            transition: transform 0.3s ease-out;
+        }
+
+        .transition-opacity {
+            transition: opacity 0.3s ease-out;
+        }
+
+        /* Improved scrollbars */
+        .custom-scrollbar {
+            scrollbar-width: thin;
+            scrollbar-color: #CBD5E0 #F7FAFC;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #F7FAFC;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #CBD5E0;
+            border-radius: 3px;
+        }
     </style>
 
     <!-- Shopto SDK -->
@@ -90,12 +174,16 @@
     <script type="text/babel" src="js/models/Role.js"></script>
     <script type="text/babel" src="js/models/ProfileInfo.js"></script>
     <script type="text/babel" src="js/models/Product.js"></script>
+    <script type="text/babel" src="js/models/Order.js"></script>
     <script type="text/babel" src="js/contexts/ProfileContext.js"></script>
     <script type="text/babel" src="js/components/Navigation.js"></script>
     <script type="text/babel" src="js/components/DashboardCard.js"></script>
     <script type="text/babel" src="js/components/TableCard.js"></script>
     <script type="text/babel" src="js/components/ProductCard.js"></script>
     <script type="text/babel" src="js/components/InventoryCard.js"></script>
+    <script type="text/babel" src="js/components/CheckoutSheet.js"></script>
+    <script type="text/babel" src="js/components/OrderView.js"></script>
+    <script type="text/babel" src="js/pages/POS.js"></script>
     <script type="text/babel" src="js/components/Modals.js"></script>
     <script type="text/babel" src="js/pages/ProfilePage.js"></script>
     <script type="text/babel" src="js/pages/Dashboard.js"></script>

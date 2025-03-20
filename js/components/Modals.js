@@ -1,100 +1,103 @@
+const React = window.React;
+const ReactDOM = window.ReactDOM;
+
+// Modal components for the application
+
 // Add Table Modal Component
 function AddTableModal({ isOpen, onClose, seller }) {
     const [title, setTitle] = React.useState('');
     const [desc, setDesc] = React.useState('');
-    const [error, setError] = React.useState('');
-    const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [error, setError] = React.useState(null);
 
-    if (!isOpen) return null;
+    // Reset form when modal opens
+    React.useEffect(() => {
+        if (isOpen) {
+            setTitle('');
+            setDesc('');
+            setError(null);
+        }
+    }, [isOpen]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setIsSubmitting(true);
+
+        // Validate form
+        if (!title) {
+            setError('Please enter a title');
+            return;
+        }
+
+        if (!desc) {
+            setError('Please enter a description');
+            return;
+        }
+
+        // Check if table already exists
+        const existingTables = seller?.tables || [];
+        if (existingTables.some(t => t.title === title)) {
+            setError('Table already exists');
+            return;
+        }
 
         try {
-            if (!title) {
-                setError('Please enter a title');
-                setIsSubmitting(false);
-                return;
-            }
+            // Get current tables
+            const currentTables = existingTables || [];
 
-            if (!desc) {
-                setError('Please enter a description');
-                setIsSubmitting(false);
-                return;
-            }
-
-            // Check if table already exists
-            if (seller?.tables?.some(t => t.title === title)) {
-                setError('Table already exists');
-                setIsSubmitting(false);
-                return;
-            }
-
-            // Create new table object
-            const newTable = {
-                id: `T${Date.now().toString(36)}`, // Generate unique ID
-                title,
-                desc,
-                type: 'dine_in',
-                section: 'ac'
-            };
-
-            // Update Firestore
-            // Get current tables from seller
-            const currentTables = seller?.tables || [];
-
-            // Add new table to the list
-            const updatedTables = [...currentTables, newTable];
-
-            // Update seller document in Firestore
-            await sdk.profile.update({
-                tables: updatedTables
+            // Add new table
+            await window.sdk.profile.update({
+                tables: [...currentTables, { title, desc }]
             });
 
-            // Show success message
             showToast('Table added successfully');
-
-            // Close modal
             onClose();
         } catch (err) {
             console.error('Error adding table:', err);
             setError('Failed to add table. Please try again.');
-            setIsSubmitting(false);
         }
     };
 
-    return (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center" onClick={onClose}>
-            <div className="bg-white rounded-lg w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-                <h2 className="text-xl font-bold mb-4">Add Table</h2>
+    if (!isOpen) return null;
 
-                <form onSubmit={handleSubmit}>
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center">
+            <div className="bg-white w-full max-w-md rounded-lg shadow-xl overflow-hidden">
+                <div className="p-4 border-b">
+                    <h2 className="text-xl font-semibold">Add Table</h2>
+                </div>
+
+                <form onSubmit={handleSubmit} className="p-6">
                     {error && (
-                        <div className="mb-4 p-2 bg-red-50 text-red-600 rounded">
+                        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md">
                             {error}
                         </div>
                     )}
 
                     <div className="mb-4">
-                        <label className="block text-gray-700 mb-2">Title</label>
+                        <label className="block text-gray-700 mb-2" htmlFor="title">
+                            Title
+                        </label>
                         <input
                             type="text"
+                            id="title"
                             value={title}
-                            onChange={e => setTitle(e.target.value)}
+                            onChange={(e) => setTitle(e.target.value)}
                             maxLength={4}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="eg. T1"
                         />
+                        <p className="text-xs text-gray-500 mt-1">Max 4 characters</p>
                     </div>
 
                     <div className="mb-6">
-                        <label className="block text-gray-700 mb-2">Description</label>
+                        <label className="block text-gray-700 mb-2" htmlFor="desc">
+                            Description
+                        </label>
                         <input
                             type="text"
+                            id="desc"
                             value={desc}
-                            onChange={e => setDesc(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onChange={(e) => setDesc(e.target.value)}
+                            className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="eg. Table in the corner"
                         />
                     </div>
@@ -103,7 +106,7 @@ function AddTableModal({ isOpen, onClose, seller }) {
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md"
+                            className="px-4 py-2 border rounded-md hover:bg-gray-50"
                         >
                             Cancel
                         </button>
@@ -122,84 +125,94 @@ function AddTableModal({ isOpen, onClose, seller }) {
 
 // Rename Room Modal Component
 function RenameRoomModal({ isOpen, onClose, tableId, variant, seller }) {
-    const [title, setTitle] = React.useState(tableId || variant || '');
-    const [error, setError] = React.useState('');
-    const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [title, setTitle] = React.useState('');
+    const [error, setError] = React.useState(null);
 
-    if (!isOpen) return null;
+    // Set initial title when modal opens
+    React.useEffect(() => {
+        if (isOpen) {
+            setTitle(tableId || variant || '');
+            setError(null);
+        }
+    }, [isOpen, tableId, variant]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setIsSubmitting(true);
+
+        // Validate form
+        if (!title) {
+            setError('Please enter a title');
+            return;
+        }
 
         try {
-            if (!title) {
-                setError('Please enter a title');
-                setIsSubmitting(false);
+            if (variant) {
+                // Rename price variant
+                const vars = seller?.priceVariants || [];
+                const index = vars.findIndex(v => v.title === variant);
+
+                if (index === -1) {
+                    setError("Can't rename this default room");
+                    return;
+                }
+
+                const updatedVars = [...vars];
+                updatedVars[index] = { title };
+
+                await window.sdk.profile.update({ priceVariants: updatedVars });
+            } else if (tableId) {
+                // Rename table
+                const tables = seller?.tables || [];
+                const index = tables.findIndex(t => t.title === tableId);
+
+                if (index === -1) {
+                    setError("Can't rename this table");
+                    return;
+                }
+
+                const updatedTables = [...tables];
+                updatedTables[index] = { ...updatedTables[index], title };
+
+                await window.sdk.profile.update({ tables: updatedTables });
+            } else {
+                setError("Can't rename room");
                 return;
             }
 
-            if (tableId) {
-                // Rename table
-                // Get current tables from seller
-                const currentTables = seller?.tables || [];
-
-                // Find the table to rename
-                const updatedTables = currentTables.map(table =>
-                    table.title === tableId ? { ...table, title } : table
-                );
-
-                // Update seller document in Firestore
-                await sdk.profile.update({
-                    tables: updatedTables
-                });
-
-                showToast('Table renamed successfully');
-            } else if (variant) {
-                // Rename variant
-                // Get current price variants from seller
-                const currentVariants = seller?.priceVariants || [];
-
-                // Find the variant to rename
-                const updatedVariants = currentVariants.map(v =>
-                    v === variant ? title : v
-                );
-
-                // Update seller document in Firestore
-                await sdk.profile.update({
-                    priceVariants: updatedVariants
-                });
-
-                showToast('Price variant renamed successfully');
-            }
-
+            showToast('Renamed successfully');
             onClose();
         } catch (err) {
             console.error('Error renaming:', err);
             setError('Failed to rename. Please try again.');
-            setIsSubmitting(false);
         }
     };
 
-    return (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center" onClick={onClose}>
-            <div className="bg-white rounded-lg w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-                <h2 className="text-xl font-bold mb-4">Rename Room</h2>
+    if (!isOpen) return null;
 
-                <form onSubmit={handleSubmit}>
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center">
+            <div className="bg-white w-full max-w-md rounded-lg shadow-xl overflow-hidden">
+                <div className="p-4 border-b">
+                    <h2 className="text-xl font-semibold">Rename Room</h2>
+                </div>
+
+                <form onSubmit={handleSubmit} className="p-6">
                     {error && (
-                        <div className="mb-4 p-2 bg-red-50 text-red-600 rounded">
+                        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md">
                             {error}
                         </div>
                     )}
 
                     <div className="mb-6">
-                        <label className="block text-gray-700 mb-2">Title</label>
+                        <label className="block text-gray-700 mb-2" htmlFor="title">
+                            Title
+                        </label>
                         <input
                             type="text"
+                            id="title"
                             value={title}
-                            onChange={e => setTitle(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onChange={(e) => setTitle(e.target.value)}
+                            className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="eg. T1"
                         />
                     </div>
@@ -208,7 +221,7 @@ function RenameRoomModal({ isOpen, onClose, tableId, variant, seller }) {
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md"
+                            className="px-4 py-2 border rounded-md hover:bg-gray-50"
                         >
                             Cancel
                         </button>
@@ -476,53 +489,83 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState(null);
     const [isMenuOpen, setIsMenuOpen] = React.useState(false);
+    const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
     const menuRef = React.useRef(null);
+    const dialogRef = React.useRef(null);
+    const [isClosing, setIsClosing] = React.useState(false);
 
+    // Check for mobile/desktop on resize
+    React.useEffect(() => {
+        const handleResize = () => {
+            setIsMobile(window.innerWidth < 768);
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => {
+            window.removeEventListener('resize', handleResize);
+        };
+    }, []);
+
+    // Set up real-time listener for orders (equivalent to StreamBuilder in Flutter)
     React.useEffect(() => {
         if (!isOpen) return;
 
-        async function fetchOrders() {
-            try {
-                setLoading(true);
-                const ordersSnapshot = await sdk.collection("Orders")
-                    .orderBy("date", "desc")
-                    .limit(100)
-                    .get();
+        let unsubscribe = () => { };
 
-                const allOrders = ordersSnapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
+        try {
+            // Create query similar to the Flutter implementation
+            let query = window.sdk.collection("Orders")
+                .where("currentStatus.label", "==", "KITCHEN");
 
-                // Filter orders by KITCHEN status and tableId or variant
-                // This matches the Flutter implementation where we filter by currentStatus.label
-                const filteredOrders = allOrders.filter(order => {
-                    if (order.currentStatus?.label !== 'KITCHEN') return false;
-
-                    if (tableId) {
-                        return order.tableId === tableId;
-                    } else if (variant) {
-                        return order.priceVariant === variant;
-                    }
-
-                    return false;
-                });
-
-                setOrders(filteredOrders);
-                setLoading(false);
-            } catch (err) {
-                console.error('Error fetching orders:', err);
-                setError('Failed to load orders');
-                setLoading(false);
+            if (tableId) {
+                query = query.where("tableId", "==", tableId);
+            } else if (variant) {
+                query = query.where("priceVariant", "==", variant);
             }
+
+            // Set up real-time listener
+            unsubscribe = query.onSnapshot(
+                (snapshot) => {
+                    const ordersList = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    })).filter(order => order.items && order.items.length > 0);
+
+                    setOrders(ordersList);
+                    setLoading(false);
+                },
+                (err) => {
+                    console.error('Error listening to orders:', err);
+                    setError('Failed to load orders');
+                    setLoading(false);
+                }
+            );
+        } catch (err) {
+            console.error('Error setting up orders listener:', err);
+            setError('Failed to set up orders listener');
+            setLoading(false);
         }
 
-        fetchOrders();
+        // Clean up listener when component unmounts or modal closes
+        return () => {
+            unsubscribe();
+        };
+    }, [isOpen, tableId, variant]);
 
-        // Set up interval to refresh orders every 30 seconds
-        const interval = setInterval(fetchOrders, 30000);
+    // Set up refresh interval (every 30 seconds)
+    React.useEffect(() => {
+        if (!isOpen) return;
 
-        // Add click event listener to close menu when clicking outside
+        const intervalId = setInterval(() => {
+            console.log('Refreshing orders data...');
+            // The real-time listener will handle the refresh
+        }, 30000);
+
+        return () => clearInterval(intervalId);
+    }, [isOpen]);
+
+    // Add click event listener to close menu when clicking outside
+    React.useEffect(() => {
         const handleClickOutside = (event) => {
             if (menuRef.current && !menuRef.current.contains(event.target)) {
                 setIsMenuOpen(false);
@@ -530,144 +573,412 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
         };
 
         document.addEventListener('mousedown', handleClickOutside);
-
-        // Cleanup interval and event listener on component unmount or when modal closes
         return () => {
-            clearInterval(interval);
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [isOpen, tableId, variant]);
+    }, []);
+
+    // Add swipe gesture for mobile
+    React.useEffect(() => {
+        if (!isOpen || !dialogRef.current) return;
+
+        let startX, startY;
+        const handleTouchStart = (e) => {
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+        };
+
+        const handleTouchMove = (e) => {
+            if (!startX || !startY) return;
+
+            const currentX = e.touches[0].clientX;
+            const currentY = e.touches[0].clientY;
+            const diffX = startX - currentX;
+            const diffY = startY - currentY;
+
+            // Detect horizontal swipe (for desktop)
+            if (Math.abs(diffX) > Math.abs(diffY) && diffX < -50 && !isMobile) {
+                handleClose();
+            }
+
+            // Detect vertical swipe down (for mobile)
+            if (Math.abs(diffY) > Math.abs(diffX) && diffY < -50 && isMobile) {
+                handleClose();
+            }
+        };
+
+        const element = dialogRef.current;
+        element.addEventListener('touchstart', handleTouchStart);
+        element.addEventListener('touchmove', handleTouchMove);
+
+        return () => {
+            element.removeEventListener('touchstart', handleTouchStart);
+            element.removeEventListener('touchmove', handleTouchMove);
+        };
+    }, [isOpen, isMobile]);
+
+    // Handle smooth closing animation
+    const handleClose = () => {
+        setIsClosing(true);
+        setTimeout(() => {
+            setIsClosing(false);
+            onClose();
+        }, 300); // Match this with the CSS transition duration
+    };
+
+    // Function to reload orders
+    const loadOrders = async () => {
+        setLoading(true);
+        try {
+            // Create query similar to the Flutter implementation
+            let query = window.sdk.collection("Orders")
+                .where("currentStatus.label", "==", "KITCHEN");
+
+            if (tableId) {
+                query = query.where("tableId", "==", tableId);
+            } else if (variant) {
+                query = query.where("priceVariant", "==", variant);
+            }
+
+            const snapshot = await query.get();
+            const ordersList = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            })).filter(order => order.items && order.items.length > 0);
+
+            setOrders(ordersList);
+            setLoading(false);
+        } catch (err) {
+            console.error('Error loading orders:', err);
+            setError('Failed to load orders');
+            setLoading(false);
+        }
+    };
 
     const handleAddNewOrder = () => {
-        // In a real implementation, this would open the POS screen
-        console.log('Add new order for', tableId || variant);
-        // For now, just show a toast
-        showToast('Add new order functionality coming soon');
+        // Check if POS component is available
+        if (!window.POS) {
+            console.error("POS component is not defined");
+            showToast("Cannot open POS: component not available", "error");
+            return;
+        }
+
+        // Create a container for the POS component
+        const posContainer = document.createElement('div');
+        posContainer.id = 'pos-modal-container';
+        posContainer.className = 'fixed inset-0 z-50';
+        document.body.appendChild(posContainer);
+
+        try {
+            // Create a root element for React 18
+            const root = ReactDOM.createRoot(posContainer);
+
+            // Render the POS component
+            root.render(
+                React.createElement(window.POS, {
+                    title: tableId ? `Table ${tableId}` : variant,
+                    tableId: tableId,
+                    variant: variant,
+                    onClose: () => {
+                        // Unmount and clean up
+                        root.unmount();
+                        if (document.body.contains(posContainer)) {
+                            document.body.removeChild(posContainer);
+                        }
+                        // Refresh orders list
+                        loadOrders();
+                    }
+                })
+            );
+        } catch (error) {
+            console.error("Error rendering POS:", error);
+            if (document.body.contains(posContainer)) {
+                document.body.removeChild(posContainer);
+            }
+            showToast("Failed to open POS", "error");
+        }
     };
 
     const handleShowQR = () => {
-        // In a real implementation, this would show the QR code
-        console.log('Show QR for', tableId || variant);
-        // For now, just show a toast
-        showToast('QR code functionality coming soon');
-        setIsMenuOpen(false);
-    };
-
-    const handleDeleteTable = () => {
-        if (confirm(`Are you sure you want to delete ${tableId ? `table ${tableId}` : variant}?`)) {
-            // In a real implementation, this would delete the table
-            console.log('Delete', tableId || variant);
-            // For now, just show a toast and close the modal
-            showToast('Delete functionality coming soon');
-            onClose();
+        // Download QR code for the table (equivalent to Usr.seller!.downloadQr(tableId: widget.tableId))
+        if (seller && typeof seller.downloadQr === 'function') {
+            seller.downloadQr(tableId);
+        } else {
+            // Fallback if seller.downloadQr is not available
+            const storeLink = seller?.getStoreLink ? seller.getStoreLink() : `https://${seller?.username || 'store'}.shopto.store`;
+            const url = tableId ? `${storeLink}/getQR?id=${tableId}` : `${storeLink}/getQR`;
+            window.open(url, '_blank');
         }
         setIsMenuOpen(false);
     };
 
-    // Calculate total items and served items across all orders
-    const totalItems = orders.reduce((sum, order) => sum + (order.totalItems || order.items?.reduce((s, item) => s + (item.qnt || item.quantity || 1), 0) || 0), 0);
-    const servedItems = orders.reduce((sum, order) => sum + (order.servedItems || order.items?.filter(item => item.served).reduce((s, item) => s + (item.qnt || item.quantity || 1), 0) || 0), 0);
-    const progress = totalItems > 0 ? (servedItems / totalItems) * 100 : 0;
+    const confirmDelete = () => {
+        // Confirm before deleting (equivalent to confirmDialog in Flutter)
+        confirmDialog({
+            title: "Confirm Delete",
+            content: `Are you sure you want to delete ${tableId ? `table ${tableId}` : variant}?`,
+            confirmText: "DELETE",
+            onConfirm: async () => {
+                try {
+                    if (tableId && seller && typeof seller.removeTable === 'function') {
+                        await seller.removeTable(tableId);
+                        showToast('Table deleted successfully');
+                        handleClose(); // Use handleClose instead of onClose directly
+                    } else {
+                        showToast('Delete functionality not available');
+                    }
+                } catch (err) {
+                    console.error('Error deleting table:', err);
+                    showToast('Failed to delete table');
+                }
+            }
+        });
+        setIsMenuOpen(false);
+    };
+
+    // Render the no orders widget (equivalent to noOrderWidget in Flutter)
+    const renderNoOrdersWidget = () => {
+        return (
+            <div className="flex flex-col items-center justify-center py-10">
+                <div className="opacity-50 mb-8">
+                    <i className="ph ph-shopping-bag text-5xl text-blue-800 mb-4"></i>
+                    <p className="text-xl font-bold text-blue-800 text-center">No orders yet here</p>
+                </div>
+            </div>
+        );
+    };
+
+    // Render the context menu (equivalent to contextMenu in Flutter)
+    const renderContextMenu = () => {
+        return (
+            <div className="relative" ref={menuRef}>
+                <button
+                    className="p-2 hover:bg-gray-100 rounded-full"
+                    onClick={() => setIsMenuOpen(!isMenuOpen)}
+                >
+                    <i className="ph ph-dots-three-vertical text-xl"></i>
+                </button>
+                {isMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-20">
+                        <div className="py-1">
+                            <button
+                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                onClick={handleShowQR}
+                            >
+                                <i className="ph ph-qr-code mr-2"></i>
+                                Show QR
+                            </button>
+                            <button
+                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                onClick={confirmDelete}
+                            >
+                                <i className="ph ph-trash mr-2"></i>
+                                Delete table
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     if (!isOpen) return null;
 
+    // Calculate total and served items across all orders
+    const totalItems = orders.reduce((sum, order) => {
+        return sum + (order.items?.reduce((itemSum, item) => itemSum + (item.quantity || item.qnt || 1), 0) || 0);
+    }, 0);
+
+    const servedItems = orders.reduce((sum, order) => {
+        return sum + (order.items?.filter(item => item.served).reduce((itemSum, item) => itemSum + (item.quantity || item.qnt || 1), 0) || 0);
+    }, 0);
+
+    const progress = totalItems > 0 ? servedItems / totalItems : 0;
+    const progressPercent = Math.round(progress * 100);
+
+    // Use the utility function for modal classes
+    const dialogClasses = getModalClasses({
+        isMobile,
+        isClosing
+    });
+
+    // Use utility function for overlay classes
+    const overlayClasses = getModalOverlayClasses(isClosing);
+
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center">
-            <div className="bg-white w-full max-w-4xl h-full md:h-auto md:max-h-[90vh] overflow-y-auto rounded-lg shadow-xl">
+        <div className={overlayClasses} onClick={handleClose}>
+            <div
+                ref={dialogRef}
+                className={dialogClasses}
+                onClick={e => e.stopPropagation()}
+            >
+                {/* Handle/Drag indicator for mobile */}
+                {isMobile && (
+                    <div className="w-full flex justify-center pt-2 pb-1">
+                        <div className="mobile-drag-handle"></div>
+                    </div>
+                )}
+
                 <div className="sticky top-0 bg-white border-b z-10">
                     <div className="p-4 flex items-center justify-between">
-                        <h2 className="text-xl font-semibold">
-                            {variant || `Table ${tableId}`}
+                        <h2 className="text-xl font-semibold flex items-center gap-2">
+                            {variant ? (
+                                <><i className="ph ph-storefront text-blue-600"></i> {variant}</>
+                            ) : (
+                                <><i className="ph ph-table text-blue-600"></i> Table {tableId}</>
+                            )}
                         </h2>
                         <div className="flex items-center">
-                            <div className="relative" ref={menuRef}>
-                                <button
-                                    className="p-2 hover:bg-gray-100 rounded-full"
-                                    onClick={() => setIsMenuOpen(!isMenuOpen)}
-                                >
-                                    <i className="ph ph-dots-three-vertical text-xl"></i>
-                                </button>
-                                {isMenuOpen && (
-                                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-20">
-                                        <div className="py-1">
-                                            <button
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
-                                                onClick={handleShowQR}
-                                            >
-                                                <i className="ph ph-qr-code mr-2"></i>
-                                                Show QR
-                                            </button>
-                                            <button
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
-                                                onClick={handleDeleteTable}
-                                            >
-                                                <i className="ph ph-trash mr-2"></i>
-                                                Delete table
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
+                            {renderContextMenu()}
                             <button
-                                onClick={onClose}
+                                onClick={handleClose}
                                 className="p-2 hover:bg-gray-100 rounded-full"
+                                aria-label="Close"
                             >
                                 <i className="ph ph-x text-xl"></i>
                             </button>
                         </div>
                     </div>
 
+                    {/* Progress bar for all orders */}
                     {orders.length > 0 && (
-                        <div className="px-4 pb-2">
-                            <div className="flex justify-between text-sm text-gray-600 mb-1">
-                                <span>Progress</span>
+                        <div className="px-4 pb-3 flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-sm text-gray-600">
                                 <span>{servedItems}/{totalItems} items served</span>
                             </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                                <div
-                                    className="bg-blue-600 h-2 rounded-full"
-                                    style={{ width: `${progress}%` }}
-                                ></div>
+                            <div className="text-sm font-medium text-gray-700">
+                                {progressPercent}% complete
                             </div>
                         </div>
                     )}
                 </div>
 
-                <div className="p-4">
+                <div className="flex flex-col h-[calc(100%-70px)]">
                     {loading ? (
-                        <div className="p-4 text-center">
-                            <div className="animate-spin inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+                        <div className="p-4 text-center flex-1 flex flex-col items-center justify-center">
+                            <div className="animate-spin inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+                            <p className="mt-2 text-gray-600">Loading orders...</p>
                         </div>
                     ) : error ? (
-                        <div className="p-4 text-center text-red-600">{error}</div>
-                    ) : orders.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-10">
-                            <div className="opacity-50 mb-8">
-                                <i className="ph ph-shopping-bag text-5xl text-blue-800 mb-4"></i>
-                                <p className="text-xl font-bold text-blue-800 text-center">No orders yet here</p>
+                        <div className="p-4 text-center flex-1 flex flex-col items-center justify-center">
+                            <div className="bg-red-50 text-red-600 p-4 rounded-lg max-w-md">
+                                <i className="ph ph-warning-circle text-2xl mb-2"></i>
+                                <p>{error}</p>
                             </div>
-                            <button
-                                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                                onClick={handleAddNewOrder}
-                            >
-                                Add New Order
-                            </button>
                         </div>
-                    ) : (
-                        <div className="space-y-6">
-                            {orders.map(order => (
-                                <OrderView
-                                    key={order.id}
-                                    order={order}
-                                    tableId={tableId}
-                                    variant={variant}
-                                />
-                            ))}
-                            <div className="py-4">
+                    ) : orders.length === 0 ? (
+                        <div className="flex-1 flex flex-col">
+                            <div className="flex-1 flex items-center justify-center">
+                                {renderNoOrdersWidget()}
+                            </div>
+                            <div className="p-4 mt-auto">
                                 <button
-                                    className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                    className="w-full py-3.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 font-medium"
                                     onClick={handleAddNewOrder}
                                 >
+                                    <i className="ph ph-plus-circle text-xl"></i>
+                                    Add New Order
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col h-full">
+                            <div className="space-y-6 flex-1 overflow-y-auto p-4">
+                                {orders.map(order => {
+                                    // Create an MOrder-like object with the necessary methods
+                                    const mOrder = {
+                                        ...order,
+                                        id: order.id,
+                                        billNo: order.billNo,
+                                        items: order.items || [],
+                                        date: order.date,
+                                        servedItems: order.items?.filter(item => item.served).length || 0,
+                                        totalItems: order.items?.length || 0,
+                                        subTotal: order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || item.qnt || 1)), 0) || 0,
+                                        // Add methods that OrderView component expects
+                                        serveItem: async (item, served) => {
+                                            try {
+                                                const orderRef = window.sdk.collection("Orders").doc(order.id);
+                                                const orderDoc = await orderRef.get();
+                                                if (!orderDoc.exists) throw new Error('Order not found');
+
+                                                const orderData = orderDoc.data();
+                                                const updatedItems = orderData.items.map(i => {
+                                                    if (i.pid === item.pid) {
+                                                        return { ...i, served: served };
+                                                    }
+                                                    return i;
+                                                });
+
+                                                await orderRef.update({ items: updatedItems });
+                                                return true;
+                                            } catch (error) {
+                                                console.error("Error updating serve status:", error);
+                                                throw error;
+                                            }
+                                        },
+                                        addItem: async (item) => {
+                                            try {
+                                                const orderRef = window.sdk.collection("Orders").doc(order.id);
+                                                const orderDoc = await orderRef.get();
+                                                if (!orderDoc.exists) throw new Error('Order not found');
+
+                                                const orderData = orderDoc.data();
+                                                const updatedItems = orderData.items.map(i => {
+                                                    if (i.pid === item.pid) {
+                                                        const newQnt = (i.quantity || i.qnt || 1) + 1;
+                                                        return { ...i, quantity: newQnt, qnt: newQnt };
+                                                    }
+                                                    return i;
+                                                });
+
+                                                await orderRef.update({ items: updatedItems });
+                                                return true;
+                                            } catch (error) {
+                                                console.error("Error adding item:", error);
+                                                throw error;
+                                            }
+                                        },
+                                        removeItem: async (item) => {
+                                            try {
+                                                const orderRef = window.sdk.collection("Orders").doc(order.id);
+                                                const orderDoc = await orderRef.get();
+                                                if (!orderDoc.exists) throw new Error('Order not found');
+
+                                                const orderData = orderDoc.data();
+                                                const updatedItems = orderData.items.map(i => {
+                                                    if (i.pid === item.pid) {
+                                                        const newQnt = Math.max(1, (i.quantity || i.qnt || 1) - 1);
+                                                        return { ...i, quantity: newQnt, qnt: newQnt };
+                                                    }
+                                                    return i;
+                                                });
+
+                                                await orderRef.update({ items: updatedItems });
+                                                return true;
+                                            } catch (error) {
+                                                console.error("Error removing item:", error);
+                                                throw error;
+                                            }
+                                        }
+                                    };
+
+                                    return (
+                                        <OrderView
+                                            key={order.id}
+                                            order={mOrder}
+                                            tableId={tableId}
+                                            variant={variant}
+                                        />
+                                    );
+                                })}
+                            </div>
+                            <div className="p-4 mt-auto border-t sticky bottom-0 bg-white">
+                                <button
+                                    className="w-full py-3.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 font-medium"
+                                    onClick={handleAddNewOrder}
+                                >
+                                    <i className="ph ph-plus-circle text-xl"></i>
                                     Add New Order
                                 </button>
                             </div>
@@ -685,54 +996,56 @@ function OrderView({ order, tableId, variant }) {
     const totalItems = order.items?.reduce((sum, item) => sum + (item.quantity || item.qnt || 1), 0) || 0;
     const servedItems = order.items?.filter(item => item.served).reduce((sum, item) => sum + (item.quantity || item.qnt || 1), 0) || 0;
     const progress = totalItems > 0 ? servedItems / totalItems : 0;
+    const progressPercent = Math.round(progress * 100);
 
     // Format date using the patterns from DateModifiers extension
     const formatTinyDateTime = (date) => {
-        if (!date) return '';
+        if (!date) return 'Invalid Date';
 
-        const orderDate = new Date(date);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        try {
+            const orderDate = new Date(date);
 
-        const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1);
+            // Check if date is valid
+            if (isNaN(orderDate.getTime())) {
+                return 'Invalid Date';
+            }
 
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
 
-        const orderDay = new Date(orderDate);
-        orderDay.setHours(0, 0, 0, 0);
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
 
-        const timeStr = orderDate.toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-        });
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
 
-        if (orderDay.getTime() === today.getTime()) {
-            return `Today, ${timeStr}`;
-        } else if (orderDay.getTime() === yesterday.getTime()) {
-            return `Yesterday, ${timeStr}`;
-        } else if (orderDay.getTime() === tomorrow.getTime()) {
-            return `Tomorrow, ${timeStr}`;
-        } else if (orderDay.getFullYear() === today.getFullYear()) {
-            return orderDate.toLocaleDateString('en-US', {
-                weekday: 'long',
-                day: '2-digit',
-                month: 'short',
+            const orderDay = new Date(orderDate);
+            orderDay.setHours(0, 0, 0, 0);
+
+            const timeStr = orderDate.toLocaleTimeString('en-US', {
                 hour: '2-digit',
                 minute: '2-digit',
                 hour12: true
             });
-        } else {
-            return orderDate.toLocaleDateString('en-US', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
-            });
+
+            if (orderDay.getTime() === today.getTime()) {
+                return `Today, ${timeStr}`;
+            } else if (orderDay.getTime() === yesterday.getTime()) {
+                return `Yesterday, ${timeStr}`;
+            } else if (orderDay.getTime() === tomorrow.getTime()) {
+                return `Tomorrow, ${timeStr}`;
+            } else {
+                return orderDate.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: true
+                });
+            }
+        } catch (error) {
+            console.error("Date formatting error:", error);
+            return 'Invalid Date';
         }
     };
 
@@ -749,25 +1062,145 @@ function OrderView({ order, tableId, variant }) {
 
     const handleCheckout = async () => {
         try {
-            // In a real implementation, this would open the checkout sheet
-            console.log('Checkout order:', order.id);
-            showToast('Checkout functionality coming soon');
-        } catch (err) {
-            console.error('Error checking out:', err);
-            showToast('Failed to checkout', 'error');
+            // Create a container for the CheckoutSheet
+            const checkoutContainer = document.createElement('div');
+            checkoutContainer.id = 'checkout-container';
+            checkoutContainer.className = 'fixed inset-0 z-50';
+            document.body.appendChild(checkoutContainer);
+
+            // Convert order items to cart format expected by CheckoutSheet
+            const cart = {};
+
+            // Make sure order and order.items exist before trying to loop
+            if (order && Array.isArray(order.items)) {
+                order.items.forEach(item => {
+                    // Make sure item has required properties
+                    if (item && item.pid) {
+                        cart[item.pid] = {
+                            product: {
+                                id: item.pid,
+                                title: item.title || 'Unknown Item',
+                                price: item.price || 0,
+                                mrp: item.mrp || item.price || 0,
+                                imgs: item.thumb ? [item.thumb] : [],
+                                charges: [], // Initialize with empty array to prevent undefined errors
+                                cat: item.cat || 'Other',
+                                veg: item.veg || false
+                            },
+                            quantity: item.quantity || item.qnt || 1
+                        };
+                    }
+                });
+            }
+
+            // Create a root element for React 18
+            const root = ReactDOM.createRoot(checkoutContainer);
+
+            // Render the CheckoutSheet component
+            root.render(
+                React.createElement(window.CheckoutSheet, {
+                    cart: cart,
+                    clearCallback: () => {
+                        // Cleanup and close
+                        root.unmount();
+                        if (document.body.contains(checkoutContainer)) {
+                            document.body.removeChild(checkoutContainer);
+                        }
+                        // Refresh orders list if needed
+                        if (onClose) onClose();
+                    },
+                    tableId: tableId,
+                    checkout: true,
+                    orderId: order ? order.id : null,
+                    priceVariant: variant,
+                    onClose: () => {
+                        // Cleanup
+                        root.unmount();
+                        if (document.body.contains(checkoutContainer)) {
+                            document.body.removeChild(checkoutContainer);
+                        }
+                    }
+                })
+            );
+        } catch (error) {
+            console.error("Error opening checkout:", error);
+            showToast("Failed to open checkout", "error");
         }
     };
 
     const handleAddNewItem = () => {
-        // In a real implementation, this would open the POS screen with the current order
-        console.log('Add new item to order:', order.id);
-        showToast('Add new item functionality coming soon');
+        // Check if POS component is available
+        if (!window.POS) {
+            console.error("POS component is not defined");
+            showToast("Cannot open POS: component not available", "error");
+            return;
+        }
+
+        // Create a container for the POS component
+        const posContainer = document.createElement('div');
+        posContainer.id = 'pos-items-container';
+        posContainer.className = 'fixed inset-0 z-50';
+        document.body.appendChild(posContainer);
+
+        try {
+            // Create a root element for React 18
+            const root = ReactDOM.createRoot(posContainer);
+
+            // Convert order to the format expected by POS component
+            const orderForPOS = {
+                ...order,
+                ref: window.sdk.collection("Orders").doc(order.id)
+            };
+
+            // Render the POS component
+            root.render(
+                React.createElement(window.POS, {
+                    title: `Add to Order #${order.billNo || order.id?.slice(-6)}`,
+                    tableId: tableId,
+                    variant: variant,
+                    order: orderForPOS,
+                    onClose: () => {
+                        // Unmount and clean up
+                        root.unmount();
+                        if (document.body.contains(posContainer)) {
+                            document.body.removeChild(posContainer);
+                        }
+                    }
+                })
+            );
+        } catch (error) {
+            console.error("Error rendering POS:", error);
+            if (document.body.contains(posContainer)) {
+                document.body.removeChild(posContainer);
+            }
+            showToast("Failed to open POS", "error");
+        }
     };
 
     const toggleItemServed = async (item, served) => {
         try {
-            // Update the item's served status in the database
-            await sdk.orders.updateItemServed(order.id, item.pid, served);
+            // Get a reference to the order document
+            const orderRef = window.sdk.collection("Orders").doc(order.id);
+
+            // Get the current order data
+            const orderDoc = await orderRef.get();
+            if (!orderDoc.exists) {
+                throw new Error('Order not found');
+            }
+
+            const orderData = orderDoc.data();
+
+            // Update the served status of the specific item
+            const updatedItems = orderData.items.map(i => {
+                if (i.pid === item.pid) {
+                    return { ...i, served: served };
+                }
+                return i;
+            });
+
+            // Update the order with the modified items array
+            await orderRef.update({ items: updatedItems });
+
             showToast(`Item ${served ? 'served' : 'unserved'}`);
         } catch (err) {
             console.error('Error updating item served status:', err);
@@ -777,8 +1210,23 @@ function OrderView({ order, tableId, variant }) {
 
     const handleRemoveItem = async (item) => {
         try {
-            // Remove the item from the order
-            await sdk.orders.removeItem(order.id, item.pid);
+            // Get a reference to the order document
+            const orderRef = window.sdk.collection("Orders").doc(order.id);
+
+            // Get the current order data
+            const orderDoc = await orderRef.get();
+            if (!orderDoc.exists) {
+                throw new Error('Order not found');
+            }
+
+            const orderData = orderDoc.data();
+
+            // Remove the item from the items array
+            const updatedItems = orderData.items.filter(i => i.pid !== item.pid);
+
+            // Update the order with the modified items array
+            await orderRef.update({ items: updatedItems });
+
             showToast(`${item.title} removed from order`);
         } catch (err) {
             console.error('Error removing item:', err);
@@ -788,8 +1236,41 @@ function OrderView({ order, tableId, variant }) {
 
     const handleAddItem = async (item) => {
         try {
-            // Add one more of the item to the order
-            await sdk.orders.addItem(order.id, item.pid);
+            // Get a reference to the order document
+            const orderRef = window.sdk.collection("Orders").doc(order.id);
+
+            // Get the current order data
+            const orderDoc = await orderRef.get();
+            if (!orderDoc.exists) {
+                throw new Error('Order not found');
+            }
+
+            const orderData = orderDoc.data();
+
+            // Find the item in the items array
+            const existingItemIndex = orderData.items.findIndex(i => i.pid === item.pid);
+
+            if (existingItemIndex >= 0) {
+                // If the item exists, increase its quantity
+                const updatedItems = [...orderData.items];
+                const existingItem = updatedItems[existingItemIndex];
+                const currentQuantity = existingItem.quantity || existingItem.qnt || 1;
+                updatedItems[existingItemIndex] = {
+                    ...existingItem,
+                    quantity: currentQuantity + 1
+                };
+
+                // Update the order with the modified items array
+                await orderRef.update({ items: updatedItems });
+            } else {
+                // If the item doesn't exist, add it to the items array
+                const newItem = { ...item, quantity: 1 };
+                const updatedItems = [...orderData.items, newItem];
+
+                // Update the order with the modified items array
+                await orderRef.update({ items: updatedItems });
+            }
+
             showToast(`${item.title} added to order`);
         } catch (err) {
             console.error('Error adding item:', err);
@@ -821,158 +1302,116 @@ function OrderView({ order, tableId, variant }) {
     // Calculate subtotal
     const subtotal = order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || item.qnt || 1)), 0) || 0;
 
-    // Check if customer information is available
-    const hasCustomerInfo = order.custName || order.custPhone || order.custId;
-
     return (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            <div className="p-4 border-b">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+            {/* Order Header */}
+            <div className="p-4">
                 <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                            <h3 className="font-medium">Bill No: #{order.billNo || order.id?.slice(-6)}</h3>
-                            <div className="flex-1"></div>
-                            <span className="text-sm text-gray-600">Served</span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-1">
-                            <p className="text-sm text-gray-500">{formatTinyDateTime(order.date)}</p>
-                            <div className="flex-1"></div>
-                            <span className="text-sm text-gray-600">{servedItems}/{totalItems} items</span>
+                    <div>
+                        <h3 className="font-medium text-gray-900">
+                            Bill No: <span className="text-blue-600">#</span>{order.billNo || order.id?.slice(-6)}
+                        </h3>
+                        <div className="flex items-center justify-between mt-1">
+                            <p className="text-sm text-gray-500">
+                                {formatTinyDateTime(order.date || order.placeDate)}
+                            </p>
+                            <p className="text-sm text-gray-500 ml-4">
+                                {servedItems}/{totalItems} items
+                            </p>
                         </div>
                     </div>
                     <button
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-full"
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
                         onClick={handleAddNewItem}
+                        aria-label="Add new item"
                     >
                         <i className="ph ph-plus-circle text-2xl"></i>
                     </button>
                 </div>
-
-                <div className="mt-2 bg-gray-200 rounded-full h-2 overflow-hidden">
-                    <div
-                        className="bg-blue-600 h-full rounded-full"
-                        style={{ width: `${progress * 100}%` }}
-                    ></div>
-                </div>
             </div>
 
-            {/* Customer Information (if available) */}
-            {hasCustomerInfo && (
-                <div className="px-4 py-3 bg-blue-50 border-b">
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                            <i className="ph ph-user text-blue-600"></i>
-                        </div>
-                        <div>
-                            <h4 className="font-medium">{order.custName || "Customer"}</h4>
-                            {order.custPhone && (
-                                <p className="text-sm text-gray-600">{order.custPhone}</p>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Progress Bar */}
+            <div className="h-1 bg-gray-100">
+                <div
+                    className="h-full bg-blue-600 transition-all duration-300 ease-out"
+                    style={{ width: `${progressPercent}%` }}
+                ></div>
+            </div>
 
-            <div className="p-4 space-y-4">
+            {/* Order Items */}
+            <div className="divide-y divide-gray-100">
                 {order.items?.map((item, index) => (
-                    <div key={index} className="flex items-center border-b pb-3">
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                checked={item.served || false}
-                                onChange={(e) => toggleItemServed(item, e.target.checked)}
-                                className="w-5 h-5 rounded text-blue-600"
-                            />
-                            <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
-                                {getItemImage(item) ? (
-                                    <img
-                                        src={getItemImage(item)}
-                                        alt={item.title}
-                                        className="w-full h-full object-cover"
-                                        onError={(e) => {
-                                            e.target.onerror = null;
-                                            e.target.style.display = 'none';
-                                            e.target.parentNode.innerHTML = `<i class="ph ${getCategoryIcon(item)} text-2xl text-gray-500"></i>`;
-                                        }}
-                                    />
-                                ) : (
-                                    <i className={`ph ${getCategoryIcon(item)} text-2xl text-gray-500`}></i>
-                                )}
-                            </div>
-                        </div>
-                        <div className="ml-3 flex-1">
-                            <h4 className="font-medium">{item.title}</h4>
-                            <p className="text-sm text-gray-600">
-                                Qnt: {item.qnt || item.quantity || 1}
-                                Price: ₹{item.price || 0}
-                                {item.veg !== undefined && (
-                                    <span className={`ml-2 ${item.veg ? 'text-green-600' : 'text-red-600'}`}>
-                                        <i className={`ph ${item.veg ? 'ph-leaf' : 'ph-circle-wavy'} text-sm`}></i>
-                                    </span>
-                                )}
-                            </p>
-                        </div>
+                    <div key={index} className="p-4">
                         <div className="flex items-center">
-                            <button
-                                className="p-2 text-gray-600 hover:bg-gray-100 rounded-full"
-                                onClick={() => handleRemoveItem(item)}
-                            >
-                                <i className="ph ph-minus"></i>
-                            </button>
-                            <button
-                                className="p-2 text-gray-600 hover:bg-gray-100 rounded-full"
-                                onClick={() => handleAddItem(item)}
-                            >
-                                <i className="ph ph-plus"></i>
-                            </button>
+                            <div className="flex items-center gap-3">
+                                <input
+                                    type="checkbox"
+                                    checked={item.served || false}
+                                    onChange={(e) => toggleItemServed(item, e.target.checked)}
+                                    className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                                    id={`item-${order.id}-${index}`}
+                                />
+                                <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
+                                    {getItemImage(item) ? (
+                                        <img
+                                            src={getItemImage(item)}
+                                            alt={item.title}
+                                            className="w-full h-full object-cover"
+                                            onError={(e) => {
+                                                e.target.onerror = null;
+                                                e.target.src = 'https://via.placeholder.com/50';
+                                            }}
+                                        />
+                                    ) : (
+                                        <i className="ph ph-image text-gray-400 text-xl"></i>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="ml-3 flex-1">
+                                <h4 className="font-medium text-gray-900">{item.title}</h4>
+                                <p className="text-sm text-gray-600">
+                                    Qty: {item.quantity || item.qnt || 1} × ₹{item.price || 0}
+                                </p>
+                            </div>
+                            <div className="flex items-center">
+                                <button
+                                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+                                    onClick={() => handleRemoveItem(item)}
+                                    aria-label="Remove item"
+                                >
+                                    <i className="ph ph-minus"></i>
+                                </button>
+                                <button
+                                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+                                    onClick={() => handleAddItem(item)}
+                                    aria-label="Add item"
+                                >
+                                    <i className="ph ph-plus"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 ))}
+            </div>
 
-                <div className="pt-2">
-                    <div className="flex justify-between items-center">
-                        <h3 className="font-medium">Sub Total:</h3>
-                        <p className="font-semibold">₹{subtotal}</p>
-                    </div>
+            {/* Subtotal */}
+            <div className="p-4 border-t border-gray-100">
+                <h3 className="font-medium text-gray-900">
+                    Sub Total: ₹{subtotal}
+                </h3>
+            </div>
 
-                    {order.discount > 0 && (
-                        <div className="flex justify-between items-center text-green-600">
-                            <h3 className="font-medium">Discount:</h3>
-                            <p className="font-semibold">-₹{order.discount}</p>
-                        </div>
-                    )}
-
-                    {order.charges?.length > 0 && order.charges.map((charge, index) => (
-                        <div key={index} className="flex justify-between items-center">
-                            <h3 className="font-medium">{charge.title}:</h3>
-                            <p className="font-semibold">₹{charge.value}</p>
-                        </div>
-                    ))}
-
-                    <div className="flex justify-between items-center mt-2 pt-2 border-t">
-                        <h3 className="font-medium text-lg">Total:</h3>
-                        <p className="font-semibold text-lg">
-                            ₹{order.total || (subtotal - (order.discount || 0))}
-                        </p>
-                    </div>
-                </div>
-
-                {order.instructions && (
-                    <div className="bg-yellow-50 p-3 rounded-lg">
-                        <h4 className="text-sm font-medium text-yellow-800 mb-1">Instructions:</h4>
-                        <p className="text-sm text-yellow-700">{order.instructions}</p>
-                    </div>
-                )}
-
-                <div className="flex gap-4 pt-4">
+            {/* Action Buttons */}
+            <div className="p-4 pt-0">
+                <div className="flex gap-4">
                     <button
-                        className="px-4 py-2 border border-blue-600 text-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+                        className="px-4 py-2.5 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
                         onClick={handlePrintKOT}
                     >
                         Print KOT
                     </button>
                     <button
-                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                        className="flex-1 px-4 py-2.5 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
                         onClick={handleCheckout}
                     >
                         Checkout
@@ -1008,7 +1447,7 @@ function CustomerSearch({ isOpen, onClose, onSelectCustomer }) {
                 setError(null);
 
                 // Search for customers
-                const results = await sdk.collection("Customers")
+                const results = await window.sdk.collection("Customers")
                     .where("phone", "==", searchTerm)
                     .limit(10)
                     .get()
@@ -1056,7 +1495,7 @@ function CustomerSearch({ isOpen, onClose, onSelectCustomer }) {
             };
 
             // Add to Firestore
-            const newCustomerRef = sdk.collection("Customers").doc();
+            const newCustomerRef = window.sdk.collection("Customers").doc();
             await newCustomerRef.set(customerData);
 
             const customer = {

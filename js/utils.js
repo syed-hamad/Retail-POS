@@ -324,7 +324,7 @@ function toTwoDigits(n) {
 }
 
 // Utility function to show toast notifications
-function showToast(message, type = 'info') {
+function showToast(message, type = 'success') {
     // Create toast container if it doesn't exist
     let toastContainer = document.getElementById('toast-container');
     if (!toastContainer) {
@@ -336,17 +336,12 @@ function showToast(message, type = 'info') {
 
     // Create toast element
     const toast = document.createElement('div');
-    toast.className = `px-4 py-2 rounded-lg shadow-lg text-white flex items-center ${type === 'error' ? 'bg-red-500' :
-        type === 'success' ? 'bg-green-500' :
-            'bg-blue-500'
+    toast.className = `px-4 py-2 rounded-lg shadow-lg text-white flex items-center ${type === 'success' ? 'bg-green-500' : 'bg-red-500'
         }`;
 
     // Add icon based on type
     const icon = document.createElement('i');
-    icon.className = `ph ${type === 'error' ? 'ph-x-circle' :
-        type === 'success' ? 'ph-check-circle' :
-            'ph-info'
-        } mr-2`;
+    icon.className = `ph ${type === 'success' ? 'ph-check-circle' : 'ph-x-circle'} mr-2`;
     toast.appendChild(icon);
 
     // Add message
@@ -359,13 +354,106 @@ function showToast(message, type = 'info') {
 
     // Remove after 3 seconds
     setTimeout(() => {
-        toast.classList.add('opacity-0', 'transition-opacity', 'duration-300');
+        toast.classList.add('opacity-0', 'transition-opacity');
         setTimeout(() => {
             toastContainer.removeChild(toast);
-            // Remove container if empty
-            if (toastContainer.children.length === 0) {
-                document.body.removeChild(toastContainer);
-            }
         }, 300);
     }, 3000);
+}
+
+// Confirm dialog
+function confirmDialog({ title, content, confirmText = 'Confirm', cancelText = 'Cancel', onConfirm, onCancel }) {
+    // Create modal container
+    const modalContainer = document.createElement('div');
+    modalContainer.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+
+    // Create modal content
+    const modal = document.createElement('div');
+    modal.className = 'bg-white rounded-lg shadow-xl max-w-md w-full mx-4 overflow-hidden';
+
+    // Create modal header
+    const header = document.createElement('div');
+    header.className = 'p-4 border-b';
+    const titleElement = document.createElement('h2');
+    titleElement.className = 'text-xl font-semibold text-gray-900';
+    titleElement.textContent = title;
+    header.appendChild(titleElement);
+
+    // Create modal body
+    const body = document.createElement('div');
+    body.className = 'p-4';
+    const contentElement = document.createElement('p');
+    contentElement.className = 'text-gray-700';
+    contentElement.textContent = content;
+    body.appendChild(contentElement);
+
+    // Create modal footer
+    const footer = document.createElement('div');
+    footer.className = 'p-4 border-t flex justify-end gap-3';
+
+    // Create cancel button
+    const cancelButton = document.createElement('button');
+    cancelButton.className = 'px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors';
+    cancelButton.textContent = cancelText;
+    cancelButton.onclick = () => {
+        document.body.removeChild(modalContainer);
+        if (onCancel) onCancel();
+    };
+
+    // Create confirm button
+    const confirmButton = document.createElement('button');
+    confirmButton.className = 'px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors';
+    confirmButton.textContent = confirmText;
+    confirmButton.onclick = () => {
+        document.body.removeChild(modalContainer);
+        if (onConfirm) onConfirm();
+    };
+
+    // Add buttons to footer
+    footer.appendChild(cancelButton);
+    footer.appendChild(confirmButton);
+
+    // Assemble modal
+    modal.appendChild(header);
+    modal.appendChild(body);
+    modal.appendChild(footer);
+    modalContainer.appendChild(modal);
+
+    // Add click outside to cancel
+    modalContainer.onclick = (e) => {
+        if (e.target === modalContainer) {
+            document.body.removeChild(modalContainer);
+            if (onCancel) onCancel();
+        }
+    };
+
+    // Add to document
+    document.body.appendChild(modalContainer);
+}
+
+// Utility function for modal/dialog classes (to reduce duplication across components)
+function getModalClasses({ isMobile, isClosing, customBaseClasses, customMobileWidthClasses, customDesktopWidthClasses }) {
+    // Default base classes if not provided
+    const baseClasses = customBaseClasses || "bg-white overflow-y-auto shadow-xl custom-scrollbar";
+
+    // Mobile positioning and sizing
+    const mobileWidthClasses = customMobileWidthClasses || "fixed inset-x-0 bottom-0 rounded-t-2xl max-h-[90vh] mobile-bottom-sheet";
+
+    // Desktop positioning and sizing
+    const desktopWidthClasses = customDesktopWidthClasses || "fixed top-0 right-0 h-full w-full md:w-2/3 lg:w-1/2 xl:w-2/5";
+
+    if (isMobile) {
+        // Mobile classes
+        const animationClass = isClosing ? "translate-y-full" : "translate-y-0";
+        return `${baseClasses} ${mobileWidthClasses} transition-transform ${animationClass}`;
+    } else {
+        // Desktop classes
+        const animationClass = isClosing ? "translate-x-full" : "translate-x-0";
+        return `${baseClasses} ${desktopWidthClasses} transition-transform ${animationClass} desktop-slide-in`;
+    }
+}
+
+// Get overlay classes for modals
+function getModalOverlayClasses(isClosing, zIndex = "z-50") {
+    return `fixed inset-0 bg-black transition-opacity duration-300 ${zIndex} ${isClosing ? 'bg-opacity-0' : 'bg-opacity-50'}`;
 } 

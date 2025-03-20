@@ -563,36 +563,44 @@ function Dashboard() {
             </div>
 
             {/* Profile Menu */}
-            <ProfileMenu
-                seller={seller}
-                isOpen={isProfileOpen}
-                onClose={() => setIsProfileOpen(false)}
-            />
+            {window.ProfileMenu && (
+                <window.ProfileMenu
+                    seller={seller}
+                    isOpen={isProfileOpen}
+                    onClose={() => setIsProfileOpen(false)}
+                />
+            )}
 
             {/* Add Table Modal */}
-            <AddTableModal
-                isOpen={isAddTableModalOpen}
-                onClose={() => setIsAddTableModalOpen(false)}
-                seller={seller}
-            />
+            {window.AddTableModal && (
+                <window.AddTableModal
+                    isOpen={isAddTableModalOpen}
+                    onClose={() => setIsAddTableModalOpen(false)}
+                    seller={seller}
+                />
+            )}
 
             {/* Rename Room Modal */}
-            <RenameRoomModal
-                isOpen={isRenameRoomModalOpen}
-                onClose={() => setIsRenameRoomModalOpen(false)}
-                tableId={selectedTableId}
-                variant={selectedVariant}
-                seller={seller}
-            />
+            {window.RenameRoomModal && (
+                <window.RenameRoomModal
+                    isOpen={isRenameRoomModalOpen}
+                    onClose={() => setIsRenameRoomModalOpen(false)}
+                    tableId={selectedTableId}
+                    variant={selectedVariant}
+                    seller={seller}
+                />
+            )}
 
             {/* OrderRoom Modal */}
-            <OrderRoom
-                isOpen={isOrderRoomOpen}
-                onClose={() => setIsOrderRoomOpen(false)}
-                tableId={selectedRoomTableId}
-                variant={selectedRoomVariant}
-                seller={seller}
-            />
+            {window.OrderRoom && (
+                <window.OrderRoom
+                    isOpen={isOrderRoomOpen}
+                    onClose={() => setIsOrderRoomOpen(false)}
+                    tableId={selectedRoomTableId}
+                    variant={selectedRoomVariant}
+                    seller={seller}
+                />
+            )}
 
             {/* Content based on active tab */}
             <div className="flex-1 overflow-hidden">
@@ -653,28 +661,28 @@ function Dashboard() {
                         </div>
 
                         {/* Dine In Tables */}
-                        <h2 className="text-2xl font-bold mb-4">Dine In</h2>
-                        {tables.filter(t => t.type === 'dine_in').length === 0 ? (
-                            <div className="opacity-30 py-8 flex flex-col items-center justify-center">
-                                <i className="ph ph-table text-5xl text-blue-800 mb-4"></i>
-                                <p className="text-xl font-bold text-blue-800">No tables added yet</p>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-3 gap-4 mb-6">
-                                {tables
-                                    .filter(t => t.type === 'dine_in')
-                                    .map(table => (
-                                        <DashboardTile
-                                            key={table.id}
-                                            tableId={table.title}
-                                            orders={table.orders}
-                                            onTap={() => handleRoomClick(table.title, null)}
-                                            onLongPress={() => showRenameRoomModal(table.title, null)}
-                                        />
-                                    ))
-                                }
-                            </div>
-                        )}
+                        <div className="mb-4">
+                            <h2 className="text-xl font-bold mb-4">Dine In</h2>
+                            {tables.filter(t => t.type === 'dine_in').length === 0 ? (
+                                <NoOrdersFound />
+                            ) : (
+                                <div className="grid grid-cols-3 gap-4 mb-6">
+                                    {tables
+                                        .filter(t => t.type === 'dine_in')
+                                        .map(table => (
+                                            <TableCard
+                                                key={table.id}
+                                                title={table.title}
+                                                orders={table.orders}
+                                                duration={table.duration}
+                                                onTap={() => handleRoomClick(table.title, null)}
+                                                onLongPress={() => showRenameRoomModal(table.title, null)}
+                                            />
+                                        ))
+                                    }
+                                </div>
+                            )}
+                        </div>
 
                         {/* Add Table Button */}
                         <div className="flex justify-center mt-6">

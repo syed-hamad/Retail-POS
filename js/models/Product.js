@@ -1,72 +1,76 @@
 // Product model for product data
 class Product {
-    constructor(data = {}) {
+    constructor(data) {
+        // Basic properties
         this.id = data.id || '';
-        this.cat = data.cat || '';
         this.title = data.title || '';
+        this.desc = data.desc || '';
+        this.cat = data.cat || 'Uncategorized';
+        this.imgs = data.imgs || [];
+        this.price = data.price || 0;
+        this.mrp = data.mrp || 0;
+        this.discount = data.discount || 0;
+        this.active = data.active !== false; // default to true
+        this.veg = data.veg !== undefined ? data.veg : true; // default to vegetarian
+
+        // Seller info
         this.sellerId = data.sellerId || '';
         this.sellerBusinessName = data.sellerBusinessName || '';
         this.sellerAvatar = data.sellerAvatar || '';
-        this.desc = data.desc || '';
-        this.tag = data.tag || '';
-        this.date = data.date ? new Date(data.date) : new Date();
-        this.mrp = data.mrp || 0;
-        this.price = data.price || 0;
-        this.imgs = data.imgs && data.imgs.length > 0 ? data.imgs : [Product.DUMMY_THUMB];
-        this.videos = data.videos && data.videos.length > 0 ? data.videos : [];
-        this.colors = data.colors || [];
-        this.sizes = data.sizes || [];
-        this.recipe = data.recipe || [];
-        this.allowCOD = data.allowCOD || false;
-        this.active = data.active || false;
-        this.veg = data.veg || false;
+
+        // Calculated properties
+        this.hasDiscount = this.price < this.mrp;
+        this.discountPercent = this.hasDiscount ? Math.round(((this.mrp - this.price) / this.mrp) * 100) : 0;
+
+        // Additional properties
+        this.barcode = data.barcode || '';
+        this.sku = data.sku || '';
         this.stock = data.stock || 0;
-        this.priceVariants = data.priceVariants || {};
-        this.charges = data.charges || [];
-        this.orderIndex = data.orderIndex || 0;
+        this.date = data.date ? new Date(data.date) : new Date();
+    }
+
+    // Create a Product from a Firestore document
+    static fromDoc(doc, priceVariant = 'default') {
+        if (!doc.exists) {
+            return null;
+        }
+
+        const data = doc.data();
+        data.id = doc.id;
+
+        // Handle price variants
+        if (data.priceVariants && data.priceVariants[priceVariant]) {
+            data.price = data.priceVariants[priceVariant];
+        }
+
+        return new Product(data);
+    }
+
+    // Convert to a simple object for storing in Firestore
+    toFirestore() {
+        return {
+            title: this.title,
+            desc: this.desc,
+            cat: this.cat,
+            imgs: this.imgs,
+            price: this.price,
+            mrp: this.mrp,
+            discount: this.discount,
+            active: this.active,
+            veg: this.veg,
+            sellerId: this.sellerId,
+            sellerBusinessName: this.sellerBusinessName,
+            sellerAvatar: this.sellerAvatar,
+            barcode: this.barcode,
+            sku: this.sku,
+            stock: this.stock,
+            date: this.date
+        };
     }
 
     // Create a Product from JSON data
     static fromJson(json) {
         return new Product(json);
-    }
-
-    // Create a Product from Firestore document
-    static fromDoc(doc, priceVariant = null) {
-        if (!doc || !doc.exists) return null;
-
-        const data = doc.data();
-        let varPrice = null;
-
-        if (priceVariant && data.priceVariants && data.priceVariants[priceVariant]) {
-            varPrice = data.priceVariants[priceVariant];
-        }
-
-        return new Product({
-            id: doc.id,
-            cat: data.cat,
-            title: data.title,
-            sellerId: data.sellerId,
-            sellerBusinessName: data.sellerBusinessName,
-            sellerAvatar: data.sellerAvatar,
-            desc: data.desc || '',
-            tag: data.tag || '',
-            date: data.date ? data.date.toDate ? data.date.toDate() : new Date(data.date) : new Date(),
-            mrp: varPrice || data.mrp,
-            price: varPrice || data.price,
-            imgs: data.imgs || [],
-            videos: data.videos || [],
-            colors: data.colors || [],
-            sizes: data.sizes || [],
-            recipe: data.recipe || [],
-            allowCOD: data.allowCOD || false,
-            active: data.active || false,
-            veg: data.veg || false,
-            stock: data.stock || 0,
-            priceVariants: data.priceVariants || {},
-            charges: data.charges || [],
-            orderIndex: data.orderIndex || 0
-        });
     }
 
     // Convert Product to JSON
@@ -79,36 +83,17 @@ class Product {
             sellerBusinessName: this.sellerBusinessName,
             sellerAvatar: this.sellerAvatar,
             desc: this.desc,
-            tag: this.tag,
-            date: this.date,
-            mrp: this.mrp,
-            price: this.price,
             imgs: this.imgs,
-            videos: this.videos,
-            colors: this.colors,
-            sizes: this.sizes,
-            recipe: this.recipe,
-            allowCOD: this.allowCOD,
+            price: this.price,
+            mrp: this.mrp,
+            discount: this.discount,
             active: this.active,
             veg: this.veg,
             stock: this.stock,
-            priceVariants: this.priceVariants,
-            charges: this.charges,
-            orderIndex: this.orderIndex
+            date: this.date,
+            barcode: this.barcode,
+            sku: this.sku
         };
-    }
-
-    // Check if product has a discount
-    get hasDiscount() {
-        return this.mrp != null && this.price != null && this.mrp > this.price;
-    }
-
-    // Calculate discount percentage
-    get discount() {
-        if (this.hasDiscount) {
-            return Math.ceil(((this.mrp - this.price) * 100) / this.mrp);
-        }
-        return 0;
     }
 
     // Get URL-friendly title
@@ -118,6 +103,14 @@ class Product {
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '-')
             .substring(0, this.title.length > 100 ? 100 : this.title.length);
+    }
+
+    // Calculate discount percentage
+    get discount() {
+        if (this.hasDiscount) {
+            return Math.ceil(((this.mrp - this.price) * 100) / this.mrp);
+        }
+        return 0;
     }
 
     // Get recipe items

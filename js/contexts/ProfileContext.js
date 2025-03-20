@@ -208,7 +208,9 @@ function ProfileProvider({ children }) {
     // Check permissions
     const checkPermission = (module, action, silent = true) => {
         // Get current user email
-        const currentEmail = window.sdk.auth().currentUser?.email;
+        // Since auth is handled by the host platform, we can't use window.sdk.auth()
+        // Instead, we'll use a different approach or assume the user has permission
+        const currentEmail = localStorage.getItem('CURRENT_USER_EMAIL') || '';
 
         // SuperAdmin or admin can do anything
         if (isSuperAdmin() || isAdmin()) return true;
@@ -253,7 +255,9 @@ function ProfileProvider({ children }) {
 
     // Check if user is super admin
     const isSuperAdmin = () => {
-        const currentEmail = window.sdk.auth().currentUser?.email;
+        // Since auth is handled by the host platform, we can't use window.sdk.auth()
+        // Instead, we'll use a different approach or assume the user has permission
+        const currentEmail = localStorage.getItem('CURRENT_USER_EMAIL') || '';
 
         // Check if user is in super admin list (you'd need to define this)
         const isSuperAdminEmail = ['admin@shopto.app'].includes(currentEmail);
@@ -263,7 +267,9 @@ function ProfileProvider({ children }) {
 
     // Check if user is admin
     const isAdmin = () => {
-        const currentEmail = window.sdk.auth().currentUser?.email;
+        // Since auth is handled by the host platform, we can't use window.sdk.auth()
+        // Instead, we'll use a different approach or assume the user has permission
+        const currentEmail = localStorage.getItem('CURRENT_USER_EMAIL') || '';
         return profile?.email === currentEmail;
     };
 

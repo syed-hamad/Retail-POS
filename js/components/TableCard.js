@@ -1,24 +1,51 @@
 // Table Card Component
-function TableCard({ title, orders, duration, status }) {
-    const statusColors = {
-        active: 'bg-green-100 text-green-800',
-        inactive: 'bg-gray-100 text-gray-600'
+function TableCard({ title, orders, duration, status, onTap, onLongPress }) {
+    // Calculate color based on last placed date (similar to getColor in Flutter)
+    const getColor = (duration) => {
+        if (!duration) return 'bg-blue-100 text-blue-800';
+        
+        const minutes = duration.minutes || 0;
+        
+        if (minutes < 15) return 'bg-green-100 text-green-800';
+        if (minutes < 30) return 'bg-orange-100 text-orange-800';
+        return 'bg-red-100 text-red-800';
     };
 
+    // Get message based on last placed date (similar to getMsg in Flutter)
+    const getMessage = (duration) => {
+        if (!duration) return '⌛️ No orders';
+        
+        const minutes = duration.minutes || 0;
+        
+        if (minutes < 3) return '🔥 New order';
+        return `⏰ ${duration.display}`;
+    };
+
+    const color = getColor(duration);
+    const message = getMessage(duration);
+
     return (
-        <div className="card p-4 aspect-square flex flex-col cursor-pointer hover:border-2 hover:border-primary transition-all">
-            <h3 className="text-lg font-medium mb-2">{title}</h3>
-            <div className="flex items-center gap-2 text-gray-600 text-sm">
-                <i className="ph ph-hourglass text-lg" />
-                {duration ? <span>{duration}</span> : <span>No orders</span>}
-            </div>
-            {orders && (
-                <div className="mt-2">
-                    <span className={`text-sm px-2 py-1 rounded-full ${orders.length > 0 ? statusColors.active : statusColors.inactive}`}>
-                        {orders.length} {orders.length === 1 ? 'order' : 'orders'}
-                    </span>
+        <div 
+            className={`card p-4 aspect-square flex flex-col cursor-pointer hover:border-2 hover:border-primary transition-all ${color}`}
+            onClick={onTap}
+            onContextMenu={(e) => {
+                e.preventDefault();
+                onLongPress && onLongPress();
+            }}
+        >
+            <div className="flex flex-col items-center justify-between h-full">
+                <h3 className="text-lg font-bold text-center mb-2">{title}</h3>
+                
+                <div className="bg-white bg-opacity-60 px-3 py-1 rounded-md text-sm mb-2">
+                    {message}
                 </div>
-            )}
+                
+                {orders && orders.length > 0 && (
+                    <div className="text-sm">
+                        {orders.length} {orders.length === 1 ? 'order' : 'orders'}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
@@ -330,10 +357,10 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
 // No Orders Found Component
 function NoOrdersFound() {
     return (
-        <div className="flex flex-col items-center justify-center py-20">
-            <i className="ph ph-inbox text-5xl text-gray-300 mb-5"></i>
-            <p className="text-xl text-gray-500 text-center">
-                No Orders yet, Don't worry!<br />Soon it will appear here.
+        <div className="flex flex-col items-center justify-center py-20 opacity-30">
+            <i className="ph ph-table text-5xl text-blue-800 mb-4"></i>
+            <p className="text-xl font-bold text-blue-800 text-center">
+                No tables added yet
             </p>
         </div>
     );
