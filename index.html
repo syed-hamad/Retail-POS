@@ -25,7 +25,10 @@
                         primary: '#FF5A5F',
                         secondary: '#00A699',
                         dark: '#484848',
-                        light: '#767676'
+                        light: '#767676',
+                        'warm-bg': '#fff8f8',
+                        'warm-accent': '#ffefef',
+                        'warm-surface': '#fffcfc'
                     },
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
@@ -102,6 +105,7 @@
                 opacity: 0;
                 transform: scale(0.9);
             }
+
             to {
                 opacity: 1;
                 transform: scale(1);
@@ -160,19 +164,20 @@
             background-color: #CBD5E0;
             border-radius: 3px;
         }
-        
+
         /* Animation keyframes */
         @keyframes fadeIn {
             from {
                 opacity: 0;
                 transform: scale(0.9);
             }
+
             to {
                 opacity: 1;
                 transform: scale(1);
             }
         }
-        
+
         .animate-fadeIn {
             animation: fadeIn 0.3s ease-out;
         }

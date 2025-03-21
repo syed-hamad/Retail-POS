@@ -1018,14 +1018,14 @@ function OrderView({ order, tableId, variant }) {
 
     // Format date using the patterns from DateModifiers extension
     const formatTinyDateTime = (date) => {
-        if (!date) return 'Invalid Date';
+        if (!date) return 'Just now';
 
         try {
             const orderDate = new Date(date);
 
             // Check if date is valid
             if (isNaN(orderDate.getTime())) {
-                return 'Invalid Date';
+                return 'Just now';
             }
 
             const today = new Date();
@@ -1063,7 +1063,7 @@ function OrderView({ order, tableId, variant }) {
             }
         } catch (error) {
             console.error("Date formatting error:", error);
-            return 'Invalid Date';
+            return 'Just now';
         }
     };
 
@@ -1124,8 +1124,8 @@ function OrderView({ order, tableId, variant }) {
                         if (document.body.contains(checkoutContainer)) {
                             document.body.removeChild(checkoutContainer);
                         }
-                        // Refresh orders list if needed
-                        if (onClose) onClose();
+                        // Refresh orders list or page
+                        window.location.reload();
                     },
                     tableId: tableId,
                     checkout: true,
@@ -1341,25 +1341,27 @@ function OrderView({ order, tableId, variant }) {
     const subtotal = order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || item.qnt || 1)), 0) || 0;
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6" style={{ backgroundColor: "#fff8f8", borderRadius: "16px" }}>
             {/* Order Header */}
             <div className="p-4">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h3 className="font-medium text-gray-900">
-                            Bill No: <span className="text-blue-600">#</span>{order.billNo || order.id?.slice(-6)}
+                        <h3 className="font-medium text-gray-800 text-lg">
+                            Bill No: <span className="text-red-500">#{order.billNo || order.id?.slice(-6)}</span>
                         </h3>
-                        <div className="flex items-center justify-between mt-1">
-                            <p className="text-sm text-gray-500">
+                        <div className="flex items-center mt-1">
+                            <p className="text-sm text-gray-600">
                                 {formatTinyDateTime(order.date || order.placeDate)}
                             </p>
-                            <p className="text-sm text-gray-500 ml-4">
+                            <span className="mx-2 text-gray-300">•</span>
+                            <p className="text-sm text-gray-600 flex items-center">
+                                <span className={`inline-block w-2 h-2 rounded-full mr-1 ${progressPercent === 100 ? 'bg-green-500' : 'bg-red-500'}`}></span>
                                 {servedItems}/{totalItems} items
                             </p>
                         </div>
                     </div>
                     <button
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                        className="p-2.5 text-red-500 hover:bg-red-50 rounded-full transition-colors flex items-center justify-center w-10 h-10"
                         onClick={handleAddNewItem}
                         aria-label="Add new item"
                     >
@@ -1369,63 +1371,79 @@ function OrderView({ order, tableId, variant }) {
             </div>
 
             {/* Progress Bar */}
-            <div className="h-1 bg-gray-100">
+            <div className="h-2 bg-gray-100">
                 <div
-                    className="h-full bg-blue-600 transition-all duration-300 ease-out"
+                    className="h-full bg-red-500 transition-all duration-300 ease-out rounded-r-full"
                     style={{ width: `${progressPercent}%` }}
                 ></div>
             </div>
 
             {/* Order Items */}
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-pink-50">
                 {order.items?.map((item, index) => (
-                    <div key={index} className="p-4">
-                        <div className="flex items-center">
-                            <div className="flex items-center gap-3">
-                                <input
-                                    type="checkbox"
-                                    checked={item.served || false}
-                                    onChange={(e) => toggleItemServed(item, e.target.checked)}
-                                    className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
-                                    id={`item-${order.id}-${index}`}
-                                />
-                                <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
-                                    {getItemImage(item) ? (
-                                        <img
-                                            src={getItemImage(item)}
-                                            alt={item.title}
-                                            className="w-full h-full object-cover"
-                                            onError={(e) => {
-                                                e.target.onerror = null;
-                                                e.target.src = 'https://via.placeholder.com/50';
-                                            }}
-                                        />
-                                    ) : (
-                                        <i className="ph ph-image text-gray-400 text-xl"></i>
+                    <div key={index} className="p-4 hover:bg-pink-50 transition-colors">
+                        <div className="flex items-center gap-3">
+                            <input
+                                type="checkbox"
+                                checked={item.served || false}
+                                onChange={(e) => toggleItemServed(item, e.target.checked)}
+                                className="w-5 h-5 rounded border-gray-300 text-red-500 focus:ring-red-500 focus:ring-offset-0"
+                                id={`item-${order.id}-${index}`}
+                            />
+                            <div className="w-14 h-14 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
+                                {getItemImage(item) ? (
+                                    <img
+                                        src={getItemImage(item)}
+                                        alt={item.title}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                            e.target.onerror = null;
+                                            e.target.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="%23ccc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
+                                        }}
+                                    />
+                                ) : (
+                                    <i className={`ph ${getCategoryIcon(item)} text-gray-400 text-xl`}></i>
+                                )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h4 className="font-medium text-gray-800 truncate">{item.title}</h4>
+                                <div className="flex items-center mt-1">
+                                    <span className="text-sm font-medium text-red-500">₹{item.price || 0}</span>
+                                    {item.cat && (
+                                        <>
+                                            <span className="mx-1 text-gray-300">•</span>
+                                            <span className="text-sm text-gray-600">{item.cat}</span>
+                                        </>
                                     )}
                                 </div>
-                            </div>
-                            <div className="ml-3 flex-1">
-                                <h4 className="font-medium text-gray-900">{item.title}</h4>
-                                <p className="text-sm text-gray-600">
-                                    Qty: {item.quantity || item.qnt || 1} × ₹{item.price || 0}
-                                </p>
+                                {item.veg !== undefined && (
+                                    <div className="mt-1">
+                                        <span className={`inline-block w-4 h-4 border ${item.veg ? 'border-green-500' : 'border-red-500'} p-0.5 rounded-sm`}>
+                                            <span className={`block w-full h-full rounded-sm ${item.veg ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                             <div className="flex items-center">
-                                <button
-                                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
-                                    onClick={() => handleRemoveItem(item)}
-                                    aria-label="Remove item"
-                                >
-                                    <i className="ph ph-minus"></i>
-                                </button>
-                                <button
-                                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
-                                    onClick={() => handleAddItem(item)}
-                                    aria-label="Add item"
-                                >
-                                    <i className="ph ph-plus"></i>
-                                </button>
+                                <div className="bg-gray-100 rounded-full px-1 py-0.5 flex items-center gap-1">
+                                    <button
+                                        className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-full"
+                                        onClick={() => handleRemoveItem(item)}
+                                        aria-label="Remove item"
+                                    >
+                                        <i className="ph ph-minus"></i>
+                                    </button>
+                                    <span className="w-8 text-center font-medium">
+                                        {item.quantity || item.qnt || 1}
+                                    </span>
+                                    <button
+                                        className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-full"
+                                        onClick={() => handleAddItem(item)}
+                                        aria-label="Add item"
+                                    >
+                                        <i className="ph ph-plus"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1433,25 +1451,28 @@ function OrderView({ order, tableId, variant }) {
             </div>
 
             {/* Subtotal */}
-            <div className="p-4 border-t border-gray-100">
-                <h3 className="font-medium text-gray-900">
-                    Sub Total: ₹{subtotal}
-                </h3>
+            <div className="p-4 border-t border-pink-100">
+                <div className="flex justify-between items-center">
+                    <h3 className="font-medium text-gray-700">Sub Total:</h3>
+                    <span className="font-medium text-red-500 text-lg">₹{subtotal}</span>
+                </div>
             </div>
 
             {/* Action Buttons */}
             <div className="p-4 pt-0">
-                <div className="flex gap-4">
+                <div className="flex gap-3">
                     <button
-                        className="px-4 py-2.5 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
+                        className="flex-1 py-2.5 border border-red-500 text-red-500 rounded-lg hover:bg-red-50 transition-colors flex items-center justify-center"
                         onClick={handlePrintKOT}
                     >
+                        <i className="ph ph-printer mr-2"></i>
                         Print KOT
                     </button>
                     <button
-                        className="flex-1 px-4 py-2.5 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
+                        className="flex-1 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center"
                         onClick={handleCheckout}
                     >
+                        <i className="ph ph-credit-card mr-2"></i>
                         Checkout
                     </button>
                 </div>

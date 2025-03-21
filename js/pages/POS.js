@@ -155,8 +155,7 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
 
     // Handle adding raw item
     const handleAddRawItem = () => {
-        // TODO: Implement raw item addition
-        showToast("Raw item addition not implemented yet");
+        setShowRawItemPanel(true);
     };
 
     // Handle smooth closing animation
@@ -326,7 +325,7 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
         return (
             <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
                 <div className="bg-white p-8 rounded-lg">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-dark"></div>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500"></div>
                 </div>
             </div>
         );
@@ -334,7 +333,7 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
 
     // Determine the appropriate classes based on device width and animation state
     const getDialogClasses = () => {
-        const baseClasses = "bg-white overflow-y-auto shadow-xl custom-scrollbar";
+        const baseClasses = "overflow-y-auto shadow-xl custom-scrollbar";
 
         if (isMobile) {
             // Mobile classes
@@ -357,6 +356,7 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
             <div
                 ref={dialogRef}
                 className={getDialogClasses()}
+                style={{ backgroundColor: "#fff8f8" }}
                 onClick={e => e.stopPropagation()}
             >
                 {/* Handle/Drag indicator for mobile */}
@@ -367,39 +367,39 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
                 )}
 
                 {/* Header */}
-                <div className="sticky top-0 bg-white border-b z-10">
+                <div className="sticky top-0 bg-white border-b z-10" style={{ backgroundColor: "#fff8f8" }}>
                     <div className="p-4 flex items-center justify-between">
-                        <h2 className="text-xl font-semibold">
+                        <h2 className="text-xl font-semibold text-gray-800">
                             {title || "New Order"}
                         </h2>
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={() => setShowSearchPanel(true)}
-                                className="p-2 hover:bg-gray-100 rounded-full"
+                                className="p-2.5 bg-white hover:bg-red-50 rounded-full shadow-sm transition-colors flex items-center justify-center w-10 h-10"
                                 aria-label="Search"
                             >
-                                <i className="ph ph-magnifying-glass text-xl"></i>
+                                <i className="ph ph-magnifying-glass text-red-500 text-xl"></i>
                             </button>
                             <button
                                 onClick={handleScanBarcode}
-                                className="p-2 hover:bg-gray-100 rounded-full"
+                                className="p-2.5 bg-white hover:bg-red-50 rounded-full shadow-sm transition-colors flex items-center justify-center w-10 h-10"
                                 aria-label="Scan barcode"
                             >
-                                <i className="ph ph-qr-code text-xl"></i>
+                                <i className="ph ph-qr-code text-red-500 text-xl"></i>
                             </button>
                             <button
                                 onClick={() => setShowRawItemPanel(true)}
-                                className="p-2 hover:bg-gray-100 rounded-full"
+                                className="p-2.5 bg-white hover:bg-red-50 rounded-full shadow-sm transition-colors flex items-center justify-center w-10 h-10"
                                 aria-label="Add raw item"
                             >
-                                <i className="ph ph-plus text-xl"></i>
+                                <i className="ph ph-plus text-red-500 text-xl"></i>
                             </button>
                             <button
                                 onClick={handleClose}
-                                className="p-2 hover:bg-gray-100 rounded-full"
+                                className="p-2.5 bg-white hover:bg-red-50 rounded-full shadow-sm transition-colors flex items-center justify-center w-10 h-10"
                                 aria-label="Close"
                             >
-                                <i className="ph ph-x text-xl"></i>
+                                <i className="ph ph-x text-red-500 text-xl"></i>
                             </button>
                         </div>
                     </div>
@@ -408,14 +408,14 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
                 {/* Main Content */}
                 <div className="flex flex-col h-[calc(100%-200px)]">
                     {showSearchPanel ? (
-                        <div className="space-y-4">
+                        <div className="space-y-4 p-4" style={{ backgroundColor: "#fffcfc" }}>
                             <div className="relative">
                                 <input
                                     type="text"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     placeholder="Search products..."
-                                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-400 shadow-sm"
                                 />
                                 <i className="ph ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
                                 <button
@@ -445,25 +445,25 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
                     ) : (
                         <>
                             {/* Category tabs */}
-                            <div className="px-4 border-b">
-                                <div className="flex items-center overflow-x-auto py-2 scroll-tabs">
+                            <div className="px-4 py-3 border-b" style={{ backgroundColor: "#ffefef" }}>
+                                <div className="flex items-center overflow-x-auto py-1 scroll-tabs gap-2">
                                     {categories.map(category => (
                                         <button
                                             key={category}
-                                            className={`px-4 py-2 whitespace-nowrap mr-2 rounded-full transition-colors ${selectedCategory === category
-                                                ? 'bg-blue-100 text-blue-700 font-medium'
-                                                : 'text-gray-600 hover:bg-gray-100'
+                                            className={`px-4 py-2.5 whitespace-nowrap rounded-full transition-colors ${selectedCategory === category
+                                                ? 'bg-red-500 text-white font-medium shadow-sm'
+                                                : 'bg-white text-gray-700 hover:bg-pink-50 shadow-sm'
                                                 }`}
                                             onClick={() => setSelectedCategory(category)}
                                         >
-                                            {category === 'all' ? 'All' : category}
+                                            {category === 'all' ? 'All Items' : category}
                                         </button>
                                     ))}
                                 </div>
                             </div>
 
                             {/* Products grid */}
-                            <div className="flex-1 overflow-y-auto p-4">
+                            <div className="flex-1 overflow-y-auto p-4" style={{ backgroundColor: "#fffcfc" }}>
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                     {filteredProducts.map(product => (
                                         <ProductCard
@@ -475,11 +475,13 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
                                         />
                                     ))}
                                     <button
-                                        className="flex flex-col items-center justify-center h-40 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
+                                        className="flex flex-col items-center justify-center h-48 border-2 border-dashed border-pink-200 rounded-lg hover:border-red-400 hover:bg-pink-50 transition-colors"
                                         onClick={() => setShowRawItemPanel(true)}
                                     >
-                                        <i className="ph ph-plus-circle text-3xl text-gray-400"></i>
-                                        <span className="mt-2 text-sm text-gray-500">Quick Item</span>
+                                        <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mb-2">
+                                            <i className="ph ph-plus-circle text-3xl text-red-500"></i>
+                                        </div>
+                                        <span className="text-sm text-gray-600 font-medium">Add Quick Item</span>
                                     </button>
                                 </div>
                             </div>
@@ -488,11 +490,11 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
                 </div>
 
                 {/* Checkout Section */}
-                <div className="sticky bottom-0 bg-white border-t p-4">
+                <div className="sticky bottom-0 bg-white border-t p-4" style={{ backgroundColor: "#fff8f8" }}>
                     <div className="mb-4">
                         <div className="flex justify-between items-center">
                             <h3 className="font-medium text-gray-700">Subtotal</h3>
-                            <span className="font-medium">₹{Object.values(cart).reduce((sum, item) => sum + (item.product.price * item.quantity), 0)}</span>
+                            <span className="font-medium text-red-600 text-lg">₹{Object.values(cart).reduce((sum, item) => sum + (item.product.price * item.quantity), 0)}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm text-gray-500 mt-1">
                             <span>Items in cart</span>
@@ -508,7 +510,7 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
                             Clear
                         </button>
                         <button
-                            className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 font-medium"
+                            className="flex-1 px-4 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 font-medium"
                             onClick={createOrder}
                             disabled={Object.values(cart).length === 0}
                         >
@@ -545,7 +547,7 @@ function ProductCard({ product, inCart = 0, onAdd, onRemove }) {
     };
 
     return (
-        <div className={`bg-white rounded-lg border overflow-hidden hover:shadow-md transition-shadow group ${addAnimation ? 'ring-2 ring-blue-500 scale-[1.02]' : ''}`}
+        <div className={`bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow transition-shadow group ${addAnimation ? 'ring-2 ring-red-400 scale-[1.02]' : ''}`}
             style={{ transition: 'all 0.2s ease' }}>
             {/* Make the main product area clickable for adding items */}
             <div
@@ -569,7 +571,7 @@ function ProductCard({ product, inCart = 0, onAdd, onRemove }) {
                         </div>
                     )}
                     {product.hasDiscount && (
-                        <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full">
+                        <div className="absolute top-2 right-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full font-medium">
                             {product.discount}% OFF
                         </div>
                     )}
@@ -583,8 +585,8 @@ function ProductCard({ product, inCart = 0, onAdd, onRemove }) {
 
                     {/* Add overlay on hover */}
                     {inCart === 0 && (
-                        <div className="absolute inset-0 bg-blue-500 bg-opacity-0 flex items-center justify-center group-hover:bg-opacity-20 transition-all duration-300">
-                            <div className="bg-blue-600 text-white px-3 py-1 rounded-full transform translate-y-4 opacity-0 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
+                        <div className="absolute inset-0 bg-red-500 bg-opacity-0 flex items-center justify-center group-hover:bg-opacity-20 transition-all duration-300">
+                            <div className="bg-red-500 text-white px-3 py-1 rounded-full transform translate-y-4 opacity-0 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 shadow-md">
                                 <i className="ph ph-plus mr-1"></i>
                                 Add
                             </div>
@@ -593,7 +595,7 @@ function ProductCard({ product, inCart = 0, onAdd, onRemove }) {
 
                     {/* Badge for items in cart */}
                     {inCart > 0 && (
-                        <div className="absolute top-2 right-2 bg-blue-600 text-white text-xs px-2 py-1 rounded-full font-medium animate-fadeIn">
+                        <div className="absolute top-2 right-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full font-medium animate-fadeIn">
                             {inCart} in cart
                         </div>
                     )}
@@ -602,7 +604,7 @@ function ProductCard({ product, inCart = 0, onAdd, onRemove }) {
                     <h3 className="font-medium text-gray-900 line-clamp-1">{product.title}</h3>
                     <div className="flex items-center justify-between mt-1">
                         <div>
-                            <span className="font-medium text-blue-600">₹{product.price}</span>
+                            <span className="font-medium text-red-600">₹{product.price}</span>
                             {product.hasDiscount && (
                                 <span className="text-xs text-gray-500 line-through ml-1">₹{product.mrp}</span>
                             )}
@@ -616,7 +618,7 @@ function ProductCard({ product, inCart = 0, onAdd, onRemove }) {
                 {inCart > 0 ? (
                     <div className="flex items-center bg-gray-100 rounded-full px-1">
                         <button
-                            className="w-7 h-7 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded-full"
+                            className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-full"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 onRemove();
@@ -626,7 +628,7 @@ function ProductCard({ product, inCart = 0, onAdd, onRemove }) {
                         </button>
                         <span className="w-8 text-center font-medium">{inCart}</span>
                         <button
-                            className="w-7 h-7 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded-full"
+                            className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-full"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 handleAddWithAnimation();
@@ -680,10 +682,11 @@ function RawProductPanel({ onClose, onAdd }) {
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
             <div
-                className="bg-white rounded-lg p-6 w-full max-w-md mx-4"
+                className="bg-white rounded-xl p-6 w-full max-w-md mx-4 shadow-xl"
                 onClick={e => e.stopPropagation()}
+                style={{ backgroundColor: "#fff8f8" }}
             >
-                <h2 className="text-xl font-semibold mb-4">Quick Item</h2>
+                <h2 className="text-xl font-semibold text-gray-800 mb-4">Quick Item</h2>
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -693,7 +696,7 @@ function RawProductPanel({ onClose, onAdd }) {
                             type="text"
                             value={title}
                             onChange={e => setTitle(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400"
                             placeholder="Enter item name"
                         />
                     </div>
@@ -705,7 +708,7 @@ function RawProductPanel({ onClose, onAdd }) {
                             type="number"
                             value={price}
                             onChange={e => setPrice(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400"
                             placeholder="Enter price"
                         />
                     </div>
@@ -718,8 +721,8 @@ function RawProductPanel({ onClose, onAdd }) {
                         Cancel
                     </button>
                     <button
-                        className={`px-4 py-2 bg-blue-600 text-white rounded-lg transition-colors ${isValid
-                            ? 'hover:bg-blue-700'
+                        className={`px-4 py-2 bg-red-500 text-white rounded-lg transition-colors ${isValid
+                            ? 'hover:bg-red-600'
                             : 'opacity-50 cursor-not-allowed'
                             }`}
                         onClick={createQuickProduct}

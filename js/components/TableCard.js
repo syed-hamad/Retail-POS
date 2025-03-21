@@ -2,47 +2,56 @@
 function TableCard({ title, orders, duration, status, onTap, onLongPress }) {
     // Calculate color based on last placed date (similar to getColor in Flutter)
     const getColor = (duration) => {
-        if (!duration) return 'bg-blue-100 text-blue-800';
-        
+        if (!duration) return 'bg-pink-50 border-pink-100';
+
         const minutes = duration.minutes || 0;
-        
-        if (minutes < 15) return 'bg-green-100 text-green-800';
-        if (minutes < 30) return 'bg-orange-100 text-orange-800';
-        return 'bg-red-100 text-red-800';
+
+        if (minutes < 15) return 'bg-green-50 border-green-100';
+        if (minutes < 30) return 'bg-orange-50 border-orange-100';
+        return 'bg-red-50 border-red-100';
     };
 
     // Get message based on last placed date (similar to getMsg in Flutter)
     const getMessage = (duration) => {
-        if (!duration) return '⌛️ No orders';
-        
+        if (!duration) return 'No orders';
+
         const minutes = duration.minutes || 0;
-        
-        if (minutes < 3) return '🔥 New order';
-        return `⏰ ${duration.display}`;
+
+        if (minutes < 3) return 'New order';
+        return `${duration.display}`;
     };
 
     const color = getColor(duration);
     const message = getMessage(duration);
 
     return (
-        <div 
-            className={`card p-4 aspect-square flex flex-col cursor-pointer hover:border-2 hover:border-primary transition-all ${color}`}
+        <div
+            className={`bg-white rounded-xl p-4 aspect-square flex flex-col cursor-pointer hover:shadow-md transition-all border ${color}`}
             onClick={onTap}
             onContextMenu={(e) => {
                 e.preventDefault();
                 onLongPress && onLongPress();
             }}
+            style={{ backgroundColor: "#fff8f8" }}
         >
             <div className="flex flex-col items-center justify-between h-full">
-                <h3 className="text-lg font-bold text-center mb-2">{title}</h3>
-                
-                <div className="bg-white bg-opacity-60 px-3 py-1 rounded-md text-sm mb-2">
-                    {message}
+                <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mb-3">
+                    <i className="ph ph-table text-red-500 text-2xl"></i>
                 </div>
-                
-                {orders && orders.length > 0 && (
-                    <div className="text-sm">
-                        {orders.length} {orders.length === 1 ? 'order' : 'orders'}
+
+                <h3 className="text-lg font-bold text-center mb-2">{title}</h3>
+
+                <div className="bg-white bg-opacity-80 px-4 py-2 rounded-full text-sm font-medium shadow-sm mb-2">
+                    {orders && orders.length > 0 ? (
+                        <span className="text-red-500">{orders.length} {orders.length === 1 ? 'order' : 'orders'}</span>
+                    ) : (
+                        <span className="text-gray-500">No orders</span>
+                    )}
+                </div>
+
+                {duration && (
+                    <div className="text-xs bg-white bg-opacity-60 px-3 py-1 rounded-full">
+                        <i className="ph ph-clock text-red-500 mr-1"></i> {message}
                     </div>
                 )}
             </div>
@@ -54,21 +63,25 @@ function TableCard({ title, orders, duration, status, onTap, onLongPress }) {
 function OrderThumb({ order }) {
     return (
         <div className="p-2 pl-4 pr-4">
-            <div className="bg-white h-[150px] w-[150px] relative">
-                <div className="absolute inset-0 overflow-hidden rounded-lg">
+            <div className="bg-white h-[150px] w-[150px] relative rounded-xl shadow-sm overflow-hidden" style={{ backgroundColor: "#fff8f8" }}>
+                <div className="absolute inset-0 overflow-hidden">
                     {order.items && order.items.length > 0 && (
                         <img
                             src={order.items[0].thumb || 'https://via.placeholder.com/150'}
                             alt={order.items[0].title || 'Order item'}
                             className="w-full h-full object-cover"
+                            onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="%23ccc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>';
+                            }}
                         />
                     )}
-                    <div className="absolute inset-2 bg-white bg-opacity-80 rounded-full flex items-center justify-center">
+                    <div className="absolute inset-2 bg-white bg-opacity-80 rounded-full flex items-center justify-center shadow-sm">
                         <div className="text-center">
-                            <div className="text-3xl font-bold leading-none">
+                            <div className="text-3xl font-bold leading-none text-red-500">
                                 {order.items ? order.items.length : 0}
                             </div>
-                            <div className="text-sm leading-none">items</div>
+                            <div className="text-sm leading-none text-gray-600">items</div>
                         </div>
                     </div>
                 </div>
@@ -96,14 +109,15 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
     return (
         <div className="my-3">
             <div
-                className="bg-white rounded-lg shadow-sm overflow-hidden cursor-pointer hover:shadow-md transition-all"
+                className="bg-white rounded-xl shadow-sm overflow-hidden cursor-pointer hover:shadow-md transition-all border border-pink-100"
                 onClick={handleOrderClick}
+                style={{ backgroundColor: "#fff8f8" }}
             >
                 <div className="p-4">
                     <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center">
-                                <span className="text-lg font-semibold text-blue-600">{totalItems}</span>
+                            <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                                <span className="text-lg font-semibold text-red-600">{totalItems}</span>
                             </div>
                             <div>
                                 <h3 className="font-medium text-gray-900">
@@ -115,7 +129,7 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
                             </div>
                         </div>
                         <div className="text-right">
-                            <div className="text-lg font-semibold text-gray-900">₹{totalAmount}</div>
+                            <div className="text-lg font-semibold text-red-600">₹{totalAmount}</div>
                             <div className="text-sm text-gray-500">Bill No: #{order.id?.slice(-6)}</div>
                         </div>
                     </div>
@@ -123,7 +137,7 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
                         <span className="px-2 py-1 bg-orange-50 text-orange-600 text-xs font-medium rounded-full">
                             {order.orderSource || "Online"}
                         </span>
-                        <span className="px-2 py-1 bg-blue-50 text-blue-600 text-xs font-medium rounded-full">
+                        <span className="px-2 py-1 bg-pink-50 text-red-600 text-xs font-medium rounded-full">
                             {order.currentStatus?.label || "PLACED"}
                         </span>
                     </div>
