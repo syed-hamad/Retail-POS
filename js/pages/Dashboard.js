@@ -5,7 +5,7 @@ function Dashboard() {
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState(null);
     const [isProfileOpen, setIsProfileOpen] = React.useState(false);
-    const [activeTab, setActiveTab] = React.useState('dashboard'); // Default to Dashboard tab
+    const [showCompletedOrders, setShowCompletedOrders] = React.useState(false);
     const [completedOrders, setCompletedOrders] = React.useState([]);
     const [qrOrders, setQrOrders] = React.useState([]);
     const [loadingQrOrders, setLoadingQrOrders] = React.useState(true);
@@ -282,8 +282,10 @@ function Dashboard() {
 
     // Fetch orders based on current filter
     React.useEffect(() => {
-        fetchCompletedOrders();
-    }, [dateFilter, customDateRange]);
+        if (showCompletedOrders) {
+            fetchCompletedOrders();
+        }
+    }, [dateFilter, customDateRange, showCompletedOrders]);
 
     const fetchOrders = async () => {
         try {
@@ -487,224 +489,53 @@ function Dashboard() {
     // Render the dashboard
     return (
         <div className="p-4">
-            {/* Fixed top tab bar */}
-            <div className="mb-6 flex items-center justify-center gap-2" style={{ backgroundColor: "#fffcfc", borderRadius: "12px", padding: "4px" }}>
-                <button
-                    className={`flex-1 px-4 py-3 rounded-xl transition-colors flex items-center justify-center gap-2 ${activeTab === 'dashboard'
-                        ? 'bg-red-500 text-white font-medium shadow-sm'
-                        : 'text-gray-600 hover:bg-pink-50'
-                        }`}
-                    onClick={() => setActiveTab('dashboard')}
-                >
-                    <i className="ph ph-layout text-lg"></i>
-                    <span>Dashboard</span>
-                </button>
-                <button
-                    className={`flex-1 px-4 py-3 rounded-xl transition-colors flex items-center justify-center gap-2 ${activeTab === 'qrorders'
-                        ? 'bg-red-500 text-white font-medium shadow-sm'
-                        : 'text-gray-600 hover:bg-pink-50'
-                        }`}
-                    onClick={() => setActiveTab('qrorders')}
-                >
-                    <i className="ph ph-qr-code text-lg"></i>
-                    <span>QR Orders</span>
-                </button>
-                <button
-                    className={`flex-1 px-4 py-3 rounded-xl transition-colors flex items-center justify-center gap-2 ${activeTab === 'completed'
-                        ? 'bg-red-500 text-white font-medium shadow-sm'
-                        : 'text-gray-600 hover:bg-pink-50'
-                        }`}
-                    onClick={() => setActiveTab('completed')}
-                >
-                    <i className="ph ph-check-circle text-lg"></i>
-                    <span>Completed</span>
-                </button>
+            {/* Orders Dashboard */}
+            <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-gray-800 flex items-center">
+                        <i className="ph ph-storefront text-red-500 mr-2"></i>
+                        Orders Dashboard
+                    </h2>
+                    <button
+                        onClick={() => setShowCompletedOrders(!showCompletedOrders)}
+                        className="px-3 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-2 shadow-sm"
+                    >
+                        <i className={`ph ${showCompletedOrders ? 'ph-x' : 'ph-check-circle'}`}></i>
+                        <span>{showCompletedOrders ? 'Back to Dashboard' : 'View Completed Orders'}</span>
+                    </button>
+                </div>
+                {!showCompletedOrders && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <DashboardCard
+                            icon="ph-chart-line-up"
+                            title="Today's Orders"
+                            value="25"
+                            trend="+15%"
+                            color="primary"
+                        />
+                        <DashboardCard
+                            icon="ph-currency-dollar"
+                            title="Today's Revenue"
+                            value="₹ 12,500"
+                            trend="+8%"
+                            color="success"
+                        />
+                        <DashboardCard
+                            icon="ph-users"
+                            title="New Customers"
+                            value="4"
+                            trend="-3%"
+                            color="warning"
+                        />
+                    </div>
+                )}
             </div>
 
-            {/* Different content based on the active tab */}
-            {activeTab === 'dashboard' && (
-                <div>
-                    {/* Orders Dashboard */}
-                    <div className="mb-6">
-                        <h2 className="text-xl font-bold mb-4 text-gray-800 flex items-center">
-                            <i className="ph ph-storefront text-red-500 mr-2"></i>
-                            Orders Dashboard
-                        </h2>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <DashboardCard
-                                icon="chart-line-up"
-                                title="Today's Orders"
-                                value="25"
-                                trend={15}
-                            />
-                            <DashboardCard
-                                icon="currency-dollar"
-                                title="Today's Revenue"
-                                value="₹ 12,500"
-                                trend={8}
-                            />
-                            <DashboardCard
-                                icon="users"
-                                title="New Customers"
-                                value="4"
-                                trend={-3}
-                            />
-                        </div>
-                    </div>
-
-                    {/* Order Channels Section */}
-                    <div className="mb-6" style={{ backgroundColor: "#fff8f8", padding: "20px", borderRadius: "12px" }}>
-                        <h2 className="text-xl font-bold mb-4 text-gray-800 flex items-center">
-                            <i className="ph ph-globe text-red-500 mr-2"></i>
-                            Order Channels
-                        </h2>
-
-                        {loading ? (
-                            <div className="text-center py-10">
-                                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
-                                <p className="mt-3 text-gray-600">Loading online orders...</p>
-                            </div>
-                        ) : error ? (
-                            <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">
-                                <p>{error}</p>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                {tables
-                                    .filter(table => table.type === 'aggregator' || table.type === 'qr')
-                                    .map(table => (
-                                        <div
-                                            key={table.id}
-                                            className="cursor-pointer"
-                                            onClick={() => handleRoomClick(table.id, table.variant)}
-                                        >
-                                            <DashboardTile
-                                                tableId={table.id}
-                                                variant={table.variant}
-                                                orders={table.orders}
-                                                onTap={() => handleRoomClick(table.id, table.variant)}
-                                            />
-                                        </div>
-                                    ))}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Dine-In Section */}
-                    <div className="mb-6" style={{ backgroundColor: "#fff8f8", padding: "20px", borderRadius: "12px" }}>
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-bold text-gray-800 flex items-center">
-                                <i className="ph ph-coffee text-red-500 mr-2"></i>
-                                Dine In
-                            </h2>
-                            <button
-                                className="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center gap-2 shadow-sm"
-                                onClick={showAddTableModal}
-                            >
-                                <i className="ph ph-plus text-lg"></i>
-                                <span>Add Table</span>
-                            </button>
-                        </div>
-
-                        {loading ? (
-                            <div className="text-center py-10">
-                                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
-                                <p className="mt-3 text-gray-600">Loading tables...</p>
-                            </div>
-                        ) : error ? (
-                            <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">
-                                <p>{error}</p>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                {tables
-                                    .filter(table => table.type === 'dine_in')
-                                    .map(table => (
-                                        <div
-                                            key={table.id}
-                                            className="cursor-pointer"
-                                            onClick={() => handleRoomClick(table.id, table.variant)}
-                                        >
-                                            <TableCard
-                                                title={table.title}
-                                                orders={table.orders}
-                                                duration={table.duration}
-                                                onTap={() => handleRoomClick(table.id, table.variant)}
-                                                onLongPress={() => showRenameRoomModal(table.id, table.variant)}
-                                            />
-                                        </div>
-                                    ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {activeTab === 'qrorders' && (
+            {showCompletedOrders ? (
+                /* Completed Orders View */
                 <div>
                     <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-xl font-bold text-gray-800 flex items-center">
-                            <i className="ph ph-qr-code text-red-500 mr-2"></i>
-                            QR Orders
-                        </h2>
-                        <button
-                            className="px-3 py-2 text-red-500 border border-red-500 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-2"
-                            onClick={refreshOrders}
-                        >
-                            <i className="ph ph-arrows-clockwise text-lg"></i>
-                            <span>Refresh</span>
-                        </button>
-                    </div>
-
-                    <div
-                        className="space-y-4"
-                        ref={qrOrdersScrollRef}
-                        onScroll={handleScroll}
-                        style={{ backgroundColor: "#fff8f8", padding: "20px", borderRadius: "12px" }}
-                    >
-                        {loadingQrOrders ? (
-                            <div className="text-center py-10">
-                                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
-                                <p className="mt-3 text-gray-600">Loading QR orders...</p>
-                            </div>
-                        ) : errorQrOrders ? (
-                            <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">
-                                <p>{errorQrOrders}</p>
-                            </div>
-                        ) : qrOrders.length === 0 ? (
-                            <div className="text-center py-10">
-                                <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <i className="ph ph-qr-code text-3xl text-red-500"></i>
-                                </div>
-                                <h3 className="text-lg font-medium text-gray-700 mb-1">No QR Orders Found</h3>
-                                <p className="text-gray-500">QR orders from your customers will appear here</p>
-                            </div>
-                        ) : (
-                            qrOrders.map(order => (
-                                <OrderGroupTile
-                                    key={order.id}
-                                    order={order}
-                                    onAccept={() => handleAcceptOrder(order.id)}
-                                    onReject={() => handleRejectOrder(order.id)}
-                                    onDelete={() => handleDeleteOrder(order.id)}
-                                    onPrintBill={() => handlePrintBill(order.id)}
-                                />
-                            ))
-                        )}
-
-                        {isLoadingMore && (
-                            <div className="text-center py-4">
-                                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-500 mx-auto"></div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {activeTab === 'completed' && (
-                <div>
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-xl font-bold text-gray-800 flex items-center">
+                        <h2 className="text-lg font-semibold text-gray-800 flex items-center">
                             <i className="ph ph-check-circle text-red-500 mr-2"></i>
                             Completed Orders
                         </h2>
@@ -730,44 +561,192 @@ function Dashboard() {
                                 className="px-3 py-2 text-red-500 border border-red-500 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-2"
                                 onClick={() => fetchCompletedOrders()}
                             >
-                                <i className="ph ph-arrows-clockwise text-lg"></i>
+                                <i className="ph ph-arrows-clockwise"></i>
                                 <span>Refresh</span>
                             </button>
                         </div>
                     </div>
 
-                    <div
-                        className="space-y-4"
-                        style={{ backgroundColor: "#fff8f8", padding: "20px", borderRadius: "12px" }}
-                    >
-                        {loadingCompletedOrders ? (
-                            <div className="text-center py-10">
-                                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
-                                <p className="mt-3 text-gray-600">Loading completed orders...</p>
-                            </div>
-                        ) : errorCompletedOrders ? (
-                            <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">
-                                <p>{errorCompletedOrders}</p>
-                            </div>
-                        ) : completedOrders.length === 0 ? (
-                            <div className="text-center py-10">
-                                <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <i className="ph ph-check-circle text-3xl text-red-500"></i>
+                    <div className="bg-white rounded-xl shadow-sm border border-red-100 overflow-hidden" style={{ backgroundColor: "#fff8f8" }}>
+                        <div className="p-4 space-y-4">
+                            {loadingCompletedOrders ? (
+                                <div className="text-center py-10">
+                                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
+                                    <p className="mt-3 text-gray-600">Loading completed orders...</p>
                                 </div>
-                                <h3 className="text-lg font-medium text-gray-700 mb-1">No Completed Orders</h3>
-                                <p className="text-gray-500">Completed orders will appear here</p>
-                            </div>
-                        ) : (
-                            completedOrders.map(order => (
-                                <OrderGroupTile
-                                    key={order.id}
-                                    order={order}
-                                    onPrintBill={() => handlePrintBill(order.id)}
-                                />
-                            ))
-                        )}
+                            ) : errorCompletedOrders ? (
+                                <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">
+                                    <p>{errorCompletedOrders}</p>
+                                </div>
+                            ) : completedOrders.length === 0 ? (
+                                <div className="text-center py-10">
+                                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <i className="ph ph-check-circle text-2xl text-red-500"></i>
+                                    </div>
+                                    <h3 className="text-lg font-medium text-gray-700 mb-1">No Completed Orders</h3>
+                                    <p className="text-gray-500">Completed orders will appear here</p>
+                                </div>
+                            ) : (
+                                completedOrders.map(order => (
+                                    <OrderGroupTile
+                                        key={order.id}
+                                        order={order}
+                                        onPrintBill={() => handlePrintBill(order.id)}
+                                    />
+                                ))
+                            )}
+                        </div>
                     </div>
                 </div>
+            ) : (
+                /* Main Dashboard View */
+                <>
+                    {/* Order Channels Section */}
+                    <div className="mb-6 bg-white rounded-xl shadow-sm overflow-hidden border border-red-100" style={{ backgroundColor: "#fff8f8" }}>
+                        <div className="px-4 py-3 border-b border-red-50">
+                            <h2 className="text-lg font-semibold text-gray-800 flex items-center">
+                                <i className="ph ph-globe text-red-500 mr-2"></i>
+                                Order Channels
+                            </h2>
+                        </div>
+                        <div className="p-4">
+                            {loading ? (
+                                <div className="text-center py-10">
+                                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
+                                    <p className="mt-3 text-gray-600">Loading online orders...</p>
+                                </div>
+                            ) : error ? (
+                                <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">
+                                    <p>{error}</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    {tables
+                                        .filter(table => table.type === 'aggregator' || table.type === 'qr')
+                                        .map(table => (
+                                            <div
+                                                key={table.id}
+                                                className="cursor-pointer"
+                                                onClick={() => handleRoomClick(table.id, table.variant)}
+                                            >
+                                                <DashboardTile
+                                                    tableId={table.id}
+                                                    variant={table.variant}
+                                                    orders={table.orders}
+                                                    onTap={() => handleRoomClick(table.id, table.variant)}
+                                                />
+                                            </div>
+                                        ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Dine-In Section */}
+                    <div className="mb-6 bg-white rounded-xl shadow-sm overflow-hidden border border-red-100" style={{ backgroundColor: "#fff8f8" }}>
+                        <div className="px-4 py-3 border-b border-red-50 flex items-center justify-between">
+                            <h2 className="text-lg font-semibold text-gray-800 flex items-center">
+                                <i className="ph ph-coffee text-red-500 mr-2"></i>
+                                Dine In
+                            </h2>
+                            <button
+                                className="px-3 py-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center gap-1.5 text-sm"
+                                onClick={showAddTableModal}
+                            >
+                                <i className="ph ph-plus"></i>
+                                <span>Add Table</span>
+                            </button>
+                        </div>
+                        <div className="p-4">
+                            {loading ? (
+                                <div className="text-center py-10">
+                                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
+                                    <p className="mt-3 text-gray-600">Loading tables...</p>
+                                </div>
+                            ) : error ? (
+                                <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">
+                                    <p>{error}</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    {tables
+                                        .filter(table => table.type === 'dine_in')
+                                        .map(table => (
+                                            <div
+                                                key={table.id}
+                                                className="cursor-pointer"
+                                                onClick={() => handleRoomClick(table.id, table.variant)}
+                                            >
+                                                <TableCard
+                                                    title={table.title}
+                                                    orders={table.orders}
+                                                    duration={table.duration}
+                                                    onTap={() => handleRoomClick(table.id, table.variant)}
+                                                    onLongPress={() => showRenameRoomModal(table.id, table.variant)}
+                                                />
+                                            </div>
+                                        ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* QR Orders Section */}
+                    <div className="mb-6 bg-white rounded-xl shadow-sm overflow-hidden border border-red-100" style={{ backgroundColor: "#fff8f8" }}>
+                        <div className="px-4 py-3 border-b border-red-50 flex items-center justify-between">
+                            <h2 className="text-lg font-semibold text-gray-800 flex items-center">
+                                <i className="ph ph-qr-code text-red-500 mr-2"></i>
+                                QR Orders
+                            </h2>
+                            <button
+                                className="px-3 py-1.5 text-red-500 border border-red-500 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1.5 text-sm"
+                                onClick={refreshOrders}
+                            >
+                                <i className="ph ph-arrows-clockwise"></i>
+                                <span>Refresh</span>
+                            </button>
+                        </div>
+                        <div className="p-4" ref={qrOrdersScrollRef} onScroll={handleScroll}>
+                            {loadingQrOrders ? (
+                                <div className="text-center py-10">
+                                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
+                                    <p className="mt-3 text-gray-600">Loading QR orders...</p>
+                                </div>
+                            ) : errorQrOrders ? (
+                                <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">
+                                    <p>{errorQrOrders}</p>
+                                </div>
+                            ) : qrOrders.length === 0 ? (
+                                <div className="text-center py-10">
+                                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <i className="ph ph-qr-code text-2xl text-red-500"></i>
+                                    </div>
+                                    <h3 className="text-lg font-medium text-gray-700 mb-1">No QR Orders Found</h3>
+                                    <p className="text-gray-500">QR orders from your customers will appear here</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {qrOrders.map(order => (
+                                        <OrderGroupTile
+                                            key={order.id}
+                                            order={order}
+                                            onAccept={() => handleAcceptOrder(order.id)}
+                                            onReject={() => handleRejectOrder(order.id)}
+                                            onDelete={() => handleDeleteOrder(order.id)}
+                                            onPrintBill={() => handlePrintBill(order.id)}
+                                        />
+                                    ))}
+
+                                    {isLoadingMore && (
+                                        <div className="text-center py-4">
+                                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-500 mx-auto"></div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </>
             )}
 
             {/* Modals */}
