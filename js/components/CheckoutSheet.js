@@ -75,11 +75,11 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
 
         // Add exclusive charges
         if (charges && charges.length > 0) {
-            charges.forEach(charge => {
-                if (!charge.inclusive && charge.value) {
-                    total += parseFloat(charge.value);
-                }
-            });
+        charges.forEach(charge => {
+            if (!charge.inclusive && charge.value) {
+                total += parseFloat(charge.value);
+            }
+        });
         }
 
         return total;
@@ -144,7 +144,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                             mrp: cartItem.product.mrp || cartItem.product.price,
                             price: cartItem.product.price,
                             veg: cartItem.product.veg || false,
-                            served: false,
+                served: false,
                             qnt: cartItem.quantity
                         }
                     };
@@ -205,27 +205,27 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                     billNo: billNo,
                     items: items.map(item => item.data || item),
                     sellerId: seller?.id,
-                    priceVariant: priceVariant,
-                    tableId: tableId,
-                    discount: discount,
+                priceVariant: priceVariant,
+                tableId: tableId,
+                discount: discount,
                     paid: true,
-                    status: [
-                        {
-                            label: "PLACED",
+                status: [
+                    {
+                        label: "PLACED",
                             date: now
-                        },
-                        {
-                            label: "KITCHEN",
-                            date: now
-                        }
-                    ],
-                    currentStatus: {
-                        label: "KITCHEN",
-                        date: now
                     },
+                    {
+                        label: "KITCHEN",
+                            date: now
+                    }
+                ],
+                currentStatus: {
+                    label: "KITCHEN",
+                        date: now
+                },
                     charges: validCharges.map(c => typeof c.toJson === 'function' ? c.toJson() : c),
                     payMode: paymentMode,
-                    instructions: instructions.trim(),
+                instructions: instructions.trim(),
                     date: now
                 };
             }
@@ -306,9 +306,9 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                         <div className="flex items-center">
                             <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
                                 <i className="ph ph-shopping-cart text-red-600 text-xl"></i>
-                            </div>
+                    </div>
                             <h2 className="text-xl font-semibold text-gray-800">Checkout</h2>
-                        </div>
+                </div>
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={() => setShowDiscountModal(true)}
@@ -325,7 +325,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                                 <i className="ph ph-x text-red-600"></i>
                             </button>
                         </div>
-                    </div>
+                </div>
 
                     {/* Order Info */}
                     <div className="bg-pink-50 px-4 py-2 border-b flex justify-between items-center">
@@ -346,7 +346,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                     <div className="p-4">
                         <h3 className="font-medium text-gray-700 mb-3">Order Items</h3>
                         <div className="space-y-3">
-                            {Object.values(cart).map((item, index) => (
+                    {Object.values(cart).map((item, index) => (
                                 <div key={index} className="flex items-start p-3 bg-white rounded-xl shadow-sm hover:shadow transition-shadow duration-200">
                                     <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden mr-3 flex-shrink-0">
                                         {item.product.imgs && item.product.imgs.length > 0 ? (
@@ -362,9 +362,9 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center">
                                                 <i className="ph ph-image text-gray-400 text-xl" />
-                                            </div>
+                        </div>
                                         )}
-                                    </div>
+                        </div>
                                     <div className="flex-1 min-w-0">
                                         <div className="font-medium text-gray-900 text-lg">{item.product.title}</div>
                                         <div className="text-sm text-gray-600 mt-0.5">
@@ -375,30 +375,30 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                                                 <span className={`inline-block w-4 h-4 border ${item.product.veg ? 'border-green-500' : 'border-red-500'} p-0.5 rounded-sm`}>
                                                     <span className={`block w-full h-full rounded-sm ${item.product.veg ? 'bg-green-500' : 'bg-red-500'}`}></span>
                                                 </span>
-                                            </div>
-                                        )}
+                            </div>
+                        )}
                                     </div>
                                     <div className="font-medium text-right whitespace-nowrap text-red-600">
                                         ₹{(item.quantity * item.product.price).toFixed(2)}
-                                    </div>
-                                </div>
-                            ))}
                         </div>
-                    </div>
-
-                    {/* Instructions */}
-                    <div className="px-4 pb-4">
-                        <h3 className="font-medium text-gray-700 mb-2">Special Instructions</h3>
-                        <textarea
-                            value={instructions}
-                            onChange={(e) => setInstructions(e.target.value)}
-                            placeholder="Add any special instructions here"
-                            className="w-full p-3 border border-gray-200 rounded-lg resize-none text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white"
-                            rows="2"
-                            maxLength={300}
-                        />
+                        </div>
+                            ))}
                     </div>
                 </div>
+
+                {/* Instructions */}
+                    <div className="px-4 pb-4">
+                        <h3 className="font-medium text-gray-700 mb-2">Special Instructions</h3>
+                <textarea
+                    value={instructions}
+                    onChange={(e) => setInstructions(e.target.value)}
+                    placeholder="Add any special instructions here"
+                            className="w-full p-3 border border-gray-200 rounded-lg resize-none text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white"
+                            rows="2"
+                    maxLength={300}
+                />
+            </div>
+        </div>
 
                 {/* Order summary - Fixed at bottom */}
                 <div className="bg-white border-t shadow-md" style={{ backgroundColor: "#fff8f8" }}>
@@ -547,8 +547,8 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                                 onClick={() => setPercentMode(true)}
                             >
                                 Percentage (%)
-                            </button>
-                        </div>
+                                </button>
+                            </div>
 
                         {/* Input field */}
                         <div className="mb-5">
@@ -559,8 +559,8 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                                 <span className="px-3 py-2 bg-gray-100 text-gray-500">
                                     {percentMode ? '%' : '₹'}
                                 </span>
-                                <input
-                                    type="number"
+                            <input
+                                type="number"
                                     value={discountInput}
                                     onChange={(e) => setDiscountInput(e.target.value)}
                                     placeholder="0"

@@ -23,6 +23,18 @@ function Dashboard() {
     const [isOrderRoomOpen, setIsOrderRoomOpen] = React.useState(false);
     const [selectedRoomTableId, setSelectedRoomTableId] = React.useState(null);
     const [selectedRoomVariant, setSelectedRoomVariant] = React.useState(null);
+    const [dashboardMetrics, setDashboardMetrics] = React.useState({
+        todayOrders: 0,
+        todayRevenue: 0,
+        newCustomers: 0,
+        avgOrderValue: 0,
+        avgServiceTime: 0,
+        todayOrdersTrend: 0,
+        todayRevenueTrend: 0,
+        newCustomersTrend: 0,
+        avgOrderValueTrend: 0,
+        avgServiceTimeTrend: 0
+    });
 
     // State for date filtering in completed orders
     const [dateFilter, setDateFilter] = React.useState('7days'); // Options: today, yesterday, 7days, custom
@@ -126,6 +138,174 @@ function Dashboard() {
         console.log(`Opening OrderRoom for ${tableId ? `Table ${tableId}` : variant}`);
     };
 
+    // Calculate dashboard metrics from orders data
+    const calculateDashboardMetrics = (allOrders) => {
+        try {
+            // Create date objects for today and yesterday
+            const now = new Date();
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+
+            // Filter orders for today and yesterday
+            const todayOrders = allOrders.filter(order => {
+                const orderDate = parseDate(order.date);
+                return orderDate && orderDate >= startOfToday;
+            });
+
+            const yesterdayOrders = allOrders.filter(order => {
+                const orderDate = parseDate(order.date);
+                return orderDate && orderDate >= startOfYesterday && orderDate < startOfToday;
+            });
+
+            // Calculate today's metrics
+            const todayOrdersCount = todayOrders.length;
+
+            // Calculate revenue (only from paid orders)
+            const todayRevenue = todayOrders
+                .filter(order => order.paid === true)
+                .reduce((sum, order) => {
+                    // Calculate total from items
+                    const itemsTotal = order.items?.reduce((total, item) => {
+                        return total + ((item.price || 0) * (item.quantity || item.qnt || 1));
+                    }, 0) || 0;
+
+                    return sum + itemsTotal;
+                }, 0);
+
+            // Calculate yesterday's metrics for trend comparison
+            const yesterdayOrdersCount = yesterdayOrders.length;
+            const yesterdayRevenue = yesterdayOrders
+                .filter(order => order.paid === true)
+                .reduce((sum, order) => {
+                    const itemsTotal = order.items?.reduce((total, item) => {
+                        return total + ((item.price || 0) * (item.quantity || item.qnt || 1));
+                    }, 0) || 0;
+
+                    return sum + itemsTotal;
+                }, 0);
+
+            // Get unique customer count for today
+            const todayCustomerIds = new Set(todayOrders
+                .filter(order => order.customer?.id)
+                .map(order => order.customer.id));
+            const newCustomersCount = todayCustomerIds.size;
+
+            // Yesterday's unique customers
+            const yesterdayCustomerIds = new Set(yesterdayOrders
+                .filter(order => order.customer?.id)
+                .map(order => order.customer.id));
+            const yesterdayNewCustomersCount = yesterdayCustomerIds.size;
+
+            // Calculate average order value for today's paid orders
+            const paidTodayOrders = todayOrders.filter(order => order.paid === true);
+            const avgOrderValue = paidTodayOrders.length > 0
+                ? todayRevenue / paidTodayOrders.length
+                : 0;
+
+            // Calculate avg order value for yesterday
+            const paidYesterdayOrders = yesterdayOrders.filter(order => order.paid === true);
+            const yesterdayAvgOrderValue = paidYesterdayOrders.length > 0
+                ? yesterdayRevenue / paidYesterdayOrders.length
+                : 1; // Avoid division by zero in trend calculation
+
+            // Calculate service time (from PLACED to COMPLETED)
+            let totalServiceTimeMinutes = 0;
+            let serviceTimeOrderCount = 0;
+
+            todayOrders.forEach(order => {
+                if (order.status && Array.isArray(order.status)) {
+                    const placedStatus = order.status.find(s => s.label === "PLACED");
+                    const completedStatus = order.status.find(s => s.label === "COMPLETED");
+
+                    if (placedStatus && completedStatus) {
+                        const placedDate = parseDate(placedStatus.date);
+                        const completedDate = parseDate(completedStatus.date);
+
+                        if (placedDate && completedDate) {
+                            const serviceTimeMinutes = (completedDate - placedDate) / (1000 * 60);
+                            totalServiceTimeMinutes += serviceTimeMinutes;
+                            serviceTimeOrderCount++;
+                        }
+                    }
+                }
+            });
+
+            const avgServiceTime = serviceTimeOrderCount > 0
+                ? totalServiceTimeMinutes / serviceTimeOrderCount
+                : 0;
+
+            // Calculate trends (percentage change from yesterday)
+            const calculateTrend = (today, yesterday) => {
+                if (yesterday === 0) return today > 0 ? 100 : 0;
+                return ((today - yesterday) / yesterday) * 100;
+            };
+
+            const todayOrdersTrend = calculateTrend(todayOrdersCount, yesterdayOrdersCount);
+            const todayRevenueTrend = calculateTrend(todayRevenue, yesterdayRevenue);
+            const newCustomersTrend = calculateTrend(newCustomersCount, yesterdayNewCustomersCount);
+            const avgOrderValueTrend = calculateTrend(avgOrderValue, yesterdayAvgOrderValue);
+
+            // For service time, a negative trend is actually good (faster service)
+            let avgServiceTimeTrend = 0;
+
+            // Calculate yesterday's average service time
+            let yesterdayTotalServiceTimeMinutes = 0;
+            let yesterdayServiceTimeOrderCount = 0;
+
+            yesterdayOrders.forEach(order => {
+                if (order.status && Array.isArray(order.status)) {
+                    const placedStatus = order.status.find(s => s.label === "PLACED");
+                    const completedStatus = order.status.find(s => s.label === "COMPLETED");
+
+                    if (placedStatus && completedStatus) {
+                        const placedDate = parseDate(placedStatus.date);
+                        const completedDate = parseDate(completedStatus.date);
+
+                        if (placedDate && completedDate) {
+                            const serviceTimeMinutes = (completedDate - placedDate) / (1000 * 60);
+                            yesterdayTotalServiceTimeMinutes += serviceTimeMinutes;
+                            yesterdayServiceTimeOrderCount++;
+                        }
+                    }
+                }
+            });
+
+            const yesterdayAvgServiceTime = yesterdayServiceTimeOrderCount > 0
+                ? yesterdayTotalServiceTimeMinutes / yesterdayServiceTimeOrderCount
+                : 1; // Avoid division by zero
+
+            // For service time, a negative trend is actually good (faster service)
+            avgServiceTimeTrend = calculateTrend(avgServiceTime, yesterdayAvgServiceTime) * -1;
+
+            return {
+                todayOrders: todayOrdersCount,
+                todayRevenue: todayRevenue,
+                newCustomers: newCustomersCount,
+                avgOrderValue: avgOrderValue,
+                avgServiceTime: avgServiceTime,
+                todayOrdersTrend: todayOrdersTrend,
+                todayRevenueTrend: todayRevenueTrend,
+                newCustomersTrend: newCustomersTrend,
+                avgOrderValueTrend: avgOrderValueTrend,
+                avgServiceTimeTrend: avgServiceTimeTrend
+            };
+        } catch (err) {
+            console.error('Error calculating dashboard metrics:', err);
+            return {
+                todayOrders: 0,
+                todayRevenue: 0,
+                newCustomers: 0,
+                avgOrderValue: 0,
+                avgServiceTime: 0,
+                todayOrdersTrend: 0,
+                todayRevenueTrend: 0,
+                newCustomersTrend: 0,
+                avgOrderValueTrend: 0,
+                avgServiceTimeTrend: 0
+            };
+        }
+    };
+
     // Load tables and orders data
     React.useEffect(() => {
         async function fetchData() {
@@ -139,6 +319,10 @@ function Dashboard() {
                     id: doc.id,
                     ...doc.data()
                 }));
+
+                // Calculate dashboard metrics
+                const metrics = calculateDashboardMetrics(allOrders);
+                setDashboardMetrics(metrics);
 
                 // Filter orders by status - only show orders with KITCHEN status
                 // This matches the Flutter implementation: .where("currentStatus.label", isEqualTo: OrderStatus.KITCHEN.name)
@@ -290,32 +474,50 @@ function Dashboard() {
     const fetchOrders = async () => {
         try {
             setLoadingQrOrders(true);
-            // Fetch last 100 orders to ensure we don't miss any
-            const ordersSnapshot = await sdk.collection("Orders")
-                .orderBy("date", "desc")
-                .limit(100)
-                .get();
+            setErrorQrOrders(null);
 
-            const fetchedOrders = ordersSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            // Create a query for the Orders collection
+            const ordersQuery = window.sdk.collection("Orders")
+                .orderBy("date", "desc")
+                .limit(100);
+
+            // Execute the query
+            const ordersSnapshot = await ordersQuery.get();
+
+            if (!ordersSnapshot || !ordersSnapshot.docs) {
+                throw new Error("Failed to fetch orders data");
+            }
+
+            const fetchedOrders = ordersSnapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    // Ensure date is properly handled
+                    date: parseDate(data.date)
+                };
+            });
+
+            // Store all orders for metrics calculations 
+            setOrders(fetchedOrders);
 
             // Filter QR orders (orders with status "PLACED")
-            const filteredQrOrders = fetchedOrders.filter(order =>
-                order.currentStatus?.label === "PLACED"
-            );
+            const filteredQrOrders = fetchedOrders.filter(order => {
+                return order.currentStatus?.label === "PLACED";
+            });
 
             setQrOrders(filteredQrOrders);
             setLoadingQrOrders(false);
 
-            // Debug log
-            console.log('All orders:', fetchedOrders);
-            console.log('QR orders:', filteredQrOrders);
+            // Log order counts for debugging
+            console.log(`Fetched ${fetchedOrders.length} orders, ${filteredQrOrders.length} pending QR orders`);
+
+            return fetchedOrders;
         } catch (err) {
             console.error('Error fetching orders:', err);
-            setErrorQrOrders('Failed to fetch orders');
+            setErrorQrOrders(`Failed to fetch orders: ${err.message}`);
             setLoadingQrOrders(false);
+            return [];
         }
     };
 
@@ -323,40 +525,62 @@ function Dashboard() {
     const fetchCompletedOrders = async () => {
         try {
             setLoadingCompletedOrders(true);
+            setErrorCompletedOrders(null);
 
             // Calculate date range based on selected filter
             const startDate = calculateStartDate(dateFilter, customDateRange.startDate);
             const endDate = calculateEndDate(dateFilter, customDateRange.endDate);
 
-            // Fetch orders
-            const ordersSnapshot = await sdk.collection("Orders")
+            // Create the query - we can't filter by date range directly in Firestore
+            // because the dates might be in different formats, so we fetch and filter client-side
+            const ordersQuery = window.sdk.collection("Orders")
                 .orderBy("date", "desc")
-                .limit(100)
-                .get();
+                .limit(100);
 
-            const fetchedOrders = ordersSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            const ordersSnapshot = await ordersQuery.get();
+
+            if (!ordersSnapshot || !ordersSnapshot.docs) {
+                throw new Error("Failed to fetch completed orders data");
+            }
+
+            const fetchedOrders = ordersSnapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    // Ensure date is properly handled
+                    date: parseDate(data.date)
+                };
+            });
 
             // Filter by completion status and date range
             const filteredOrders = fetchedOrders.filter(order => {
-                // Check if completed
-                if (!order.completed) return false;
+                // Check if completed or paid
+                const isCompleted = order.currentStatus?.label === "COMPLETED" || order.paid === true;
+                if (!isCompleted) return false;
 
                 // Get order date
-                const orderDate = parseDate(order.date);
+                const orderDate = order.date;
                 if (!orderDate) return false;
 
                 // Check if within date range
                 return orderDate >= startDate && orderDate <= endDate;
             });
 
+            // Sort by date descending (newest first)
+            filteredOrders.sort((a, b) => {
+                const dateA = a.date;
+                const dateB = b.date;
+                return dateB - dateA;
+            });
+
             setCompletedOrders(filteredOrders);
             setLoadingCompletedOrders(false);
+
+            console.log(`Fetched ${fetchedOrders.length} orders, ${filteredOrders.length} completed in selected date range`);
         } catch (err) {
             console.error('Error fetching completed orders:', err);
-            setErrorCompletedOrders('Failed to fetch completed orders');
+            setErrorCompletedOrders(`Failed to fetch completed orders: ${err.message}`);
             setLoadingCompletedOrders(false);
         }
     };
@@ -393,7 +617,9 @@ function Dashboard() {
     // Add order handling functions
     const handleAcceptOrder = async (orderId) => {
         try {
-            const orderRef = sdk.collection("Orders").doc(orderId);
+            setLoadingQrOrders(true);
+
+            const orderRef = window.sdk.collection("Orders").doc(orderId);
             const orderDoc = await orderRef.get();
 
             if (!orderDoc.exists) {
@@ -402,9 +628,9 @@ function Dashboard() {
 
             const order = orderDoc.data();
 
-            // Create status entry
+            // Create status entry for processing
             const statusEntry = {
-                label: 'processing',
+                label: 'PROCESSING',
                 date: new Date()
             };
 
@@ -414,15 +640,25 @@ function Dashboard() {
                 status: [...(order.status || []), statusEntry]
             });
 
-            refreshOrders();
+            // Show success message
+            showToast("Order accepted successfully");
+
+            // Refresh orders data
+            await fetchOrders();
+
         } catch (err) {
             console.error('Error accepting order:', err);
+            showToast(`Failed to accept order: ${err.message}`, "error");
+        } finally {
+            setLoadingQrOrders(false);
         }
     };
 
     const handleRejectOrder = async (orderId) => {
         try {
-            const orderRef = sdk.collection("Orders").doc(orderId);
+            setLoadingQrOrders(true);
+
+            const orderRef = window.sdk.collection("Orders").doc(orderId);
             const orderDoc = await orderRef.get();
 
             if (!orderDoc.exists) {
@@ -431,9 +667,9 @@ function Dashboard() {
 
             const order = orderDoc.data();
 
-            // Create status entry
+            // Create status entry for rejected
             const statusEntry = {
-                label: 'cancelled',
+                label: 'CANCELLED',
                 date: new Date()
             };
 
@@ -443,26 +679,71 @@ function Dashboard() {
                 status: [...(order.status || []), statusEntry]
             });
 
-            refreshOrders();
+            // Show success message
+            showToast("Order rejected successfully");
+
+            // Refresh orders data
+            await fetchOrders();
+
         } catch (err) {
             console.error('Error rejecting order:', err);
+            showToast(`Failed to reject order: ${err.message}`, "error");
+        } finally {
+            setLoadingQrOrders(false);
         }
     };
 
     const handleDeleteOrder = async (orderId) => {
         try {
-            if (confirm('Are you sure you want to delete this order?')) {
-                await sdk.collection("Orders").doc(orderId).delete();
-                refreshOrders();
+            if (!confirm('Are you sure you want to delete this order?')) {
+                return;
             }
+
+            setLoadingQrOrders(true);
+
+            // Delete the order from Firestore
+            await window.sdk.collection("Orders").doc(orderId).delete();
+
+            // Show success message
+            showToast("Order deleted successfully");
+
+            // Refresh orders data
+            await fetchOrders();
+
         } catch (err) {
             console.error('Error deleting order:', err);
+            showToast(`Failed to delete order: ${err.message}`, "error");
+        } finally {
+            setLoadingQrOrders(false);
         }
     };
 
-    const handlePrintBill = (orderId) => {
-        console.log('Print bill for order:', orderId);
-        // Implement print bill functionality
+    const handlePrintBill = async (orderId) => {
+        try {
+            const orderRef = window.sdk.collection("Orders").doc(orderId);
+            const orderDoc = await orderRef.get();
+
+            if (!orderDoc.exists) {
+                throw new Error('Order not found');
+            }
+
+            // Check if bill printing is available in SDK
+            if (window.sdk.bill && typeof window.sdk.bill.print === 'function') {
+                await window.sdk.bill.print(orderId);
+                showToast("Bill printed successfully");
+            } else if (window.sdk.kot && typeof window.sdk.kot.print === 'function') {
+                // Fallback to KOT printing if bill printing is not available
+                await window.sdk.kot.print(orderId);
+                showToast("KOT printed successfully");
+            } else {
+                // Fallback for development/testing
+                console.log('Print bill for order:', orderId);
+                showToast("Print simulation: Bill printed successfully");
+            }
+        } catch (err) {
+            console.error('Error printing bill:', err);
+            showToast(`Failed to print bill: ${err.message}`, "error");
+        }
     };
 
     const filteredTables = React.useMemo(() => {
@@ -485,6 +766,19 @@ function Dashboard() {
             return acc;
         }, {});
     }, [filteredTables]);
+
+    // Format a number with commas
+    const formatNumber = (num) => {
+        return num.toLocaleString('en-IN');
+    };
+
+    // Format a currency value
+    const formatCurrency = (amount) => {
+        return '₹ ' + amount.toLocaleString('en-IN', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        });
+    };
 
     // Render the dashboard
     return (
@@ -589,42 +883,42 @@ function Dashboard() {
                                 <DashboardCard
                                     icon="ph-chart-line-up"
                                     title="Today's Orders"
-                                    value="25"
-                                    trend="+15%"
-                                    color="primary"
+                                    value={formatNumber(dashboardMetrics.todayOrders)}
+                                    trend={`${dashboardMetrics.todayOrdersTrend >= 0 ? '+' : ''}${dashboardMetrics.todayOrdersTrend.toFixed(1)}%`}
+                                    color={dashboardMetrics.todayOrdersTrend >= 0 ? "primary" : "warning"}
                                     compact={true}
                                 />
                                 <DashboardCard
                                     icon="ph-currency-dollar"
                                     title="Today's Revenue"
-                                    value="₹ 12,500"
-                                    trend="+8%"
-                                    color="success"
+                                    value={formatCurrency(dashboardMetrics.todayRevenue)}
+                                    trend={`${dashboardMetrics.todayRevenueTrend >= 0 ? '+' : ''}${dashboardMetrics.todayRevenueTrend.toFixed(1)}%`}
+                                    color={dashboardMetrics.todayRevenueTrend >= 0 ? "success" : "warning"}
                                     compact={true}
                                 />
                                 <DashboardCard
                                     icon="ph-users"
                                     title="New Customers"
-                                    value="4"
-                                    trend="-3%"
-                                    color="warning"
+                                    value={formatNumber(dashboardMetrics.newCustomers)}
+                                    trend={`${dashboardMetrics.newCustomersTrend >= 0 ? '+' : ''}${dashboardMetrics.newCustomersTrend.toFixed(1)}%`}
+                                    color={dashboardMetrics.newCustomersTrend >= 0 ? "primary" : "warning"}
                                     compact={true}
                                 />
                                 <DashboardCard
                                     icon="ph-shopping-cart"
                                     title="Avg. Order Value"
-                                    value="₹ 500"
-                                    trend="+5%"
-                                    color="info"
+                                    value={formatCurrency(dashboardMetrics.avgOrderValue)}
+                                    trend={`${dashboardMetrics.avgOrderValueTrend >= 0 ? '+' : ''}${dashboardMetrics.avgOrderValueTrend.toFixed(1)}%`}
+                                    color={dashboardMetrics.avgOrderValueTrend >= 0 ? "info" : "warning"}
                                     compact={true}
                                     className="hidden md:flex"
                                 />
                                 <DashboardCard
                                     icon="ph-clock"
                                     title="Avg. Service Time"
-                                    value="22 min"
-                                    trend="-10%"
-                                    color="success"
+                                    value={`${Math.round(dashboardMetrics.avgServiceTime)} min`}
+                                    trend={`${dashboardMetrics.avgServiceTimeTrend >= 0 ? '+' : ''}${dashboardMetrics.avgServiceTimeTrend.toFixed(1)}%`}
+                                    color={dashboardMetrics.avgServiceTimeTrend >= 0 ? "success" : "warning"}
                                     compact={true}
                                     className="hidden lg:flex"
                                 />
@@ -794,7 +1088,30 @@ function Dashboard() {
                                     </div>
                                     <div>
                                         <div className="text-xs text-gray-500">Accepted Today</div>
-                                        <div className="text-lg font-bold text-gray-800">12</div>
+                                        <div className="text-lg font-bold text-gray-800">
+                                            {(() => {
+                                                // Filter orders accepted today
+                                                const today = new Date();
+                                                today.setHours(0, 0, 0, 0);
+                                                const acceptedToday = orders.filter(order => {
+                                                    // Check if order has 'PROCESSING' status
+                                                    if (!order.status || !Array.isArray(order.status)) return false;
+
+                                                    // Find the processing status entry
+                                                    const processingStatus = order.status.find(
+                                                        s => s.label && s.label.toUpperCase() === 'PROCESSING'
+                                                    );
+
+                                                    if (!processingStatus || !processingStatus.date) return false;
+
+                                                    // Check if it was accepted today
+                                                    const statusDate = parseDate(processingStatus.date);
+                                                    return statusDate && statusDate >= today;
+                                                });
+
+                                                return acceptedToday.length;
+                                            })()}
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -803,7 +1120,53 @@ function Dashboard() {
                                     </div>
                                     <div>
                                         <div className="text-xs text-gray-500">Avg. Accept Time</div>
-                                        <div className="text-lg font-bold text-gray-800">4 min</div>
+                                        <div className="text-lg font-bold text-gray-800">
+                                            {(() => {
+                                                // Calculate average acceptance time for orders today
+                                                const today = new Date();
+                                                today.setHours(0, 0, 0, 0);
+
+                                                let totalAcceptTimeMinutes = 0;
+                                                let acceptedOrderCount = 0;
+
+                                                orders.forEach(order => {
+                                                    if (!order.status || !Array.isArray(order.status)) return;
+
+                                                    // Find the placed and processing status entries
+                                                    const placedStatus = order.status.find(
+                                                        s => s.label && s.label.toUpperCase() === 'PLACED'
+                                                    );
+
+                                                    const processingStatus = order.status.find(
+                                                        s => s.label && s.label.toUpperCase() === 'PROCESSING'
+                                                    );
+
+                                                    if (!placedStatus || !processingStatus) return;
+
+                                                    const placedDate = parseDate(placedStatus.date);
+                                                    const processingDate = parseDate(processingStatus.date);
+
+                                                    if (!placedDate || !processingDate) return;
+
+                                                    // Only consider orders accepted today
+                                                    if (processingDate < today) return;
+
+                                                    // Calculate time difference in minutes
+                                                    const acceptTimeMinutes = (processingDate - placedDate) / (1000 * 60);
+
+                                                    // Only consider valid times (greater than 0 and less than 1 day)
+                                                    if (acceptTimeMinutes > 0 && acceptTimeMinutes < 1440) {
+                                                        totalAcceptTimeMinutes += acceptTimeMinutes;
+                                                        acceptedOrderCount++;
+                                                    }
+                                                });
+
+                                                if (acceptedOrderCount === 0) return "N/A";
+
+                                                const avgAcceptTime = Math.round(totalAcceptTimeMinutes / acceptedOrderCount);
+                                                return `${avgAcceptTime} min`;
+                                            })()}
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -812,7 +1175,23 @@ function Dashboard() {
                                     </div>
                                     <div>
                                         <div className="text-xs text-gray-500">Avg. Order Value</div>
-                                        <div className="text-lg font-bold text-gray-800">₹620</div>
+                                        <div className="text-lg font-bold text-gray-800">
+                                            {(() => {
+                                                // Calculate average order value for QR orders
+                                                if (qrOrders.length === 0) return "₹0";
+
+                                                const totalValue = qrOrders.reduce((sum, order) => {
+                                                    const itemsTotal = order.items?.reduce((total, item) => {
+                                                        return total + ((item.price || 0) * (item.quantity || item.qnt || 1));
+                                                    }, 0) || 0;
+
+                                                    return sum + itemsTotal;
+                                                }, 0);
+
+                                                const avgValue = Math.round(totalValue / qrOrders.length);
+                                                return `₹${avgValue}`;
+                                            })()}
+                                        </div>
                                     </div>
                                 </div>
                             </div>

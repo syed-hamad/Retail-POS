@@ -1721,10 +1721,522 @@ function CustomerSearch({ isOpen, onClose, onSelectCustomer }) {
     );
 }
 
+// Product Form Modal Component
+function ProductFormModal({ isOpen, onClose, editProduct = null }) {
+    const [formData, setFormData] = React.useState({
+        title: '',
+        desc: '',
+        price: '',
+        mrp: '',
+        cat: 'Appetizers',
+        veg: true,
+        active: true,
+        stock: '',
+        imgs: []
+    });
+    const [uploading, setUploading] = React.useState(false);
+    const [error, setError] = React.useState(null);
+    const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [categories, setCategories] = React.useState([
+        'Appetizers', 'Main Course', 'NORTH INDIAN', 'MILKSHAKES', 'Breakfast', 'Juices', 'WRAPS'
+    ]);
+    const [previewImage, setPreviewImage] = React.useState('');
+
+    // Reset form when modal opens and populate with edit data if available
+    React.useEffect(() => {
+        if (isOpen) {
+            setError(null);
+
+            // If editing, populate form with product data
+            if (editProduct) {
+                setFormData({
+                    title: editProduct.title || '',
+                    desc: editProduct.desc || '',
+                    price: editProduct.price || '',
+                    mrp: editProduct.mrp || editProduct.price || '',
+                    cat: editProduct.cat || 'Appetizers',
+                    veg: editProduct.veg !== undefined ? editProduct.veg : true,
+                    active: editProduct.active !== undefined ? editProduct.active : true,
+                    stock: editProduct.stock !== undefined ? editProduct.stock : '',
+                    imgs: editProduct.imgs || []
+                });
+
+                // Set preview image if available
+                if (editProduct.imgs && editProduct.imgs.length > 0) {
+                    setPreviewImage(editProduct.imgs[0]);
+                } else {
+                    setPreviewImage('');
+                }
+            } else {
+                // Reset form for new product
+                setFormData({
+                    title: '',
+                    desc: '',
+                    price: '',
+                    mrp: '',
+                    cat: 'Appetizers',
+                    veg: true,
+                    active: true,
+                    stock: '',
+                    imgs: []
+                });
+                setPreviewImage('');
+            }
+        }
+    }, [isOpen, editProduct]);
+
+    // Fetch categories from existing products
+    React.useEffect(() => {
+        async function fetchCategories() {
+            try {
+                const snapshot = await window.sdk.collection("Product").get();
+                const cats = new Set(['Appetizers', 'Main Course', 'NORTH INDIAN', 'MILKSHAKES', 'Breakfast', 'Juices', 'WRAPS']);
+
+                snapshot.docs.forEach(doc => {
+                    const data = doc.data();
+                    if (data.cat) {
+                        cats.add(data.cat);
+                    }
+                });
+
+                setCategories(Array.from(cats).sort());
+            } catch (error) {
+                console.error("Error fetching categories:", error);
+            }
+        }
+
+        if (isOpen) {
+            fetchCategories();
+        }
+    }, [isOpen]);
+
+    const handleChange = (e) => {
+        const { name, value, type, checked } = e.target;
+
+        if (type === 'checkbox') {
+            setFormData(prev => ({ ...prev, [name]: checked }));
+        } else if (name === 'price' || name === 'mrp' || name === 'stock') {
+            // Only allow numbers for price, mrp and stock fields
+            const numValue = value.replace(/[^0-9]/g, '');
+            setFormData(prev => ({ ...prev, [name]: numValue }));
+        } else {
+            setFormData(prev => ({ ...prev, [name]: value }));
+        }
+    };
+
+    const handleImageUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // Check file type
+        if (!file.type.match('image.*')) {
+            setError('Please select an image file');
+            return;
+        }
+
+        // Check file size (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            setError('Image size should be less than 5MB');
+            return;
+        }
+
+        try {
+            setUploading(true);
+            setError(null);
+
+            // Preview image
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                setPreviewImage(e.target.result);
+            };
+            reader.readAsDataURL(file);
+
+            // Upload image to storage
+            const storageRef = window.sdk.storage.ref();
+            const fileRef = storageRef.child(`products/${Date.now()}_${file.name}`);
+
+            await fileRef.put(file);
+            const downloadURL = await fileRef.getDownloadURL();
+
+            // Update form data with image URL
+            setFormData(prev => ({
+                ...prev,
+                imgs: [downloadURL, ...(prev.imgs || []).slice(0, 4)] // Keep max 5 images
+            }));
+
+            setUploading(false);
+        } catch (error) {
+            setError('Failed to upload image: ' + error.message);
+            setUploading(false);
+        }
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+
+        // Validate form
+        if (!formData.title) {
+            setError('Please enter a product title');
+            return;
+        }
+
+        if (!formData.price) {
+            setError('Please enter a price');
+            return;
+        }
+
+        // If mrp is not provided, set it equal to price
+        if (!formData.mrp) {
+            setFormData(prev => ({ ...prev, mrp: prev.price }));
+        }
+
+        // Ensure price is not greater than MRP
+        if (Number(formData.price) > Number(formData.mrp)) {
+            setError('Price cannot be greater than MRP');
+            return;
+        }
+
+        try {
+            setIsSubmitting(true);
+
+            // Prepare product data
+            const productData = {
+                title: formData.title,
+                desc: formData.desc,
+                price: Number(formData.price),
+                mrp: Number(formData.mrp),
+                cat: formData.cat,
+                veg: formData.veg,
+                active: formData.active,
+                date: new Date()
+            };
+
+            // Add stock if provided
+            if (formData.stock !== '') {
+                productData.stock = Number(formData.stock);
+            }
+
+            // Add images if available
+            if (formData.imgs && formData.imgs.length > 0) {
+                productData.imgs = formData.imgs;
+            }
+
+            // Save to Firestore
+            if (editProduct) {
+                // Update existing product
+                await window.sdk.collection("Product").doc(editProduct.id).update(productData);
+                showToast('Product updated successfully');
+            } else {
+                // Add new product
+                await window.sdk.collection("Product").doc().set(productData);
+                showToast('Product added successfully');
+            }
+
+            setIsSubmitting(false);
+            onClose();
+
+            // Refresh the page to show updated product list
+            window.location.reload();
+        } catch (error) {
+            setError('Failed to save product: ' + error.message);
+            setIsSubmitting(false);
+        }
+    };
+
+    const removeImage = (index) => {
+        setFormData(prev => {
+            const updatedImgs = [...prev.imgs];
+            updatedImgs.splice(index, 1);
+            return { ...prev, imgs: updatedImgs };
+        });
+
+        // Update preview image
+        if (index === 0 && formData.imgs.length > 1) {
+            setPreviewImage(formData.imgs[1]);
+        } else if (formData.imgs.length <= 1) {
+            setPreviewImage('');
+        }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
+                {/* Header */}
+                <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-red-50">
+                    <h2 className="text-xl font-semibold text-gray-800">
+                        {editProduct ? 'Edit Product' : 'Add New Product'}
+                    </h2>
+                    <button
+                        onClick={onClose}
+                        className="p-2 hover:bg-red-100 rounded-full"
+                    >
+                        <i className="ph ph-x text-gray-600"></i>
+                    </button>
+                </div>
+
+                {/* Form Content - Scrollable */}
+                <div className="overflow-y-auto p-4 max-h-[calc(90vh-60px)]">
+                    {error && (
+                        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">
+                            {error}
+                        </div>
+                    )}
+
+                    <form onSubmit={handleSubmit}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Left Column - Image and Basic Info */}
+                            <div>
+                                {/* Image Upload */}
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Product Image
+                                    </label>
+                                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                                        {previewImage ? (
+                                            <div className="relative">
+                                                <img
+                                                    src={previewImage}
+                                                    alt="Product preview"
+                                                    className="mx-auto max-h-48 object-contain mb-2"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeImage(0)}
+                                                    className="absolute top-0 right-0 bg-red-500 text-white p-1 rounded-full"
+                                                >
+                                                    <i className="ph ph-x text-sm"></i>
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center py-6">
+                                                <i className="ph ph-image text-4xl text-gray-400 mb-2"></i>
+                                                <p className="text-sm text-gray-500">Upload product image</p>
+                                            </div>
+                                        )}
+
+                                        <div className="mt-2">
+                                            <label className="cursor-pointer bg-red-500 hover:bg-red-600 text-white text-sm py-2 px-4 rounded-lg inline-flex items-center">
+                                                <i className="ph ph-upload-simple mr-2"></i>
+                                                <span>{uploading ? 'Uploading...' : 'Choose File'}</span>
+                                                <input
+                                                    type="file"
+                                                    className="hidden"
+                                                    onChange={handleImageUpload}
+                                                    accept="image/*"
+                                                    disabled={uploading}
+                                                />
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">Maximum file size: 5MB</p>
+                                </div>
+
+                                {/* Title */}
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Product Title <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="title"
+                                        value={formData.title}
+                                        onChange={handleChange}
+                                        className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                        placeholder="Enter product name"
+                                        required
+                                    />
+                                </div>
+
+                                {/* Description */}
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Description
+                                    </label>
+                                    <textarea
+                                        name="desc"
+                                        value={formData.desc}
+                                        onChange={handleChange}
+                                        className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                        placeholder="Enter product description"
+                                        rows="3"
+                                    ></textarea>
+                                </div>
+                            </div>
+
+                            {/* Right Column - Pricing and Category */}
+                            <div>
+                                <div className="flex gap-4 mb-4">
+                                    {/* Price */}
+                                    <div className="flex-1">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Price (₹) <span className="text-red-500">*</span>
+                                        </label>
+                                        <div className="relative">
+                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                <span className="text-gray-500 sm:text-sm">₹</span>
+                                            </div>
+                                            <input
+                                                type="text"
+                                                name="price"
+                                                value={formData.price}
+                                                onChange={handleChange}
+                                                className="w-full pl-8 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                                placeholder="0"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* MRP */}
+                                    <div className="flex-1">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            MRP (₹)
+                                        </label>
+                                        <div className="relative">
+                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                <span className="text-gray-500 sm:text-sm">₹</span>
+                                            </div>
+                                            <input
+                                                type="text"
+                                                name="mrp"
+                                                value={formData.mrp}
+                                                onChange={handleChange}
+                                                className="w-full pl-8 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                                placeholder="Same as price"
+                                            />
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1">Leave empty to set same as price</p>
+                                    </div>
+                                </div>
+
+                                {/* Category */}
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Category
+                                    </label>
+                                    <select
+                                        name="cat"
+                                        value={formData.cat}
+                                        onChange={handleChange}
+                                        className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                    >
+                                        {categories.map((category, index) => (
+                                            <option key={index} value={category}>
+                                                {category}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Stock */}
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Stock (Quantity)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="stock"
+                                        value={formData.stock}
+                                        onChange={handleChange}
+                                        className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                        placeholder="Leave empty for unlimited"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">Leave empty if stock tracking is not needed</p>
+                                </div>
+
+                                {/* Toggles - Veg/Non-veg and Active Status */}
+                                <div className="space-y-4 mt-6">
+                                    {/* Veg/Non-veg Toggle */}
+                                    <div className="flex items-center">
+                                        <div className="mr-3">
+                                            <div className={`h-6 w-6 border-2 p-0.5 ${formData.veg ? 'border-green-500' : 'border-red-500'}`}>
+                                                <div className={`h-full w-full rounded-sm ${formData.veg ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                            </div>
+                                        </div>
+                                        <label className="flex items-center cursor-pointer">
+                                            <div className="relative">
+                                                <input
+                                                    type="checkbox"
+                                                    name="veg"
+                                                    checked={formData.veg}
+                                                    onChange={handleChange}
+                                                    className="sr-only"
+                                                />
+                                                <div className="block bg-gray-300 w-14 h-8 rounded-full"></div>
+                                                <div className={`absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${formData.veg ? 'transform translate-x-6' : ''}`}></div>
+                                            </div>
+                                            <div className="ml-3 text-gray-700">
+                                                {formData.veg ? 'Vegetarian' : 'Non-vegetarian'}
+                                            </div>
+                                        </label>
+                                    </div>
+
+                                    {/* Active Status Toggle */}
+                                    <div className="flex items-center">
+                                        <label className="flex items-center cursor-pointer">
+                                            <div className="relative">
+                                                <input
+                                                    type="checkbox"
+                                                    name="active"
+                                                    checked={formData.active}
+                                                    onChange={handleChange}
+                                                    className="sr-only"
+                                                />
+                                                <div className="block bg-gray-300 w-14 h-8 rounded-full"></div>
+                                                <div className={`absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${formData.active ? 'transform translate-x-6' : ''}`}></div>
+                                            </div>
+                                            <div className="ml-3 text-gray-700">
+                                                Product {formData.active ? 'Active' : 'Inactive'}
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Form Actions */}
+                        <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-gray-200">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isSubmitting || uploading}
+                                className={`px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 flex items-center ${(isSubmitting || uploading) ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <span className="animate-spin inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></span>
+                                        Saving...
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="ph ph-floppy-disk mr-2"></i>
+                                        {editProduct ? 'Update Product' : 'Save Product'}
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// Make component available globally
+window.ProductFormModal = ProductFormModal;
+
 // Export components
 window.ProfileMenu = ProfileMenu;
 window.AddTableModal = AddTableModal;
 window.RenameRoomModal = RenameRoomModal;
 window.OrderRoom = OrderRoom;
 window.OrderView = OrderView;
-window.CustomerSearch = CustomerSearch;
+window.CustomerSearch = CustomerSearch; 

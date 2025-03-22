@@ -427,7 +427,7 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 {filteredProducts.map(product => (
-                                    <ProductCard
+                                    <POSProductCard
                                         key={product.id}
                                         product={product}
                                         inCart={cart[product.id]?.quantity || 0}
@@ -466,7 +466,7 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
                             <div className="flex-1 overflow-y-auto p-4" style={{ backgroundColor: "#fffcfc" }}>
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                     {filteredProducts.map(product => (
-                                        <ProductCard
+                                        <POSProductCard
                                             key={product.id}
                                             product={product}
                                             inCart={cart[product.id]?.quantity || 0}
@@ -535,8 +535,8 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
     );
 }
 
-// Product Card Component
-function ProductCard({ product, inCart = 0, onAdd, onRemove }) {
+// POS Product Card Component (renamed to avoid conflicts)
+function POSProductCard({ product, inCart = 0, onAdd, onRemove }) {
     const [addAnimation, setAddAnimation] = React.useState(false);
 
     // Animation effect when adding to cart
@@ -572,7 +572,7 @@ function ProductCard({ product, inCart = 0, onAdd, onRemove }) {
                     )}
                     {product.hasDiscount && (
                         <div className="absolute top-2 right-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full font-medium">
-                            {product.discount}% OFF
+                            {product.discountPercent}% OFF
                         </div>
                     )}
                     {product.veg !== undefined && (

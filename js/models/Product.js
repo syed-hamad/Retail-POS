@@ -9,7 +9,6 @@ class Product {
         this.imgs = data.imgs || [];
         this.price = data.price || 0;
         this.mrp = data.mrp || 0;
-        this.discount = data.discount || 0;
         this.active = data.active !== false; // default to true
         this.veg = data.veg !== undefined ? data.veg : true; // default to vegetarian
 
@@ -31,19 +30,30 @@ class Product {
 
     // Create a Product from a Firestore document
     static fromDoc(doc, priceVariant = 'default') {
-        if (!doc.exists) {
+        if (!doc || !doc.exists) {
+            console.warn('Attempted to create Product from non-existent document');
             return null;
         }
 
-        const data = doc.data();
-        data.id = doc.id;
+        try {
+            const data = doc.data();
+            if (!data) {
+                console.warn('Document exists but has no data');
+                return null;
+            }
+            
+            data.id = doc.id;
 
-        // Handle price variants
-        if (data.priceVariants && data.priceVariants[priceVariant]) {
-            data.price = data.priceVariants[priceVariant];
+            // Handle price variants
+            if (data.priceVariants && data.priceVariants[priceVariant]) {
+                data.price = data.priceVariants[priceVariant];
+            }
+
+            return new Product(data);
+        } catch (error) {
+            console.error('Error creating Product from document:', error);
+            return null;
         }
-
-        return new Product(data);
     }
 
     // Convert to a simple object for storing in Firestore
@@ -55,7 +65,7 @@ class Product {
             imgs: this.imgs,
             price: this.price,
             mrp: this.mrp,
-            discount: this.discount,
+            discount: this.discountPercent,
             active: this.active,
             veg: this.veg,
             sellerId: this.sellerId,
@@ -86,7 +96,7 @@ class Product {
             imgs: this.imgs,
             price: this.price,
             mrp: this.mrp,
-            discount: this.discount,
+            discount: this.discountPercent,
             active: this.active,
             veg: this.veg,
             stock: this.stock,
@@ -106,7 +116,7 @@ class Product {
     }
 
     // Calculate discount percentage
-    get discount() {
+    get discountPercentage() {
         if (this.hasDiscount) {
             return Math.ceil(((this.mrp - this.price) * 100) / this.mrp);
         }

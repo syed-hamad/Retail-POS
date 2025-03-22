@@ -1,71 +1,201 @@
 // Product Card Component
 function ProductCard({ product }) {
-    return (
-        <div className="bg-gradient-to-br from-warm-bg to-white rounded-xl p-4 border border-gray-200 shadow-section hover:shadow-md transition-all">
-            <div className="flex items-start gap-4">
-                {/* Product Image */}
-                <div className="w-24 h-24 rounded-lg bg-gradient-to-br from-card-bg to-white flex-shrink-0 overflow-hidden">
-                    {product.imgs && product.imgs.length > 0 ? (
-                        <img src={product.imgs[0]} className="w-full h-full object-cover" alt={product.title} />
-                    ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-400">
-                            <i className="ph ph-image text-2xl" />
-                        </div>
-                    )}
+    // Function to handle product deletion
+    const handleDelete = (e) => {
+        e.stopPropagation();
+        if (!confirm(`Are you sure you want to delete "${product.title}"?`)) return;
+
+        try {
+            window.sdk.collection("Product").doc(product.id).delete()
+                .then(() => {
+                    showToast("Product deleted successfully");
+                    // Refresh the products list - ideally this would trigger a re-fetch
+                    window.location.reload();
+                })
+                .catch(error => {
+                    console.error("Error deleting product:", error);
+                    showToast("Failed to delete product", "error");
+                });
+        } catch (error) {
+            console.error("Error deleting product:", error);
+            showToast("Failed to delete product", "error");
+        }
+    };
+
+    // Function to toggle product active status
+    const toggleActive = (e) => {
+        e.stopPropagation();
+        const newActiveState = !product.active;
+
+        try {
+            window.sdk.collection("Product").doc(product.id).update({
+                active: newActiveState
+            })
+                .then(() => {
+                    showToast(`Product ${newActiveState ? 'activated' : 'deactivated'} successfully`);
+                    // Refresh the products list - ideally this would trigger a re-fetch
+                    window.location.reload();
+                })
+                .catch(error => {
+                    console.error("Error updating product status:", error);
+                    showToast("Failed to update product status", "error");
+                });
+        } catch (error) {
+            console.error("Error updating product status:", error);
+            showToast("Failed to update product status", "error");
+        }
+    };
+
+    // Function to open product edit form
+    const handleEdit = (e) => {
+        e.stopPropagation();
+
+        // Create a modal container if it doesn't exist
+        let modalContainer = document.getElementById('product-form-modal-container');
+        if (!modalContainer) {
+            modalContainer = document.createElement('div');
+            modalContainer.id = 'product-form-modal-container';
+            document.body.appendChild(modalContainer);
+        }
+
+        // Render the ProductFormModal inside the container
+        ReactDOM.render(
+            React.createElement(window.ProductFormModal, {
+                isOpen: true,
+                onClose: () => {
+                    ReactDOM.unmountComponentAtNode(modalContainer);
+                },
+                editProduct: product
+            }),
+            modalContainer
+        );
+    };
+
+    // Determine the stock status display
+    const getStockDisplay = () => {
+        if (product.stock === undefined || product.stock === null) return null;
+
+        const available = product.stock;
+
+        if (available <= 0) {
+            return (
+                <div className="flex justify-between items-center w-full mt-1">
+                    <span className="text-2xs font-bold text-red-600">Out of stock</span>
+                    <button
+                        onClick={handleEdit}
+                        className="text-2xs bg-gray-100 hover:bg-gray-200 text-red-600 px-2 py-0.5 rounded"
+                    >
+                        Update Stock
+                    </button>
                 </div>
-                {/* Product Details */}
-                <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                        <h3 className="font-medium text-lg">{product.title}</h3>
-                        <div className="flex items-center gap-2">
-                            <span className={`px-2 py-1 rounded-full text-xs ${product.active ? 'bg-gradient-to-r from-green-100 to-green-50 text-green-800' : 'bg-gradient-to-r from-gray-100 to-gray-50 text-gray-600'}`}>
-                                {product.active ? 'Active' : 'Inactive'}
-                            </span>
-                            <span className={`px-2 py-1 rounded-full text-xs ${product.veg ? 'bg-gradient-to-r from-green-100 to-green-50 text-green-800' : 'bg-gradient-to-r from-red-100 to-red-50 text-red-800'}`}>
-                                {product.veg ? 'Veg' : 'Non-veg'}
-                            </span>
-                        </div>
+            );
+        } else {
+            return (
+                <div className="w-full mt-1">
+                    <span className="text-2xs font-bold text-green-600">({available} left)</span>
+                </div>
+            );
+        }
+    };
+
+    return (
+        <div className={`bg-gradient-to-br from-warm-bg to-white rounded-lg overflow-hidden border border-gray-200 shadow-sm hover:shadow-md transition-all flex flex-col h-full ${!product.active ? 'opacity-60' : ''}`}>
+            {/* Product Image with Badges */}
+            <div className="relative w-full aspect-square bg-gradient-to-br from-card-bg to-white overflow-hidden">
+                {product.imgs && product.imgs.length > 0 ? (
+                    <img src={product.imgs[0]} className="w-full h-full object-cover" alt={product.title} />
+                ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-400">
+                        <i className="ph ph-image text-2xl md:text-4xl" />
                     </div>
-                    <p className="text-gray-400 text-xs mt-1 line-clamp-2" style={{ lineHeight: '1.3' }}>
-                        {product.desc || 'No description'}
-                    </p>
-                    <div className="flex items-center gap-4 mt-2">
-                        <div className="text-sm">
-                            <span className="text-gray-500">Price: </span>
-                            <span className="font-medium">₹{product.price}</span>
-                        </div>
-                        {product.hasDiscount && (
-                            <>
-                                <div className="text-sm">
-                                    <span className="text-gray-500">MRP: </span>
-                                    <span className="line-through text-gray-400">₹{product.mrp}</span>
-                                </div>
-                                <div className="text-xs px-2 py-1 bg-gradient-to-r from-green-100 to-green-50 text-green-800 rounded-full">
-                                    {product.discount}% off
-                                </div>
-                            </>
-                        )}
-                        {product.conv > 0 && (
-                            <div className="text-xs px-2 py-1 bg-gradient-to-r from-blue-100 to-blue-50 text-blue-800 rounded-full">
-                                {product.conv}% conversion
-                            </div>
-                        )}
+                )}
+
+                {/* Discount Badge */}
+                {product.hasDiscount && (
+                    <div className="absolute top-1 right-1 text-xs px-1.5 py-0.5 bg-red-500 text-white rounded-full font-medium">
+                        {product.discountPercent}% OFF
+                    </div>
+                )}
+
+                {/* Veg/Non-veg indicator */}
+                <div className="absolute bottom-1 left-1">
+                    <div className={`h-4 w-4 border p-0.5 ${product.veg ? 'border-green-500' : 'border-red-500'}`}>
+                        <div className={`h-full w-full rounded-full ${product.veg ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                    </div>
+                </div>
+
+                {/* Status Badge */}
+                {!product.active && (
+                    <div className="absolute bottom-1 right-1 px-1.5 py-0.5 text-2xs bg-gray-100 text-gray-600 rounded-full">
+                        Inactive
+                    </div>
+                )}
+
+                {/* Quick Action Buttons (visible on hover) */}
+                <div className="absolute inset-0 bg-black bg-opacity-40 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <div className="flex gap-2">
+                        <button
+                            onClick={handleEdit}
+                            className="p-2 bg-white rounded-full text-yellow-600 hover:bg-yellow-50"
+                            title="Edit Product"
+                        >
+                            <i className="ph ph-pencil-simple"></i>
+                        </button>
+                        <button
+                            onClick={toggleActive}
+                            className={`p-2 bg-white rounded-full ${product.active ? 'text-gray-600 hover:bg-gray-50' : 'text-green-600 hover:bg-green-50'}`}
+                            title={product.active ? "Disable Product" : "Enable Product"}
+                        >
+                            <i className={`ph ${product.active ? 'ph-eye-slash' : 'ph-eye'}`}></i>
+                        </button>
+                        <button
+                            onClick={handleDelete}
+                            className="p-2 bg-white rounded-full text-red-600 hover:bg-red-50"
+                            title="Delete Product"
+                        >
+                            <i className="ph ph-trash"></i>
+                        </button>
                     </div>
                 </div>
             </div>
-            <div className="flex items-center justify-end gap-2 mt-3">
-                <button className="px-2 py-1.5 text-sm bg-gradient-to-r hover:from-red-50 hover:to-white text-red-500 border border-gray-200 rounded-lg flex items-center gap-1.5">
-                    <i className="ph ph-pencil-simple-line"></i>
-                    <span>Edit</span>
-                </button>
-                <button className="px-2 py-1.5 text-sm bg-gradient-to-r hover:from-red-50 hover:to-white text-red-500 border border-gray-200 rounded-lg flex items-center gap-1.5">
-                    <i className="ph ph-trash"></i>
-                    <span>Delete</span>
-                </button>
-                <button className="px-2 py-1.5 text-sm bg-gradient-to-r hover:from-red-50 hover:to-white text-red-500 border border-gray-200 rounded-lg flex items-center gap-1.5">
-                    <i className="ph ph-paper"></i>
-                    <span>Details</span>
-                </button>
+
+            {/* Product Details */}
+            <div className="p-2 flex-1 flex flex-col">
+                <h3 className="font-medium text-sm md:text-base line-clamp-1">{product.title}</h3>
+                <p className="text-gray-500 text-2xs md:text-xs mt-0.5 line-clamp-1 flex-grow" style={{ lineHeight: '1.2' }}>
+                    {product.desc || 'No description'}
+                </p>
+
+                {/* Price Information */}
+                <div className="flex items-center mt-1 md:mt-2">
+                    <div className="flex items-center gap-1">
+                        <div className="font-medium text-red-600 text-sm md:text-base">₹{product.price}</div>
+                        {product.hasDiscount && (
+                            <div className="text-2xs md:text-xs line-through text-gray-400">₹{product.mrp}</div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Stock Information */}
+                {getStockDisplay()}
+
+                {/* Action Bar */}
+                <div className="flex items-center justify-between gap-1 mt-2 pt-2 border-t border-gray-100">
+                    <button
+                        onClick={handleEdit}
+                        className="flex-1 px-1 py-1 text-2xs md:text-xs bg-gradient-to-r hover:from-red-50 hover:to-white text-red-500 border border-gray-200 rounded flex items-center justify-center gap-1"
+                    >
+                        <i className="ph ph-pencil-simple text-xs"></i>
+                        <span>Edit</span>
+                    </button>
+                    <button
+                        onClick={toggleActive}
+                        className={`flex-1 px-1 py-1 text-2xs md:text-xs bg-gradient-to-r hover:from-${product.active ? 'gray' : 'green'}-50 hover:to-white text-${product.active ? 'gray' : 'green'}-500 border border-gray-200 rounded flex items-center justify-center gap-1`}
+                    >
+                        <i className={`ph ph-${product.active ? 'eye-slash' : 'eye'} text-xs`}></i>
+                        <span>{product.active ? 'Disable' : 'Enable'}</span>
+                    </button>
+                </div>
             </div>
         </div>
     );
@@ -152,4 +282,8 @@ function CustomerCard({ customer }) {
             </div>
         </div>
     );
-} 
+}
+
+// Make components available globally
+window.ProductCard = ProductCard;
+window.CustomerCard = CustomerCard; 
