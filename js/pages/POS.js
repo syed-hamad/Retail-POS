@@ -324,7 +324,7 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
     if (loading) {
         return (
             <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
-                <div className="bg-white p-8 rounded-lg">
+                <div className="bg-white p-8 rounded-lg shadow-section" onClick={e => e.stopPropagation()}>
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500"></div>
                 </div>
             </div>

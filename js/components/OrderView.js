@@ -242,8 +242,14 @@ function OrderView({ order, tableId, variant, onClose }) {
 
             {/* Checkout Sheet */}
             {showCheckout && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end">
-                    <div className="w-full bg-white rounded-t-2xl">
+                <div
+                    className="fixed inset-0 bg-black bg-opacity-50 flex items-end z-50"
+                    onClick={() => setShowCheckout(false)}
+                >
+                    <div
+                        className="w-full bg-white rounded-t-2xl shadow-section"
+                        onClick={e => e.stopPropagation()}
+                    >
                         <window.CheckoutSheet
                             order={order}
                             onClose={() => setShowCheckout(false)}

@@ -1,5 +1,5 @@
 // Table Card Component
-function TableCard({ title, orders, duration, status, onTap, onLongPress }) {
+function TableCard({ title, orders, duration, status, onTap, onLongPress, compact = false }) {
     // Calculate color based on last placed date (similar to getColor in Flutter)
     const getColor = (duration) => {
         if (!duration) return {
@@ -42,6 +42,46 @@ function TableCard({ title, orders, duration, status, onTap, onLongPress }) {
         ? `${orders.length} ${orders.length === 1 ? 'order' : 'orders'}`
         : 'No orders';
 
+    // Render compact version for mobile
+    if (compact) {
+        return (
+            <div
+                className={`${colorStyle.gradient} rounded-xl p-2 md:p-3 h-full flex flex-col cursor-pointer hover:shadow-md transition-all border ${colorStyle.border} shadow-section`}
+                onClick={onTap}
+                onContextMenu={(e) => {
+                    e.preventDefault();
+                    onLongPress && onLongPress();
+                }}
+            >
+                <div className="flex items-center justify-between mb-1.5 md:mb-2">
+                    <h3 className="text-xs md:text-sm font-bold line-clamp-1 leading-tight max-w-[70%]">{title}</h3>
+                    <div className="w-6 h-6 md:w-7 md:h-7 rounded-lg bg-gradient-to-br from-white to-white/80 flex items-center justify-center shadow-sm flex-shrink-0">
+                        <i className="ph ph-table text-red-500 text-xs md:text-sm"></i>
+                    </div>
+                </div>
+
+                <div className="mt-auto">
+                    <div className={`text-2xs md:text-xs font-medium px-1.5 py-0.5 md:px-2 md:py-1 rounded-full mb-0.5 md:mb-1 inline-flex items-center ${hasOrders ? 'bg-gradient-to-r from-red-100 to-red-50 text-red-600' : 'bg-gradient-to-r from-gray-100 to-gray-50 text-gray-500'}`}>
+                        {hasOrders ? (
+                            <i className="ph ph-shopping-bag text-2xs md:text-xs mr-0.5 md:mr-1"></i>
+                        ) : (
+                            <i className="ph ph-tray-empty text-2xs md:text-xs mr-0.5 md:mr-1"></i>
+                        )}
+                        {orderText}
+                    </div>
+
+                    {duration && hasOrders && (
+                        <div className="text-2xs md:text-xs bg-gradient-to-r from-gray-100 to-gray-50 px-1.5 md:px-2 py-0.5 md:py-1 rounded-full inline-flex items-center">
+                            <i className="ph ph-clock text-red-500 text-2xs md:text-xs mr-0.5 md:mr-1"></i>
+                            {message}
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    // Render standard version
     return (
         <div
             className={`${colorStyle.gradient} rounded-xl p-4 h-full flex flex-col cursor-pointer hover:shadow-md transition-all border ${colorStyle.border} shadow-section`}
@@ -144,44 +184,72 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
     const statusColor = getStatusColor(order.currentStatus);
 
     return (
-        <div className="my-3">
+        <div className="my-1.5">
             <div
                 className="bg-gradient-to-br from-warm-bg to-white rounded-xl shadow-sm overflow-hidden cursor-pointer hover:shadow-md transition-all border border-gray-200"
                 onClick={handleOrderClick}
             >
-                <div className="p-4">
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-gradient-to-br from-red-50 to-white rounded-lg flex items-center justify-center shadow-sm">
-                                <i className="ph ph-shopping-bag text-red-500 text-lg"></i>
+                <div className="p-2.5 md:p-3">
+                    <div className="flex items-center justify-between mb-1.5 md:mb-2">
+                        <div className="flex items-center gap-1.5 md:gap-3">
+                            <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-red-50 to-white rounded-lg flex items-center justify-center shadow-sm flex-shrink-0">
+                                <i className="ph ph-shopping-bag text-red-500 text-base md:text-lg"></i>
                             </div>
                             <div>
-                                <h3 className="font-medium text-gray-900 truncate max-w-[150px]">
+                                <h3 className="font-medium text-gray-900 line-clamp-1 max-w-[120px] md:max-w-[200px] text-sm md:text-base">
                                     {order.customer?.name || "Guest Customer"}
                                 </h3>
-                                <p className="text-xs text-gray-500">
+                                <p className="text-xs md:text-sm text-gray-500">
                                     {timeAgo}
                                 </p>
                             </div>
                         </div>
                         <div className="text-right">
-                            <div className="text-base font-semibold text-red-600">₹{totalAmount}</div>
+                            <div className="text-sm md:text-base font-semibold text-red-600">₹{totalAmount}</div>
                             <div className="text-xs text-gray-500">#{order.id?.slice(-6)}</div>
                         </div>
                     </div>
-                    <div className="flex items-center justify-between mt-2">
-                        <div className="flex items-center gap-1.5">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColor}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-1 mt-1.5 md:mt-2">
+                        <div className="flex items-center gap-1 md:gap-2 flex-wrap">
+                            <span className={`px-1.5 py-0.5 md:px-2 md:py-1 rounded-full text-xs md:text-sm font-medium ${statusColor}`}>
                                 {order.currentStatus?.label?.toUpperCase() || "PLACED"}
                             </span>
-                            <span className="px-2 py-1 bg-gradient-to-r from-red-100 to-red-50 text-red-600 text-xs font-medium rounded-full inline-flex items-center">
-                                <i className="ph ph-shopping-cart-simple text-xs mr-1"></i>
+                            <span className="px-1.5 py-0.5 md:px-2 md:py-1 bg-gradient-to-r from-red-100 to-red-50 text-red-600 text-xs md:text-sm font-medium rounded-full inline-flex items-center">
+                                <i className="ph ph-shopping-cart-simple text-xs mr-0.5 md:mr-1"></i>
                                 {totalItems} {totalItems === 1 ? 'item' : 'items'}
                             </span>
+                            <span className="hidden md:inline-flex px-2 py-1 bg-gradient-to-r from-gray-100 to-gray-50 text-gray-600 text-sm font-medium rounded-full items-center">
+                                <i className="ph ph-map-pin text-gray-500 mr-1"></i>
+                                {order.address?.area || "In-store"}
+                            </span>
                         </div>
-                        <span className="text-xs text-gray-500">
+                        <span className="text-2xs md:text-xs text-gray-500">
                             {order.orderSource || "In-store"}
                         </span>
+                    </div>
+
+                    {/* Desktop Quick Actions - Only visible on md screens and up */}
+                    <div className="hidden md:flex justify-end mt-2 gap-2">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onAccept && onAccept();
+                            }}
+                            className="px-2 py-1 bg-gradient-to-r from-green-600 to-green-500 text-white rounded-lg text-xs font-medium"
+                        >
+                            <i className="ph ph-check mr-1"></i>
+                            Accept
+                        </button>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onReject && onReject();
+                            }}
+                            className="px-2 py-1 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg text-xs font-medium"
+                        >
+                            <i className="ph ph-x mr-1"></i>
+                            Reject
+                        </button>
                     </div>
                 </div>
             </div>
@@ -231,8 +299,14 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-end">
-            <div className="bg-gradient-to-br from-warm-bg to-white w-full max-w-md h-full overflow-y-auto animate-slide-in-right">
+        <div
+            className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-end"
+            onClick={onClose}
+        >
+            <div
+                className="bg-gradient-to-br from-warm-bg to-white w-full max-w-md h-full overflow-y-auto animate-slide-in-right shadow-section"
+                onClick={e => e.stopPropagation()}
+            >
                 <div className="sticky top-0 bg-white border-b border-gray-200 z-10 px-4 py-3 flex items-center justify-between">
                     <h2 className="text-lg font-semibold text-gray-800">Order Details</h2>
                     <button
@@ -262,7 +336,10 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                             </div>
                             <button
                                 className="w-8 h-8 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                                onClick={() => setIsCustomerSearchOpen(true)}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsCustomerSearchOpen(true);
+                                }}
                                 title="Assign Customer"
                             >
                                 <i className="ph ph-user-plus"></i>
@@ -297,6 +374,10 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                                                 src={item.image}
                                                 alt={item.title}
                                                 className="w-full h-full object-cover rounded-lg"
+                                                onError={(e) => {
+                                                    e.target.onerror = null;
+                                                    e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="%23ccc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>';
+                                                }}
                                             />
                                         ) : (
                                             <i className="ph ph-hamburger text-gray-400 text-lg"></i>
@@ -345,7 +426,8 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                         <div className="space-y-2 pt-2">
                             <div className="flex gap-2">
                                 <button
-                                    onClick={() => {
+                                    onClick={(e) => {
+                                        e.stopPropagation();
                                         onAccept && onAccept();
                                         onClose();
                                     }}
@@ -355,7 +437,8 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                                     <span>Accept Order</span>
                                 </button>
                                 <button
-                                    onClick={() => {
+                                    onClick={(e) => {
+                                        e.stopPropagation();
                                         onReject && onReject();
                                         onClose();
                                     }}
@@ -366,7 +449,8 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                                 </button>
                             </div>
                             <button
-                                onClick={() => {
+                                onClick={(e) => {
+                                    e.stopPropagation();
                                     onDelete && onDelete();
                                     onClose();
                                 }}
@@ -379,7 +463,8 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                     ) : (
                         <div className="flex gap-2 pt-2">
                             <button
-                                onClick={() => {
+                                onClick={(e) => {
+                                    e.stopPropagation();
                                     onPrintBill && onPrintBill();
                                     onClose();
                                 }}
@@ -389,7 +474,8 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                                 <span>Print Bill</span>
                             </button>
                             <button
-                                onClick={() => {
+                                onClick={(e) => {
+                                    e.stopPropagation();
                                     onDelete && onDelete();
                                     onClose();
                                 }}

@@ -488,49 +488,7 @@ function Dashboard() {
 
     // Render the dashboard
     return (
-        <div className="p-4 bg-page-bg">
-            {/* Orders Dashboard */}
-            <div className="mb-6">
-                <div className="flex items-center justify-between mb-5">
-                    <h2 className="text-xl font-bold text-gray-800 flex items-center">
-                        <i className="ph ph-storefront text-red-500 mr-2"></i>
-                        Orders Dashboard
-                    </h2>
-                    <button
-                        onClick={() => setShowCompletedOrders(!showCompletedOrders)}
-                        className="px-2 py-1.5 bg-gradient-to-r from-white to-gray-50 border border-gray-200 text-red-500 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1.5 text-sm shadow-sm"
-                    >
-                        <i className={`ph ${showCompletedOrders ? 'ph-x' : 'ph-check-circle'}`}></i>
-                        <span>{showCompletedOrders ? 'Back' : 'Completed Orders'}</span>
-                    </button>
-                </div>
-                {!showCompletedOrders && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <DashboardCard
-                            icon="ph-chart-line-up"
-                            title="Today's Orders"
-                            value="25"
-                            trend="+15%"
-                            color="primary"
-                        />
-                        <DashboardCard
-                            icon="ph-currency-dollar"
-                            title="Today's Revenue"
-                            value="₹ 12,500"
-                            trend="+8%"
-                            color="success"
-                        />
-                        <DashboardCard
-                            icon="ph-users"
-                            title="New Customers"
-                            value="4"
-                            trend="-3%"
-                            color="warning"
-                        />
-                    </div>
-                )}
-            </div>
-
+        <div className="pb-24 md:pb-4 px-4 mt-4">
             {showCompletedOrders ? (
                 /* Completed Orders View */
                 <div>
@@ -563,6 +521,14 @@ function Dashboard() {
                             >
                                 <i className="ph ph-arrows-clockwise"></i>
                                 <span>Refresh</span>
+                            </button>
+
+                            <button
+                                onClick={() => setShowCompletedOrders(false)}
+                                className="px-2 py-1.5 bg-gradient-to-r from-white to-gray-50 border border-gray-200 text-red-500 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1.5 text-sm shadow-sm"
+                            >
+                                <i className="ph ph-x"></i>
+                                <span>Back</span>
                             </button>
                         </div>
                     </div>
@@ -601,13 +567,78 @@ function Dashboard() {
             ) : (
                 /* Main Dashboard View */
                 <>
+                    {/* Orders Dashboard */}
+                    <div className="mb-6">
+                        <div className="flex items-center justify-between mb-5">
+                            <h2 className="text-xl font-bold text-gray-800 flex items-center">
+                                <i className="ph ph-storefront text-red-500 mr-2"></i>
+                                Orders Dashboard
+                            </h2>
+
+                            <button
+                                onClick={() => setShowCompletedOrders(true)}
+                                className="px-2 py-1.5 bg-gradient-to-r from-white to-gray-50 border border-gray-200 text-red-500 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1.5 text-sm shadow-sm"
+                            >
+                                <i className="ph ph-check-circle"></i>
+                                <span>Completed Orders</span>
+                            </button>
+                        </div>
+
+                        <div className="overflow-x-auto overflow-visible pb-2 -mx-4 px-4">
+                            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1.5 md:gap-4 min-w-[300px]">
+                                <DashboardCard
+                                    icon="ph-chart-line-up"
+                                    title="Today's Orders"
+                                    value="25"
+                                    trend="+15%"
+                                    color="primary"
+                                    compact={true}
+                                />
+                                <DashboardCard
+                                    icon="ph-currency-dollar"
+                                    title="Today's Revenue"
+                                    value="₹ 12,500"
+                                    trend="+8%"
+                                    color="success"
+                                    compact={true}
+                                />
+                                <DashboardCard
+                                    icon="ph-users"
+                                    title="New Customers"
+                                    value="4"
+                                    trend="-3%"
+                                    color="warning"
+                                    compact={true}
+                                />
+                                <DashboardCard
+                                    icon="ph-shopping-cart"
+                                    title="Avg. Order Value"
+                                    value="₹ 500"
+                                    trend="+5%"
+                                    color="info"
+                                    compact={true}
+                                    className="hidden md:flex"
+                                />
+                                <DashboardCard
+                                    icon="ph-clock"
+                                    title="Avg. Service Time"
+                                    value="22 min"
+                                    trend="-10%"
+                                    color="success"
+                                    compact={true}
+                                    className="hidden lg:flex"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Order Channels Section */}
                     <div className="mb-6 bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
-                        <div className="px-4 py-3 border-b border-gray-200 flex items-center">
+                        <div className="px-3 py-3 border-b border-gray-200 flex items-center">
                             <i className="ph ph-globe text-red-500 text-xl mr-2"></i>
                             <h2 className="text-lg font-semibold text-gray-800">Order Channels</h2>
                         </div>
-                        <div className="p-4">
+                        <div className="p-3">
                             {loading ? (
                                 <div className="text-center py-10">
                                     <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
@@ -618,58 +649,62 @@ function Dashboard() {
                                     <p>{error}</p>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                                    {tables
-                                        .filter(table => table.type === 'aggregator' || table.type === 'qr')
-                                        .map(table => (
-                                            <div
-                                                key={table.id}
-                                                className="cursor-pointer h-full"
-                                                onClick={() => handleRoomClick(table.id, table.variant)}
-                                            >
-                                                <div className={`bg-gradient-to-br rounded-xl p-4 border border-gray-200 shadow-sm hover:shadow-md transition-all h-full flex flex-col ${table.id === 'default' ? 'from-gray-50 to-white' :
-                                                    table.id === 'zomato' ? 'from-red-50 to-white' :
-                                                        table.id === 'swiggy' ? 'from-orange-50 to-white' :
-                                                            'from-card-bg to-white'
-                                                    }`}>
-                                                    <div className="flex items-center justify-between mb-3">
-                                                        <h3 className="text-lg font-bold text-gray-800 truncate">
-                                                            {table.id.charAt(0).toUpperCase() + table.id.slice(1)}
-                                                        </h3>
-                                                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-white to-white/80 flex items-center justify-center shadow-sm">
-                                                            <i className={`ph ${table.id === 'default' ? 'ph-globe text-gray-500' :
-                                                                table.id === 'zomato' ? 'ph-pizza text-red-500' :
-                                                                    table.id === 'swiggy' ? 'ph-bicycle text-orange-500' :
-                                                                        'ph-globe text-gray-500'
-                                                                } text-xl`}></i>
+                                <div className="overflow-x-auto -mx-3 px-3 pb-2">
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1.5 md:gap-2 min-w-[280px] md:min-w-0">
+                                        {tables
+                                            .filter(table => table.type === 'aggregator' || table.type === 'qr')
+                                            .map(table => (
+                                                <div
+                                                    key={table.id}
+                                                    className="cursor-pointer h-full"
+                                                    onClick={() => handleRoomClick(table.id, table.variant)}
+                                                >
+                                                    <div className={`bg-gradient-to-br rounded-xl p-2.5 md:p-3 border border-gray-200 shadow-sm hover:shadow-md transition-all h-full ${table.id === 'default' ? 'from-gray-50 to-white' :
+                                                        table.id === 'zomato' ? 'from-red-50 to-white' :
+                                                            table.id === 'swiggy' ? 'from-orange-50 to-white' :
+                                                                'from-card-bg to-white'
+                                                        }`}>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-7 h-7 md:w-9 md:h-9 rounded-lg bg-gradient-to-br from-white to-white/80 flex items-center justify-center shadow-sm flex-shrink-0">
+                                                                <i className={`ph ${table.id === 'default' ? 'ph-globe text-gray-500' :
+                                                                    table.id === 'zomato' ? 'ph-pizza text-red-500' :
+                                                                        table.id === 'swiggy' ? 'ph-bicycle text-orange-500' :
+                                                                            'ph-globe text-gray-500'
+                                                                    } text-base md:text-lg`}></i>
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <h3 className="text-sm md:text-base font-bold text-gray-800 line-clamp-1">
+                                                                    {table.id.charAt(0).toUpperCase() + table.id.slice(1)}
+                                                                </h3>
+                                                                <div className="flex items-center text-xs md:text-sm flex-wrap gap-y-1 mt-1">
+                                                                    {table.orders.length > 0 ? (
+                                                                        <span className="text-red-500 font-medium truncate flex items-center">
+                                                                            <i className="ph ph-shopping-bag text-xs mr-1"></i>
+                                                                            {table.orders.length} {table.orders.length === 1 ? 'order' : 'orders'}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-gray-500 truncate flex items-center">
+                                                                            <i className="ph ph-tray-empty text-xs mr-1"></i>
+                                                                            No orders
+                                                                        </span>
+                                                                    )}
+                                                                    {table.duration && (
+                                                                        <span className="text-xs text-gray-500 ml-auto flex items-center">
+                                                                            <i className="ph ph-clock text-red-500 text-xs mr-1"></i>
+                                                                            {table.duration.display}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                     </div>
-
-                                                    <div className="mt-auto">
-                                                        {table.orders.length > 0 ? (
-                                                            <div className={`py-1.5 px-3 rounded-full inline-flex items-center self-start ${table.id === 'default' ? 'bg-gradient-to-r from-gray-100 to-gray-50 text-gray-600' :
-                                                                'bg-gradient-to-r from-red-100 to-red-50 text-red-600'
-                                                                }`}>
-                                                                <i className="ph ph-shopping-bag text-xs mr-1.5"></i>
-                                                                <span className="font-medium">{table.orders.length} {table.orders.length === 1 ? 'order' : 'orders'}</span>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="bg-gradient-to-r from-gray-100 to-gray-50 text-gray-600 py-1.5 px-3 rounded-full inline-flex items-center self-start">
-                                                                <i className="ph ph-tray-empty text-xs mr-1.5"></i>
-                                                                <span>No orders</span>
-                                                            </div>
-                                                        )}
-
-                                                        {table.duration && (
-                                                            <div className="text-xs bg-gradient-to-r from-gray-100 to-gray-50 px-2 py-1 rounded-full inline-flex items-center mt-2">
-                                                                <i className="ph ph-clock text-red-500 text-xs mr-1"></i>
-                                                                <span>{table.duration.display}</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            ))}
+                                    </div>
+                                    <div className="md:hidden text-center text-xs text-gray-400 mt-1 flex items-center justify-center">
+                                        <i className="ph ph-arrows-horizontal mr-1 text-gray-300"></i>
+                                        <span>Swipe to see more</span>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -677,7 +712,7 @@ function Dashboard() {
 
                     {/* Dine-In Section */}
                     <div className="mb-6 bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
-                        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                        <div className="px-3 py-3 border-b border-gray-200 flex items-center justify-between">
                             <div className="flex items-center">
                                 <i className="ph ph-coffee text-red-500 text-xl mr-2"></i>
                                 <h2 className="text-lg font-semibold text-gray-800">Dine In</h2>
@@ -690,7 +725,7 @@ function Dashboard() {
                                 <span>Add Table</span>
                             </button>
                         </div>
-                        <div className="p-4">
+                        <div className="p-3">
                             {loading ? (
                                 <div className="text-center py-10">
                                     <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
@@ -701,7 +736,7 @@ function Dashboard() {
                                     <p>{error}</p>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1.5 md:gap-4 overflow-visible">
                                     {tables
                                         .filter(table => table.type === 'dine_in')
                                         .map(table => (
@@ -716,6 +751,7 @@ function Dashboard() {
                                                     duration={table.duration}
                                                     onTap={() => handleRoomClick(table.id, table.variant)}
                                                     onLongPress={() => showRenameRoomModal(table.id, table.variant)}
+                                                    compact={true}
                                                 />
                                             </div>
                                         ))}
@@ -726,7 +762,7 @@ function Dashboard() {
 
                     {/* QR Orders Section */}
                     <div className="mb-6 bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
-                        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                        <div className="px-3 py-3 border-b border-gray-200 flex items-center justify-between">
                             <div className="flex items-center">
                                 <i className="ph ph-qr-code text-red-500 text-xl mr-2"></i>
                                 <h2 className="text-lg font-semibold text-gray-800">QR Orders</h2>
@@ -739,6 +775,49 @@ function Dashboard() {
                                 <span>Refresh</span>
                             </button>
                         </div>
+
+                        {/* Desktop Summary Row - Only visible on md and larger screens */}
+                        <div className="hidden md:flex border-b border-gray-100 bg-gradient-to-r from-warm-bg to-white">
+                            <div className="grid grid-cols-4 gap-4 p-4 w-full">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-red-50 to-white flex items-center justify-center shadow-sm flex-shrink-0">
+                                        <i className="ph ph-timer text-red-500 text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-gray-500">Pending Orders</div>
+                                        <div className="text-lg font-bold text-gray-800">{qrOrders.length}</div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-green-50 to-white flex items-center justify-center shadow-sm flex-shrink-0">
+                                        <i className="ph ph-check-circle text-green-500 text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-gray-500">Accepted Today</div>
+                                        <div className="text-lg font-bold text-gray-800">12</div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-50 to-white flex items-center justify-center shadow-sm flex-shrink-0">
+                                        <i className="ph ph-clock-countdown text-orange-500 text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-gray-500">Avg. Accept Time</div>
+                                        <div className="text-lg font-bold text-gray-800">4 min</div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-50 to-white flex items-center justify-center shadow-sm flex-shrink-0">
+                                        <i className="ph ph-money text-blue-500 text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-gray-500">Avg. Order Value</div>
+                                        <div className="text-lg font-bold text-gray-800">₹620</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="p-4" ref={qrOrdersScrollRef} onScroll={handleScroll}>
                             {loadingQrOrders ? (
                                 <div className="text-center py-10">
@@ -758,23 +837,31 @@ function Dashboard() {
                                     <p className="text-gray-500">QR orders from your customers will appear here</p>
                                 </div>
                             ) : (
-                                <div className="space-y-4">
-                                    {qrOrders.map(order => (
-                                        <OrderGroupTile
-                                            key={order.id}
-                                            order={order}
-                                            onAccept={() => handleAcceptOrder(order.id)}
-                                            onReject={() => handleRejectOrder(order.id)}
-                                            onDelete={() => handleDeleteOrder(order.id)}
-                                            onPrintBill={() => handlePrintBill(order.id)}
-                                        />
-                                    ))}
+                                <div>
+                                    <div className="overflow-x-auto md:overflow-visible">
+                                        <div className="space-y-3 min-w-[100%] md:min-w-0">
+                                            {qrOrders.map(order => (
+                                                <OrderGroupTile
+                                                    key={order.id}
+                                                    order={order}
+                                                    onAccept={() => handleAcceptOrder(order.id)}
+                                                    onReject={() => handleRejectOrder(order.id)}
+                                                    onDelete={() => handleDeleteOrder(order.id)}
+                                                    onPrintBill={() => handlePrintBill(order.id)}
+                                                />
+                                            ))}
 
-                                    {isLoadingMore && (
-                                        <div className="text-center py-4">
-                                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-500 mx-auto"></div>
+                                            {isLoadingMore && (
+                                                <div className="text-center py-4">
+                                                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-500 mx-auto"></div>
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
+                                    </div>
+                                    <div className="md:hidden text-center text-xs text-gray-400 mt-3 flex items-center justify-center">
+                                        <i className="ph ph-arrows-horizontal mr-1 text-gray-300"></i>
+                                        <span>Swipe horizontally on orders if needed</span>
+                                    </div>
                                 </div>
                             )}
                         </div>

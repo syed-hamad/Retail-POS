@@ -276,8 +276,9 @@ function ProfileMenu({ isOpen, onClose, seller }) {
     }
 
     return (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-50" onClick={onClose}>
-            <div className="absolute right-0 top-0 h-full w-96 bg-white shadow-lg overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50" onClick={onClose}>
+            <div className="fixed inset-0 bg-black bg-opacity-50"></div>
+            <div className="absolute top-16 right-4 mt-2 w-64 bg-section-bg rounded-lg shadow-section overflow-hidden" onClick={e => e.stopPropagation()}>
                 <div className="p-6">
                     {/* Modern Header with just close button */}
                     <div className="flex justify-end mb-6">
@@ -391,8 +392,12 @@ function AddInventoryModal({ isOpen, onClose, onSave, editItem = null }) {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg w-full max-w-md p-6">
+        <div
+            className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${isOpen ? 'visible' : 'invisible'}`}
+            onClick={onClose}
+        >
+            <div className="fixed inset-0 bg-black bg-opacity-50"></div>
+            <div className="bg-section-bg w-full max-w-md rounded-lg shadow-section overflow-hidden relative z-10" onClick={e => e.stopPropagation()}>
                 {/* Modal Header */}
                 <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-semibold">
@@ -1576,11 +1581,11 @@ function CustomerSearch({ isOpen, onClose, onSelectCustomer }) {
 
     return (
         <div
-            className={`fixed inset-0 z-50 ${isOpen ? 'visible' : 'invisible'}`}
+            className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${isOpen ? 'visible' : 'invisible'}`}
             onClick={onClose}
         >
             <div className="fixed inset-0 bg-black bg-opacity-50"></div>
-            <div className="absolute right-0 top-0 h-full w-96 bg-section-bg shadow-section overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="bg-section-bg w-full max-w-md rounded-lg shadow-section overflow-hidden relative z-10" onClick={e => e.stopPropagation()}>
                 <div className="p-4">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-xl font-bold">Select Customer</h2>
@@ -1723,11 +1728,3 @@ window.RenameRoomModal = RenameRoomModal;
 window.OrderRoom = OrderRoom;
 window.OrderView = OrderView;
 window.CustomerSearch = CustomerSearch;
-
-// Confirmation dialog
-function confirmDialog({ title, message, confirmText = 'OK', cancelText = 'Cancel', onConfirm, onCancel }) {
-    const modalContent = document.createElement('div');
-    modalContent.className = 'bg-section-bg rounded-lg w-full max-w-md p-6';
-
-    // ... existing code ...
-} 

@@ -1,5 +1,5 @@
 // Dashboard Card Component
-function DashboardCard({ icon, title, value, trend, color = 'primary' }) {
+function DashboardCard({ icon, title, value, trend, color = 'primary', compact = false, className = '' }) {
     // Set background and icon color classes based on the color prop
     let bgClass = 'bg-gradient-to-br from-warm-bg to-white';
     let iconColorClass = 'text-red-500';
@@ -23,8 +23,32 @@ function DashboardCard({ icon, title, value, trend, color = 'primary' }) {
     const trendColor = trendIsPositive ? 'text-green-500' : 'text-red-500';
     const trendIcon = trendIsPositive ? 'ph-trend-up' : 'ph-trend-down';
 
+    // Render compact version for mobile
+    if (compact) {
+        return (
+            <div className={`${bgClass} rounded-xl p-2.5 md:p-3 shadow-section border border-gray-200 hover:shadow-md transition-all h-full flex flex-col ${className}`}>
+                <div className="flex items-center justify-between">
+                    <div className="w-6 h-6 md:w-8 md:h-8 rounded-md bg-gradient-to-br from-white to-white/80 flex items-center justify-center shadow-sm flex-shrink-0">
+                        <i className={`ph ${icon} text-xs md:text-sm ${iconColorClass}`}></i>
+                    </div>
+                    {trend && (
+                        <div className={`text-xs md:text-sm ${trendColor} flex items-center`}>
+                            <i className={`ph ${trendIcon} text-xs mr-0.5`}></i>
+                            {trend}
+                        </div>
+                    )}
+                </div>
+                <div className="mt-1 md:mt-2">
+                    <div className="text-sm md:text-base font-bold text-gray-800 leading-tight line-clamp-1">{value}</div>
+                    <div className="text-xs md:text-sm text-gray-500 line-clamp-1">{title}</div>
+                </div>
+            </div>
+        );
+    }
+
+    // Render standard version
     return (
-        <div className={`${bgClass} rounded-xl p-4 shadow-section border border-gray-200 hover:shadow-md transition-all h-full flex flex-col`}>
+        <div className={`${bgClass} rounded-xl p-4 shadow-section border border-gray-200 hover:shadow-md transition-all h-full flex flex-col ${className}`}>
             <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-medium text-gray-500 truncate max-w-[70%]">{title}</h3>
                 <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-white to-white/80 flex items-center justify-center shadow-sm">
@@ -146,7 +170,7 @@ function DashboardTile({ tableId, variant, orders, onTap, onLongPress }) {
                         <i className="ph ph-layout text-red-500 text-lg"></i>
                     )}
                 </div>
-            </div>
+                        </div>
 
             <div className="mt-auto">
                 <div className={`text-sm font-medium px-3 py-1.5 rounded-full mb-2 inline-flex items-center ${orders.length > 0 ? 'bg-gradient-to-r from-red-100 to-red-50 text-red-600' : 'bg-gradient-to-r from-gray-100 to-gray-50 text-gray-500'}`}>
