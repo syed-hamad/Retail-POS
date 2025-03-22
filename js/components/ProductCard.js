@@ -9,8 +9,10 @@ function ProductCard({ product }) {
             window.sdk.collection("Product").doc(product.id).delete()
                 .then(() => {
                     showToast("Product deleted successfully");
-                    // Refresh the products list - ideally this would trigger a re-fetch
-                    window.location.reload();
+                    // Trigger a re-fetch instead of reloading the page
+                    if (window.refreshProducts && typeof window.refreshProducts === 'function') {
+                        window.refreshProducts();
+                    }
                 })
                 .catch(error => {
                     console.error("Error deleting product:", error);
@@ -33,8 +35,10 @@ function ProductCard({ product }) {
             })
                 .then(() => {
                     showToast(`Product ${newActiveState ? 'activated' : 'deactivated'} successfully`);
-                    // Refresh the products list - ideally this would trigger a re-fetch
-                    window.location.reload();
+                    // Trigger a re-fetch instead of reloading the page
+                    if (window.refreshProducts && typeof window.refreshProducts === 'function') {
+                        window.refreshProducts();
+                    }
                 })
                 .catch(error => {
                     console.error("Error updating product status:", error);
@@ -47,9 +51,7 @@ function ProductCard({ product }) {
     };
 
     // Function to open product edit form
-    const handleEdit = (e) => {
-        e.stopPropagation();
-
+    const handleEdit = () => {
         // Create a modal container if it doesn't exist
         let modalContainer = document.getElementById('product-form-modal-container');
         if (!modalContainer) {
@@ -64,6 +66,10 @@ function ProductCard({ product }) {
                 isOpen: true,
                 onClose: () => {
                     ReactDOM.unmountComponentAtNode(modalContainer);
+                    // Refresh products data after modal is closed
+                    if (window.refreshProducts && typeof window.refreshProducts === 'function') {
+                        window.refreshProducts();
+                    }
                 },
                 editProduct: product
             }),
@@ -81,12 +87,6 @@ function ProductCard({ product }) {
             return (
                 <div className="flex justify-between items-center w-full mt-1">
                     <span className="text-2xs font-bold text-red-600">Out of stock</span>
-                    <button
-                        onClick={handleEdit}
-                        className="text-2xs bg-gray-100 hover:bg-gray-200 text-red-600 px-2 py-0.5 rounded"
-                    >
-                        Update Stock
-                    </button>
                 </div>
             );
         } else {
@@ -99,7 +99,10 @@ function ProductCard({ product }) {
     };
 
     return (
-        <div className={`bg-gradient-to-br from-warm-bg to-white rounded-lg overflow-hidden border border-gray-200 shadow-sm hover:shadow-md transition-all flex flex-col h-full ${!product.active ? 'opacity-60' : ''}`}>
+        <div 
+            className={`bg-gradient-to-br from-warm-bg to-white rounded-lg overflow-hidden border border-gray-200 shadow-sm hover:shadow-md transition-all flex flex-col h-full ${!product.active ? 'opacity-60' : ''} cursor-pointer`}
+            onClick={handleEdit}
+        >
             {/* Product Image with Badges */}
             <div className="relative w-full aspect-square bg-gradient-to-br from-card-bg to-white overflow-hidden">
                 {product.imgs && product.imgs.length > 0 ? (
@@ -117,9 +120,9 @@ function ProductCard({ product }) {
                     </div>
                 )}
 
-                {/* Veg/Non-veg indicator */}
-                <div className="absolute bottom-1 left-1">
-                    <div className={`h-4 w-4 border p-0.5 ${product.veg ? 'border-green-500' : 'border-red-500'}`}>
+                {/* Veg/Non-veg indicator - moved to top left */}
+                <div className="absolute top-1 left-1">
+                    <div className={`h-4 w-4 border p-0.5 bg-white shadow-sm ${product.veg ? 'border-green-500' : 'border-red-500'}`}>
                         <div className={`h-full w-full rounded-full ${product.veg ? 'bg-green-500' : 'bg-red-500'}`}></div>
                     </div>
                 </div>
@@ -130,33 +133,6 @@ function ProductCard({ product }) {
                         Inactive
                     </div>
                 )}
-
-                {/* Quick Action Buttons (visible on hover) */}
-                <div className="absolute inset-0 bg-black bg-opacity-40 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <div className="flex gap-2">
-                        <button
-                            onClick={handleEdit}
-                            className="p-2 bg-white rounded-full text-yellow-600 hover:bg-yellow-50"
-                            title="Edit Product"
-                        >
-                            <i className="ph ph-pencil-simple"></i>
-                        </button>
-                        <button
-                            onClick={toggleActive}
-                            className={`p-2 bg-white rounded-full ${product.active ? 'text-gray-600 hover:bg-gray-50' : 'text-green-600 hover:bg-green-50'}`}
-                            title={product.active ? "Disable Product" : "Enable Product"}
-                        >
-                            <i className={`ph ${product.active ? 'ph-eye-slash' : 'ph-eye'}`}></i>
-                        </button>
-                        <button
-                            onClick={handleDelete}
-                            className="p-2 bg-white rounded-full text-red-600 hover:bg-red-50"
-                            title="Delete Product"
-                        >
-                            <i className="ph ph-trash"></i>
-                        </button>
-                    </div>
-                </div>
             </div>
 
             {/* Product Details */}
@@ -169,7 +145,7 @@ function ProductCard({ product }) {
                 {/* Price Information */}
                 <div className="flex items-center mt-1 md:mt-2">
                     <div className="flex items-center gap-1">
-                        <div className="font-medium text-red-600 text-sm md:text-base">₹{product.price}</div>
+                        <div className="font-medium text-gray-800 text-sm md:text-base">₹{product.price}</div>
                         {product.hasDiscount && (
                             <div className="text-2xs md:text-xs line-through text-gray-400">₹{product.mrp}</div>
                         )}
@@ -178,24 +154,6 @@ function ProductCard({ product }) {
 
                 {/* Stock Information */}
                 {getStockDisplay()}
-
-                {/* Action Bar */}
-                <div className="flex items-center justify-between gap-1 mt-2 pt-2 border-t border-gray-100">
-                    <button
-                        onClick={handleEdit}
-                        className="flex-1 px-1 py-1 text-2xs md:text-xs bg-gradient-to-r hover:from-red-50 hover:to-white text-red-500 border border-gray-200 rounded flex items-center justify-center gap-1"
-                    >
-                        <i className="ph ph-pencil-simple text-xs"></i>
-                        <span>Edit</span>
-                    </button>
-                    <button
-                        onClick={toggleActive}
-                        className={`flex-1 px-1 py-1 text-2xs md:text-xs bg-gradient-to-r hover:from-${product.active ? 'gray' : 'green'}-50 hover:to-white text-${product.active ? 'gray' : 'green'}-500 border border-gray-200 rounded flex items-center justify-center gap-1`}
-                    >
-                        <i className={`ph ph-${product.active ? 'eye-slash' : 'eye'} text-xs`}></i>
-                        <span>{product.active ? 'Disable' : 'Enable'}</span>
-                    </button>
-                </div>
             </div>
         </div>
     );

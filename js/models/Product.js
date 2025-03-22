@@ -41,7 +41,7 @@ class Product {
                 console.warn('Document exists but has no data');
                 return null;
             }
-            
+
             data.id = doc.id;
 
             // Handle price variants
@@ -154,8 +154,10 @@ class InventoryItem {
         this.name = data.name || '';
         this.quantity = data.quantity || 0;
         this.unit = data.unit || '';
+        this.minQuantity = data.minQuantity || 0;
         this.date = data.date ? new Date(data.date) : new Date();
         this.updatedAt = data.updatedAt ? new Date(data.updatedAt) : new Date();
+        this.lastUpdated = data.lastUpdated || data.updatedAt || new Date().toISOString();
     }
 
     static fromJson(json) {
@@ -168,8 +170,10 @@ class InventoryItem {
             name: this.name,
             quantity: this.quantity,
             unit: this.unit,
+            minQuantity: this.minQuantity,
             date: this.date,
-            updatedAt: this.updatedAt
+            updatedAt: this.updatedAt,
+            lastUpdated: this.lastUpdated
         };
     }
 

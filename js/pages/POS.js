@@ -577,7 +577,7 @@ function POSProductCard({ product, inCart = 0, onAdd, onRemove }) {
                     )}
                     {product.veg !== undefined && (
                         <div className="absolute top-2 left-2 h-6 w-6 flex items-center justify-center">
-                            <div className={`h-5 w-5 border p-0.5 ${product.veg ? 'border-green-500' : 'border-red-500'}`}>
+                            <div className={`h-5 w-5 border p-0.5 bg-white shadow-sm ${product.veg ? 'border-green-500' : 'border-red-500'}`}>
                                 <div className={`h-full w-full rounded-full ${product.veg ? 'bg-green-500' : 'bg-red-500'}`}></div>
                             </div>
                         </div>
@@ -604,7 +604,7 @@ function POSProductCard({ product, inCart = 0, onAdd, onRemove }) {
                     <h3 className="font-medium text-gray-900 line-clamp-1">{product.title}</h3>
                     <div className="flex items-center justify-between mt-1">
                         <div>
-                            <span className="font-medium text-red-600">₹{product.price}</span>
+                            <span className="font-medium text-gray-800">₹{product.price}</span>
                             {product.hasDiscount && (
                                 <span className="text-xs text-gray-500 line-through ml-1">₹{product.mrp}</span>
                             )}

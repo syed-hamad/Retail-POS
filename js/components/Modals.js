@@ -381,11 +381,30 @@ function ProfileMenu({ isOpen, onClose, seller }) {
 // Add Inventory Modal Component
 function AddInventoryModal({ isOpen, onClose, onSave, editItem = null }) {
     const [formData, setFormData] = React.useState({
-        name: editItem?.name || '',
-        quantity: editItem?.quantity || '',
-        unit: editItem?.unit || 'kg',
-        minQuantity: editItem?.minQuantity || ''
+        name: '',
+        quantity: '',
+        unit: 'kg',
+        minQuantity: ''
     });
+
+    // Initialize form data when editItem changes
+    React.useEffect(() => {
+        if (editItem) {
+            setFormData({
+                name: editItem.name || '',
+                quantity: editItem.quantity || '',
+                unit: editItem.unit || 'kg',
+                minQuantity: editItem.minQuantity || ''
+            });
+        } else {
+            setFormData({
+                name: '',
+                quantity: '',
+                unit: 'kg',
+                minQuantity: ''
+            });
+        }
+    }, [editItem]);
 
     const units = ['kg', 'gm', 'ltr', 'ml', 'pc'];
 
@@ -397,10 +416,10 @@ function AddInventoryModal({ isOpen, onClose, onSave, editItem = null }) {
             onClick={onClose}
         >
             <div className="fixed inset-0 bg-black bg-opacity-50"></div>
-            <div className="bg-section-bg w-full max-w-md rounded-lg shadow-section overflow-hidden relative z-10" onClick={e => e.stopPropagation()}>
+            <div className="bg-section-bg w-full max-w-md rounded-lg shadow-section overflow-hidden relative z-10 p-6" onClick={e => e.stopPropagation()}>
                 {/* Modal Header */}
                 <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-semibold">
+                    <h3 className="text-xl font-semibold text-gray-800">
                         {editItem ? 'Edit Inventory Item' : 'Add New Item'}
                     </h3>
                     <button className="p-2 hover:bg-gray-100 rounded-full" onClick={onClose}>
@@ -418,7 +437,7 @@ function AddInventoryModal({ isOpen, onClose, onSave, editItem = null }) {
                             type="text"
                             value={formData.name}
                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                             placeholder="Enter item name"
                         />
                     </div>
@@ -432,8 +451,9 @@ function AddInventoryModal({ isOpen, onClose, onSave, editItem = null }) {
                                 type="number"
                                 value={formData.quantity}
                                 onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                                 placeholder="Enter quantity"
+                                min="0"
                             />
                         </div>
                         <div className="w-32">
@@ -443,7 +463,7 @@ function AddInventoryModal({ isOpen, onClose, onSave, editItem = null }) {
                             <select
                                 value={formData.unit}
                                 onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                             >
                                 {units.map(unit => (
                                     <option key={unit} value={unit}>{unit}</option>
@@ -460,8 +480,9 @@ function AddInventoryModal({ isOpen, onClose, onSave, editItem = null }) {
                             type="number"
                             value={formData.minQuantity}
                             onChange={(e) => setFormData({ ...formData, minQuantity: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                             placeholder="Enter minimum quantity"
+                            min="0"
                         />
                     </div>
                 </div>
@@ -474,9 +495,9 @@ function AddInventoryModal({ isOpen, onClose, onSave, editItem = null }) {
                         Cancel
                     </button>
                     <button
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                         onClick={() => {
-                            if (!formData.name || !formData.quantity || !formData.minQuantity) {
+                            if (!formData.name || formData.quantity === '' || formData.minQuantity === '') {
                                 alert('Please fill all required fields');
                                 return;
                             }
@@ -1131,7 +1152,11 @@ function OrderView({ order, tableId, variant }) {
                             document.body.removeChild(checkoutContainer);
                         }
                         // Refresh orders list or page
-                        window.location.reload();
+                        if (window.refreshOrders && typeof window.refreshOrders === 'function') {
+                            window.refreshOrders();
+                        } else if (window.refreshData && typeof window.refreshData === 'function') {
+                            window.refreshData();
+                        }
                     },
                     tableId: tableId,
                     checkout: true,
@@ -1935,8 +1960,10 @@ function ProductFormModal({ isOpen, onClose, editProduct = null }) {
             setIsSubmitting(false);
             onClose();
 
-            // Refresh the page to show updated product list
-            window.location.reload();
+            // Refresh the products list without reloading the page
+            if (window.refreshProducts && typeof window.refreshProducts === 'function') {
+                window.refreshProducts();
+            }
         } catch (error) {
             setError('Failed to save product: ' + error.message);
             setIsSubmitting(false);

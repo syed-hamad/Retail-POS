@@ -13,107 +13,147 @@ function Products() {
     const [productSearchQuery, setProductSearchQuery] = React.useState('');
     const [sortBy, setSortBy] = React.useState('recent');
 
-    React.useEffect(() => {
-        async function fetchData() {
-            try {
-                setLoading(true);
-                setError(null);
+    // Define a function to refresh products and make it available globally
+    const refreshProducts = async () => {
+        try {
+            setLoading(true);
+            setError(null);
 
-                // Fetch products
-                const productsSnapshot = await window.sdk.collection("Product")
-                    .orderBy("date", "desc")
-                    .limit(100)
-                    .get();
+            // Fetch products
+            const productsSnapshot = await window.sdk.collection("Product")
+                .orderBy("date", "desc")
+                .limit(100)
+                .get();
 
-                // More robust handling of product creation
-                const productsList = [];
-                for (const doc of productsSnapshot.docs) {
-                    try {
-                        const product = Product.fromDoc(doc);
-                        if (product) {
-                            productsList.push(product);
-                        }
-                    } catch (productError) {
-                        console.error(`Error creating product from doc ${doc.id}:`, productError);
-                        // Continue with other products
+            // More robust handling of product creation
+            const productsList = [];
+            for (const doc of productsSnapshot.docs) {
+                try {
+                    const product = Product.fromDoc(doc);
+                    if (product) {
+                        productsList.push(product);
                     }
+                } catch (productError) {
+                    console.error(`Error creating product from doc ${doc.id}:`, productError);
+                    // Continue with other products
                 }
-
-                setProducts(productsList);
-                console.log(`Successfully loaded ${productsList.length} products`);
-
-                // Fetch inventory items
-                const inventorySnapshot = await window.sdk.collection("Inventory")
-                    .orderBy("updatedAt", "desc")
-                    .limit(100)
-                    .get();
-
-                // More robust handling of inventory item creation
-                const inventoryList = [];
-                for (const doc of inventorySnapshot.docs) {
-                    try {
-                        const item = InventoryItem.fromJson({
-                            id: doc.id,
-                            ...doc.data()
-                        });
-                        if (item) {
-                            inventoryList.push(item);
-                        }
-                    } catch (inventoryError) {
-                        console.error(`Error creating inventory item from doc ${doc.id}:`, inventoryError);
-                        // Continue with other inventory items
-                    }
-                }
-
-                setInventory(inventoryList);
-                console.log(`Successfully loaded ${inventoryList.length} inventory items`);
-
-                // Extract unique categories and count products in each
-                const categoryCounts = productsList.reduce((acc, product) => {
-                    const cat = product.cat || 'Uncategorized';
-                    acc[cat] = (acc[cat] || 0) + 1;
-                    return acc;
-                }, {});
-
-                // Format categories with counts
-                const formattedCategories = Object.entries(categoryCounts).map(([name, count]) => ({
-                    name,
-                    count,
-                    id: name.toLowerCase()
-                }));
-
-                setCategories(formattedCategories);
-                if (formattedCategories.length > 0) {
-                    setSelectedCategory(formattedCategories[0].name);
-                }
-
-                setLoading(false);
-            } catch (err) {
-                console.error('Error fetching data:', err);
-                setError(`Failed to load data: ${err.message}`);
-                setLoading(false);
             }
-        }
 
-        fetchData();
+            setProducts(productsList);
+            console.log(`Successfully loaded ${productsList.length} products`);
+
+            // Fetch inventory items
+            const inventorySnapshot = await window.sdk.collection("Inventory")
+                .orderBy("updatedAt", "desc")
+                .limit(100)
+                .get();
+
+            // More robust handling of inventory item creation
+            const inventoryList = [];
+            for (const doc of inventorySnapshot.docs) {
+                try {
+                    const data = doc.data();
+                    // Handle date conversions for Firestore Timestamps
+                    const processedData = {
+                        id: doc.id,
+                        name: data.name || '',
+                        quantity: Number(data.quantity || 0),
+                        unit: data.unit || '',
+                        minQuantity: Number(data.minQuantity || 0),
+                        date: data.date?.toDate ? data.date.toDate() : new Date(),
+                        updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(),
+                        lastUpdated: data.lastUpdated || (data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : new Date().toISOString())
+                    };
+                    
+                    const item = new InventoryItem(processedData);
+                    if (item) {
+                        inventoryList.push(item);
+                    }
+                } catch (inventoryError) {
+                    console.error(`Error creating inventory item from doc ${doc.id}:`, inventoryError);
+                    // Continue with other inventory items
+                }
+            }
+
+            setInventory(inventoryList);
+            console.log(`Successfully loaded ${inventoryList.length} inventory items`);
+
+            // Extract unique categories and count products in each
+            const categoryCounts = productsList.reduce((acc, product) => {
+                const cat = product.cat || 'Uncategorized';
+                acc[cat] = (acc[cat] || 0) + 1;
+                return acc;
+            }, {});
+
+            // Format categories with counts
+            const formattedCategories = Object.entries(categoryCounts).map(([name, count]) => ({
+                name,
+                count,
+                id: name.toLowerCase()
+            }));
+
+            setCategories(formattedCategories);
+            if (formattedCategories.length > 0 && !formattedCategories.find(c => c.name === selectedCategory)) {
+                setSelectedCategory(formattedCategories[0].name);
+            }
+
+            setLoading(false);
+        } catch (err) {
+            console.error('Error fetching product data:', err);
+            setError(`Failed to load product data: ${err.message}`);
+            setLoading(false);
+        }
+    };
+
+    // Make the refreshProducts function available globally
+    window.refreshProducts = refreshProducts;
+
+    React.useEffect(() => {
+        // Load product data on initial render
+        refreshProducts();
     }, []);
 
-    // Filter products based on search and category
-    const filteredProducts = React.useMemo(() => {
-        return products
-            .filter(product => product.cat === selectedCategory)
-            .filter(product =>
-                product.title.toLowerCase().includes(productSearchQuery.toLowerCase()) ||
-                product.desc?.toLowerCase().includes(productSearchQuery.toLowerCase())
-            );
-    }, [products, selectedCategory, productSearchQuery]);
-
-    // Filter inventory items based on search
+    // Filter inventory items based on search query
     const filteredInventory = React.useMemo(() => {
-        return inventory.filter(item =>
+        return inventory.filter(item => 
             item.name.toLowerCase().includes(searchQuery.toLowerCase())
         );
     }, [inventory, searchQuery]);
+
+    // Filter products based on search query and category
+    const filteredProducts = React.useMemo(() => {
+        let filtered = products;
+        
+        // Filter by search query
+        if (productSearchQuery) {
+            filtered = filtered.filter(product => 
+                product.name.toLowerCase().includes(productSearchQuery.toLowerCase())
+            );
+        }
+        
+        // Filter by category
+        if (selectedCategory) {
+            filtered = filtered.filter(product => 
+                product.cat === selectedCategory
+            );
+        }
+        
+        // Sort products
+        switch (sortBy) {
+            case 'name':
+                filtered.sort((a, b) => a.name.localeCompare(b.name));
+                break;
+            case 'price':
+                filtered.sort((a, b) => a.price - b.price);
+                break;
+            case 'recent':
+            default:
+                // Sorting by date is the default from the query
+                break;
+        }
+        
+        return filtered;
+    }, [products, productSearchQuery, selectedCategory, sortBy]);
 
     const handleSaveInventory = async (itemData) => {
         try {
@@ -122,7 +162,10 @@ function Products() {
                 const updatedItem = new InventoryItem({
                     ...editingItem,
                     ...itemData,
-                    updatedAt: new Date()
+                    quantity: Number(itemData.quantity),
+                    minQuantity: Number(itemData.minQuantity),
+                    updatedAt: new Date(),
+                    lastUpdated: new Date().toISOString()
                 });
 
                 const updatedInventory = inventory.map(item =>
@@ -132,15 +175,24 @@ function Products() {
 
                 // Update in Firestore
                 await sdk.collection("Inventory").doc(editingItem.id).update({
-                    ...itemData,
-                    updatedAt: new Date()
+                    name: itemData.name,
+                    quantity: Number(itemData.quantity),
+                    unit: itemData.unit,
+                    minQuantity: Number(itemData.minQuantity),
+                    updatedAt: new Date(),
+                    lastUpdated: new Date().toISOString()
                 });
+                showToast('Inventory item updated successfully', 'success');
             } else {
                 // Add new item
                 const newItemData = new InventoryItem({
-                    ...itemData,
+                    name: itemData.name,
+                    quantity: Number(itemData.quantity),
+                    unit: itemData.unit,
+                    minQuantity: Number(itemData.minQuantity),
                     date: new Date(),
-                    updatedAt: new Date()
+                    updatedAt: new Date(),
+                    lastUpdated: new Date().toISOString()
                 });
 
                 // Add to Firestore
@@ -149,6 +201,7 @@ function Products() {
 
                 newItemData.id = newItemRef.id;
                 setInventory([...inventory, newItemData]);
+                showToast('Inventory item added successfully', 'success');
             }
             setIsAddModalOpen(false);
             setEditingItem(null);
