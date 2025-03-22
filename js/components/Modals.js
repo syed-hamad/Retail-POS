@@ -59,10 +59,14 @@ function AddTableModal({ isOpen, onClose, seller }) {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center">
-            <div className="bg-white w-full max-w-md rounded-lg shadow-xl overflow-hidden">
-                <div className="p-4 border-b">
-                    <h2 className="text-xl font-semibold">Add Table</h2>
+        <div
+            className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${isOpen ? 'visible' : 'invisible'}`}
+            onClick={onClose}
+        >
+            <div className="fixed inset-0 bg-black bg-opacity-50"></div>
+            <div className="bg-section-bg w-full max-w-md rounded-lg shadow-section overflow-hidden relative z-10" onClick={e => e.stopPropagation()}>
+                <div className="px-6 py-4 border-b border-gray-200">
+                    <h3 className="text-xl font-semibold text-gray-800">Add New Table</h3>
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-6">
@@ -190,10 +194,14 @@ function RenameRoomModal({ isOpen, onClose, tableId, variant, seller }) {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center">
-            <div className="bg-white w-full max-w-md rounded-lg shadow-xl overflow-hidden">
-                <div className="p-4 border-b">
-                    <h2 className="text-xl font-semibold">Rename Room</h2>
+        <div
+            className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${isOpen ? 'visible' : 'invisible'}`}
+            onClick={onClose}
+        >
+            <div className="fixed inset-0 bg-black bg-opacity-50"></div>
+            <div className="bg-section-bg w-full max-w-md rounded-lg shadow-section overflow-hidden relative z-10" onClick={e => e.stopPropagation()}>
+                <div className="px-6 py-4 border-b border-gray-200">
+                    <h3 className="text-xl font-semibold text-gray-800">Rename Table</h3>
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-6">
@@ -806,19 +814,12 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
     const overlayClasses = getModalOverlayClasses(isClosing);
 
     return (
-        <div className={overlayClasses} onClick={handleClose}>
-            <div
-                ref={dialogRef}
-                className={dialogClasses}
-                onClick={e => e.stopPropagation()}
-            >
-                {/* Handle/Drag indicator for mobile */}
-                {isMobile && (
-                    <div className="w-full flex justify-center pt-2 pb-1">
-                        <div className="mobile-drag-handle"></div>
-                    </div>
-                )}
-
+        <div
+            className={`fixed inset-0 z-50 ${isOpen ? 'visible' : 'invisible'}`}
+            onClick={onClose}
+        >
+            <div className="fixed inset-0 bg-black bg-opacity-50"></div>
+            <div className="absolute right-0 top-0 h-full w-full md:w-2/3 lg:w-1/2 bg-section-bg shadow-section overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="sticky top-0 bg-white border-b z-10">
                     <div className="p-4 flex items-center justify-between">
                         <h2 className="text-xl font-semibold flex items-center gap-2">
@@ -1574,139 +1575,142 @@ function CustomerSearch({ isOpen, onClose, onSelectCustomer }) {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center" onClick={onClose}>
-            <div className="bg-white rounded-lg w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold">Select Customer</h2>
-                    <button
-                        className="p-2 hover:bg-gray-100 rounded-full"
-                        onClick={onClose}
-                    >
-                        <i className="ph ph-x text-gray-600"></i>
-                    </button>
-                </div>
-
-                {error && (
-                    <div className="mb-4 p-2 bg-red-50 text-red-600 rounded">
-                        {error}
-                    </div>
-                )}
-
-                {!showAddForm ? (
-                    <>
-                        <div className="mb-4">
-                            <div className="relative">
-                                <input
-                                    type="text"
-                                    value={searchTerm}
-                                    onChange={e => setSearchTerm(e.target.value)}
-                                    placeholder="Search by name or phone"
-                                    className="w-full px-3 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                                <i className="ph ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                            </div>
-                        </div>
-
-                        <div className="max-h-60 overflow-y-auto mb-4">
-                            {loading ? (
-                                <div className="p-4 text-center">
-                                    <div className="animate-spin inline-block w-6 h-6 border-3 border-primary border-t-transparent rounded-full"></div>
-                                </div>
-                            ) : customers.length > 0 ? (
-                                <div className="space-y-2">
-                                    {customers.map(customer => (
-                                        <div
-                                            key={customer.id}
-                                            className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
-                                            onClick={() => handleSelectCustomer(customer)}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                                                    <i className="ph ph-user text-blue-600"></i>
-                                                </div>
-                                                <div>
-                                                    <h4 className="font-medium">{customer.name}</h4>
-                                                    <p className="text-sm text-gray-600">{customer.phone}</p>
-                                                </div>
-                                                {customer.orderCount > 0 && (
-                                                    <div className="ml-auto text-right">
-                                                        <span className="text-sm text-gray-600">{customer.orderCount} orders</span>
-                                                        <p className="text-sm font-medium">₹{customer.totalSpent}</p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : searchTerm.length >= 2 ? (
-                                <div className="p-4 text-center text-gray-500">
-                                    No customers found
-                                </div>
-                            ) : (
-                                <div className="p-4 text-center text-gray-500">
-                                    Type at least 2 characters to search
-                                </div>
-                            )}
-                        </div>
-
-                        <button
-                            className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                            onClick={() => setShowAddForm(true)}
-                        >
-                            Add New Customer
+        <div
+            className={`fixed inset-0 z-50 ${isOpen ? 'visible' : 'invisible'}`}
+            onClick={onClose}
+        >
+            <div className="fixed inset-0 bg-black bg-opacity-50"></div>
+            <div className="absolute right-0 top-0 h-full w-96 bg-section-bg shadow-section overflow-y-auto" onClick={e => e.stopPropagation()}>
+                <div className="p-4">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-xl font-bold">Select Customer</h2>
+                        <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+                            <i className="ph ph-x text-xl"></i>
                         </button>
-                    </>
-                ) : (
-                    <>
-                        <div className="space-y-4 mb-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Name
-                                </label>
-                                <input
-                                    type="text"
-                                    value={newCustomer.name}
-                                    onChange={e => setNewCustomer({ ...newCustomer, name: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="Enter customer name"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Phone
-                                </label>
-                                <input
-                                    type="tel"
-                                    value={newCustomer.phone}
-                                    onChange={e => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="Enter phone number"
-                                />
-                            </div>
-                        </div>
+                    </div>
 
-                        <div className="flex gap-3">
-                            <button
-                                className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                                onClick={() => setShowAddForm(false)}
-                                disabled={loading}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                                onClick={handleCreateCustomer}
-                                disabled={loading}
-                            >
-                                {loading ? (
-                                    <div className="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
-                                ) : (
-                                    'Create Customer'
-                                )}
-                            </button>
+                    {error && (
+                        <div className="mb-4 p-2 bg-red-50 text-red-600 rounded">
+                            {error}
                         </div>
-                    </>
-                )}
+                    )}
+
+                    {!showAddForm ? (
+                        <>
+                            <div className="mb-4">
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        value={searchTerm}
+                                        onChange={e => setSearchTerm(e.target.value)}
+                                        placeholder="Search by name or phone"
+                                        className="w-full px-3 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                    <i className="ph ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                                </div>
+                            </div>
+
+                            <div className="max-h-60 overflow-y-auto mb-4">
+                                {loading ? (
+                                    <div className="p-4 text-center">
+                                        <div className="animate-spin inline-block w-6 h-6 border-3 border-primary border-t-transparent rounded-full"></div>
+                                    </div>
+                                ) : customers.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {customers.map(customer => (
+                                            <div
+                                                key={customer.id}
+                                                className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
+                                                onClick={() => handleSelectCustomer(customer)}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                                        <i className="ph ph-user text-blue-600"></i>
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="font-medium">{customer.name}</h4>
+                                                        <p className="text-sm text-gray-600">{customer.phone}</p>
+                                                    </div>
+                                                    {customer.orderCount > 0 && (
+                                                        <div className="ml-auto text-right">
+                                                            <span className="text-sm text-gray-600">{customer.orderCount} orders</span>
+                                                            <p className="text-sm font-medium">₹{customer.totalSpent}</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : searchTerm.length >= 2 ? (
+                                    <div className="p-4 text-center text-gray-500">
+                                        No customers found
+                                    </div>
+                                ) : (
+                                    <div className="p-4 text-center text-gray-500">
+                                        Type at least 2 characters to search
+                                    </div>
+                                )}
+                            </div>
+
+                            <button
+                                className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                onClick={() => setShowAddForm(true)}
+                            >
+                                Add New Customer
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <div className="space-y-4 mb-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Name
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={newCustomer.name}
+                                        onChange={e => setNewCustomer({ ...newCustomer, name: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Enter customer name"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Phone
+                                    </label>
+                                    <input
+                                        type="tel"
+                                        value={newCustomer.phone}
+                                        onChange={e => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Enter phone number"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3">
+                                <button
+                                    className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                                    onClick={() => setShowAddForm(false)}
+                                    disabled={loading}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                    onClick={handleCreateCustomer}
+                                    disabled={loading}
+                                >
+                                    {loading ? (
+                                        <div className="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
+                                    ) : (
+                                        'Create Customer'
+                                    )}
+                                </button>
+                            </div>
+                        </>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -1718,4 +1722,12 @@ window.AddTableModal = AddTableModal;
 window.RenameRoomModal = RenameRoomModal;
 window.OrderRoom = OrderRoom;
 window.OrderView = OrderView;
-window.CustomerSearch = CustomerSearch; 
+window.CustomerSearch = CustomerSearch;
+
+// Confirmation dialog
+function confirmDialog({ title, message, confirmText = 'OK', cancelText = 'Cancel', onConfirm, onCancel }) {
+    const modalContent = document.createElement('div');
+    modalContent.className = 'bg-section-bg rounded-lg w-full max-w-md p-6';
+
+    // ... existing code ...
+} 

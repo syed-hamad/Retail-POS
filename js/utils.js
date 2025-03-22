@@ -455,4 +455,59 @@ function getModalClasses({ isMobile, isClosing, customBaseClasses, customMobileW
 // Get overlay classes for modals
 function getModalOverlayClasses(isClosing, zIndex = "z-50") {
     return `fixed inset-0 bg-black transition-opacity duration-300 ${zIndex} ${isClosing ? 'bg-opacity-0' : 'bg-opacity-50'}`;
+}
+
+// Create a modal
+function createModal(content, { title, footer, onClose, baseClasses, headerClasses, bodyClasses, footerClasses, showCloseButton = true, closeOnBackdropClick = true } = {}) {
+    // Create the modal container
+    const modalContainer = document.createElement('div');
+    modalContainer.className = 'fixed inset-0 z-50 flex items-center justify-center p-4';
+
+    // Create the backdrop
+    const backdrop = document.createElement('div');
+    backdrop.className = 'fixed inset-0 bg-black bg-opacity-50';
+    if (closeOnBackdropClick) {
+        backdrop.addEventListener('click', () => {
+            closeModal(modalContainer);
+            if (onClose) onClose();
+        });
+    }
+
+    // Create the modal itself
+    const modal = document.createElement('div');
+    modal.className = 'bg-section-bg rounded-lg shadow-section max-w-md w-full mx-4 overflow-hidden';
+    modal.addEventListener('click', (e) => e.stopPropagation());
+
+    // ... existing code ...
+}
+
+// Create a sliding panel
+function createSlidingPanel(content, { title, position = 'right', onClose, customWidth, customBaseClasses } = {}) {
+    // Create the panel container
+    const panelContainer = document.createElement('div');
+    panelContainer.className = 'fixed inset-0 z-50';
+
+    // Create the backdrop
+    const backdrop = document.createElement('div');
+    backdrop.className = 'fixed inset-0 bg-black bg-opacity-50';
+    backdrop.addEventListener('click', () => {
+        closeSlidingPanel(panelContainer);
+        if (onClose) onClose();
+    });
+
+    // Create the panel itself
+    const panel = document.createElement('div');
+    const baseClasses = customBaseClasses || "bg-section-bg overflow-y-auto shadow-section custom-scrollbar";
+
+    if (position === 'right') {
+        panel.className = `absolute top-0 right-0 h-full ${customWidth || 'w-full md:w-96'} ${baseClasses}`;
+    } else if (position === 'left') {
+        panel.className = `absolute top-0 left-0 h-full ${customWidth || 'w-full md:w-96'} ${baseClasses}`;
+    } else if (position === 'bottom') {
+        panel.className = `absolute bottom-0 left-0 w-full ${customWidth || 'h-2/3'} rounded-t-xl ${baseClasses}`;
+    }
+
+    panel.addEventListener('click', (e) => e.stopPropagation());
+
+    // ... existing code ...
 } 

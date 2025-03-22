@@ -1,52 +1,41 @@
 // Dashboard Card Component
-function DashboardCard({ icon, title, value, trend, color }) {
-    let colorClass = 'text-gray-600';
-    let bgClass = 'bg-gray-50';
-    let trendColorClass = 'text-gray-400';
-    let iconColorClass = 'text-red-600';
-    
-    if (color === 'primary' || color === 'red') {
-        bgClass = 'bg-red-50';
-        iconColorClass = 'text-red-600';
-    } else if (color === 'success' || color === 'green') {
-        bgClass = 'bg-green-50';
-        iconColorClass = 'text-green-600';
-    } else if (color === 'info' || color === 'blue') {
-        bgClass = 'bg-blue-50';
-        iconColorClass = 'text-blue-600';
-    } else if (color === 'warning' || color === 'orange') {
-        bgClass = 'bg-orange-50';
-        iconColorClass = 'text-orange-600';
+function DashboardCard({ icon, title, value, trend, color = 'primary' }) {
+    // Set background and icon color classes based on the color prop
+    let bgClass = 'bg-gradient-to-br from-warm-bg to-white';
+    let iconColorClass = 'text-red-500';
+
+    if (color === 'primary') {
+        bgClass = 'bg-gradient-to-br from-warm-bg to-white';
+        iconColorClass = 'text-red-500';
+    } else if (color === 'success') {
+        bgClass = 'bg-gradient-to-br from-green-50 to-white';
+        iconColorClass = 'text-green-500';
+    } else if (color === 'info') {
+        bgClass = 'bg-gradient-to-br from-blue-50 to-white';
+        iconColorClass = 'text-blue-500';
+    } else if (color === 'warning') {
+        bgClass = 'bg-gradient-to-br from-orange-50 to-white';
+        iconColorClass = 'text-orange-500';
     }
-    
-    if (trend) {
-        if (trend.startsWith('+')) {
-            trendColorClass = 'text-green-600';
-        } else if (trend.startsWith('-')) {
-            trendColorClass = 'text-red-600';
-        }
-    }
-    
+
+    // Determine if trend is positive or negative
+    const trendIsPositive = trend && trend.startsWith('+');
+    const trendColor = trendIsPositive ? 'text-green-500' : 'text-red-500';
+    const trendIcon = trendIsPositive ? 'ph-trend-up' : 'ph-trend-down';
+
     return (
-        <div className={`rounded-xl border p-3 ${bgClass} bg-white shadow-sm`}>
-            <div className="flex items-center justify-between mb-2">
-                <div className="font-medium text-sm truncate">{title}</div>
-                <div className={`w-8 h-8 flex items-center justify-center rounded-lg ${bgClass}`}>
-                    <i className={`ph ${icon} ${iconColorClass}`}></i>
+        <div className={`${bgClass} rounded-xl p-4 shadow-section border border-gray-200 hover:shadow-md transition-all h-full flex flex-col`}>
+            <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-gray-500 truncate max-w-[70%]">{title}</h3>
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-white to-white/80 flex items-center justify-center shadow-sm">
+                    <i className={`ph ${icon} text-lg ${iconColorClass}`}></i>
                 </div>
             </div>
-            
-            <div className="flex items-end justify-between">
-                <div className="text-xl font-bold truncate" title={value}>{value}</div>
+            <div className="flex items-end justify-between mt-auto">
+                <div className="text-2xl font-bold text-gray-800 truncate max-w-[70%]">{value}</div>
                 {trend && (
-                    <div className={`text-xs ${trendColorClass} flex items-center`}>
-                        {trend.startsWith('+') ? (
-                            <i className="ph ph-trend-up mr-1"></i>
-                        ) : trend.startsWith('-') ? (
-                            <i className="ph ph-trend-down mr-1"></i>
-                        ) : (
-                            <i className="ph ph-minus mr-1"></i>
-                        )}
+                    <div className={`text-sm font-medium ${trendColor} flex items-center bg-gradient-to-r from-gray-100 to-gray-50 px-2 py-0.5 rounded-full shadow-sm`}>
+                        <i className={`ph ${trendIcon} text-xs mr-1`}></i>
                         {trend}
                     </div>
                 )}
@@ -71,20 +60,41 @@ function DashboardTile({ tableId, variant, orders, onTap, onLongPress }) {
 
     // Get color based on time elapsed
     const getColor = (duration) => {
-        if (!duration) return 'bg-pink-50 border-pink-100';
+        if (!duration) return {
+            border: 'border-gray-200',
+            gradient: 'bg-gradient-to-br from-card-bg to-white'
+        };
 
         const minutes = duration.minutes;
 
-        if (minutes > 30) return 'bg-red-50 border-red-200';
-        if (minutes > 15) return 'bg-orange-50 border-orange-200';
-        return 'bg-green-50 border-green-100';
+        if (minutes > 30) return {
+            border: 'border-gray-200',
+            gradient: 'bg-gradient-to-br from-red-50 to-white'
+        };
+        if (minutes > 15) return {
+            border: 'border-gray-200',
+            gradient: 'bg-gradient-to-br from-orange-50 to-white'
+        };
+        return {
+            border: 'border-gray-200',
+            gradient: 'bg-gradient-to-br from-green-50 to-white'
+        };
     };
 
     // Special colors for aggregator tables
     const getAggregatorColor = (id) => {
-        if (id === 'zomato') return 'bg-red-50 border-red-200';
-        if (id === 'swiggy') return 'bg-orange-50 border-orange-200';
-        if (id === 'default') return 'bg-blue-50 border-blue-200';
+        if (id === 'zomato') return {
+            border: 'border-gray-200',
+            gradient: 'bg-gradient-to-br from-red-50 to-white'
+        };
+        if (id === 'swiggy') return {
+            border: 'border-gray-200',
+            gradient: 'bg-gradient-to-br from-orange-50 to-white'
+        };
+        if (id === 'default') return {
+            border: 'border-gray-200',
+            gradient: 'bg-gradient-to-br from-card-bg to-white'
+        };
         return null;
     };
 
@@ -93,7 +103,7 @@ function DashboardTile({ tableId, variant, orders, onTap, onLongPress }) {
 
     // Get the appropriate color
     const aggregatorColor = isAggregator ? getAggregatorColor(tableId) : null;
-    const color = aggregatorColor || getColor(duration);
+    const colorStyle = aggregatorColor || getColor(duration);
 
     const message = orders.length > 0
         ? `${orders.length} order${orders.length > 1 ? 's' : ''}`
@@ -101,46 +111,45 @@ function DashboardTile({ tableId, variant, orders, onTap, onLongPress }) {
 
     // Display duration if available
     const durationDisplay = duration ? duration.display : '';
-    
+
     // Get appropriate icon for aggregator
     const getAggregatorIcon = (id) => {
         if (id === 'zomato') return 'ph-pizza';
         if (id === 'swiggy') return 'ph-bicycle';
         return 'ph-globe';
     };
-    
+
     // Get appropriate color for icon
     const getIconColor = (id) => {
-        if (id === 'zomato') return 'text-red-600';
-        if (id === 'swiggy') return 'text-orange-600';
-        return 'text-blue-600';
+        if (id === 'zomato') return 'text-red-500';
+        if (id === 'swiggy') return 'text-orange-500';
+        return 'text-gray-500';  // Changed from blue to gray for default
     };
 
     return (
         <div
-            className={`bg-white rounded-xl p-3 h-full flex flex-col cursor-pointer hover:shadow-md transition-all border ${color}`}
+            className={`${colorStyle.gradient} rounded-xl p-4 shadow-section overflow-hidden cursor-pointer border ${colorStyle.border} hover:shadow-md transition-all h-full flex flex-col`}
             onClick={() => onTap && onTap()}
             onContextMenu={(e) => {
                 e.preventDefault();
                 onLongPress && onLongPress();
             }}
-            style={{ backgroundColor: isAggregator && tableId === 'zomato' ? '#fff0f0' : '' }}
         >
-            <div className="flex items-center justify-between mb-2">
-                <h3 className="text-lg font-bold truncate">
+            <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-bold truncate max-w-[70%]">
                     {isAggregator ? tableId.charAt(0).toUpperCase() + tableId.slice(1) : (tableId || variant || "Default")}
                 </h3>
-                <div className="w-6 h-6 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-white to-white/80 flex items-center justify-center shadow-sm">
                     {isAggregator ? (
-                        <i className={`ph ${getAggregatorIcon(tableId)} ${getIconColor(tableId)} text-sm`}></i>
+                        <i className={`ph ${getAggregatorIcon(tableId)} ${getIconColor(tableId)} text-lg`}></i>
                     ) : (
-                        <i className="ph ph-layout text-red-500 text-sm"></i>
+                        <i className="ph ph-layout text-red-500 text-lg"></i>
                     )}
                 </div>
             </div>
-            
+
             <div className="mt-auto">
-                <div className={`text-sm font-medium px-3 py-1.5 rounded-full mb-2 inline-flex items-center ${orders.length > 0 ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-500'}`}>
+                <div className={`text-sm font-medium px-3 py-1.5 rounded-full mb-2 inline-flex items-center ${orders.length > 0 ? 'bg-gradient-to-r from-red-100 to-red-50 text-red-600' : 'bg-gradient-to-r from-gray-100 to-gray-50 text-gray-500'}`}>
                     {orders.length > 0 ? (
                         <i className="ph ph-shopping-bag text-xs mr-1.5"></i>
                     ) : (
@@ -148,9 +157,9 @@ function DashboardTile({ tableId, variant, orders, onTap, onLongPress }) {
                     )}
                     {message}
                 </div>
-                
+
                 {duration && orders.length > 0 && (
-                    <div className="text-xs bg-white bg-opacity-60 px-2 py-1 rounded-full inline-flex items-center">
+                    <div className="text-xs bg-gradient-to-r from-gray-100 to-gray-50 px-2 py-1 rounded-full inline-flex items-center">
                         <i className="ph ph-clock text-red-500 text-xs mr-1"></i>
                         {durationDisplay}
                     </div>

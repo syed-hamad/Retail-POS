@@ -2,13 +2,25 @@
 function TableCard({ title, orders, duration, status, onTap, onLongPress }) {
     // Calculate color based on last placed date (similar to getColor in Flutter)
     const getColor = (duration) => {
-        if (!duration) return 'bg-pink-50 border-pink-100';
+        if (!duration) return {
+            border: 'border-gray-200',
+            gradient: 'bg-gradient-to-br from-card-bg to-white'
+        };
 
         const minutes = duration.minutes || 0;
 
-        if (minutes < 15) return 'bg-green-50 border-green-100';
-        if (minutes < 30) return 'bg-orange-50 border-orange-100';
-        return 'bg-red-50 border-red-100';
+        if (minutes < 15) return {
+            border: 'border-gray-200',
+            gradient: 'bg-gradient-to-br from-green-50 to-white'
+        };
+        if (minutes < 30) return {
+            border: 'border-gray-200',
+            gradient: 'bg-gradient-to-br from-orange-50 to-white'
+        };
+        return {
+            border: 'border-gray-200',
+            gradient: 'bg-gradient-to-br from-red-50 to-white'
+        };
     };
 
     // Get message based on last placed date (similar to getMsg in Flutter)
@@ -21,7 +33,7 @@ function TableCard({ title, orders, duration, status, onTap, onLongPress }) {
         return `${duration.display}`;
     };
 
-    const color = getColor(duration);
+    const colorStyle = getColor(duration);
     const message = getMessage(duration);
     const hasOrders = orders && orders.length > 0;
 
@@ -32,23 +44,22 @@ function TableCard({ title, orders, duration, status, onTap, onLongPress }) {
 
     return (
         <div
-            className={`bg-white rounded-xl p-3 h-full flex flex-col cursor-pointer hover:shadow-md transition-all border ${color}`}
+            className={`${colorStyle.gradient} rounded-xl p-4 h-full flex flex-col cursor-pointer hover:shadow-md transition-all border ${colorStyle.border} shadow-section`}
             onClick={onTap}
             onContextMenu={(e) => {
                 e.preventDefault();
                 onLongPress && onLongPress();
             }}
-            style={{ backgroundColor: "#fff8f8" }}
         >
-            <div className="flex items-center justify-between mb-2">
-                <h3 className="text-lg font-bold truncate">{title}</h3>
-                <div className="w-6 h-6 flex items-center justify-center">
-                    <i className="ph ph-table text-red-500 text-sm"></i>
+            <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-bold truncate max-w-[70%]">{title}</h3>
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-white to-white/80 flex items-center justify-center shadow-sm">
+                    <i className="ph ph-table text-red-500 text-lg"></i>
                 </div>
             </div>
 
             <div className="mt-auto">
-                <div className={`text-sm font-medium px-3 py-1.5 rounded-full mb-2 inline-flex items-center ${hasOrders ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-500'}`}>
+                <div className={`text-sm font-medium px-3 py-1.5 rounded-full mb-2 inline-flex items-center ${hasOrders ? 'bg-gradient-to-r from-red-100 to-red-50 text-red-600' : 'bg-gradient-to-r from-gray-100 to-gray-50 text-gray-500'}`}>
                     {hasOrders ? (
                         <i className="ph ph-shopping-bag text-xs mr-1.5"></i>
                     ) : (
@@ -58,7 +69,7 @@ function TableCard({ title, orders, duration, status, onTap, onLongPress }) {
                 </div>
 
                 {duration && hasOrders && (
-                    <div className="text-xs bg-white bg-opacity-60 px-2 py-1 rounded-full inline-flex items-center">
+                    <div className="text-xs bg-gradient-to-r from-gray-100 to-gray-50 px-2 py-1 rounded-full inline-flex items-center">
                         <i className="ph ph-clock text-red-500 text-xs mr-1"></i>
                         {message}
                     </div>
@@ -72,7 +83,7 @@ function TableCard({ title, orders, duration, status, onTap, onLongPress }) {
 function OrderThumb({ order }) {
     return (
         <div className="p-2 pl-4 pr-4">
-            <div className="bg-white h-[150px] w-[150px] relative rounded-xl shadow-sm overflow-hidden" style={{ backgroundColor: "#fff8f8" }}>
+            <div className="bg-gradient-to-br from-warm-bg to-white h-[150px] w-[150px] relative rounded-xl shadow-sm overflow-hidden border border-gray-100">
                 <div className="absolute inset-0 overflow-hidden">
                     {order.items && order.items.length > 0 && (
                         <img
@@ -85,7 +96,7 @@ function OrderThumb({ order }) {
                             }}
                         />
                     )}
-                    <div className="absolute inset-2 bg-white bg-opacity-80 rounded-full flex items-center justify-center shadow-sm">
+                    <div className="absolute inset-2 bg-gradient-to-br from-white to-white/80 rounded-full flex items-center justify-center shadow-sm">
                         <div className="text-center">
                             <div className="text-3xl font-bold leading-none text-red-500">
                                 {order.items ? order.items.length : 0}
@@ -117,16 +128,16 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
 
     // Get status color
     const getStatusColor = (status) => {
-        if (!status) return 'bg-gray-50 text-gray-600';
+        if (!status) return 'bg-gradient-to-r from-gray-100 to-gray-50 text-gray-600';
 
         const label = status.label?.toUpperCase();
 
-        if (label === 'PLACED') return 'bg-blue-50 text-blue-600';
-        if (label === 'PROCESSING' || label === 'KITCHEN') return 'bg-orange-50 text-orange-600';
-        if (label === 'COMPLETED') return 'bg-green-50 text-green-600';
-        if (label === 'CANCELLED') return 'bg-red-50 text-red-600';
+        if (label === 'PLACED') return 'bg-gradient-to-r from-blue-100 to-blue-50 text-blue-600';
+        if (label === 'PROCESSING' || label === 'KITCHEN') return 'bg-gradient-to-r from-orange-100 to-orange-50 text-orange-600';
+        if (label === 'COMPLETED') return 'bg-gradient-to-r from-green-100 to-green-50 text-green-600';
+        if (label === 'CANCELLED') return 'bg-gradient-to-r from-red-100 to-red-50 text-red-600';
 
-        return 'bg-gray-50 text-gray-600';
+        return 'bg-gradient-to-r from-gray-100 to-gray-50 text-gray-600';
     };
 
     // Get status badge color
@@ -135,15 +146,14 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
     return (
         <div className="my-3">
             <div
-                className="bg-white rounded-xl shadow-sm overflow-hidden cursor-pointer hover:shadow-md transition-all border border-red-100"
+                className="bg-gradient-to-br from-warm-bg to-white rounded-xl shadow-sm overflow-hidden cursor-pointer hover:shadow-md transition-all border border-gray-200"
                 onClick={handleOrderClick}
-                style={{ backgroundColor: "#fff8f8" }}
             >
-                <div className="p-3">
-                    <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                            <div className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center">
-                                <i className="ph ph-shopping-bag text-red-500"></i>
+                <div className="p-4">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-gradient-to-br from-red-50 to-white rounded-lg flex items-center justify-center shadow-sm">
+                                <i className="ph ph-shopping-bag text-red-500 text-lg"></i>
                             </div>
                             <div>
                                 <h3 className="font-medium text-gray-900 truncate max-w-[150px]">
@@ -161,10 +171,10 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
                     </div>
                     <div className="flex items-center justify-between mt-2">
                         <div className="flex items-center gap-1.5">
-                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${statusColor}`}>
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColor}`}>
                                 {order.currentStatus?.label?.toUpperCase() || "PLACED"}
                             </span>
-                            <span className="px-2 py-0.5 bg-red-50 text-red-600 text-xs font-medium rounded-full inline-flex items-center">
+                            <span className="px-2 py-1 bg-gradient-to-r from-red-100 to-red-50 text-red-600 text-xs font-medium rounded-full inline-flex items-center">
                                 <i className="ph ph-shopping-cart-simple text-xs mr-1"></i>
                                 {totalItems} {totalItems === 1 ? 'item' : 'items'}
                             </span>
@@ -222,8 +232,8 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-end">
-            <div className="bg-white w-full max-w-md h-full overflow-y-auto animate-slide-in-right">
-                <div className="sticky top-0 bg-white border-b border-red-50 z-10 px-4 py-3 flex items-center justify-between">
+            <div className="bg-gradient-to-br from-warm-bg to-white w-full max-w-md h-full overflow-y-auto animate-slide-in-right">
+                <div className="sticky top-0 bg-white border-b border-gray-200 z-10 px-4 py-3 flex items-center justify-between">
                     <h2 className="text-lg font-semibold text-gray-800">Order Details</h2>
                     <button
                         onClick={onClose}
@@ -235,11 +245,11 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
 
                 <div className="p-4 space-y-4">
                     {/* Customer Info */}
-                    <div className="bg-white rounded-xl p-3 border border-red-100 shadow-sm" style={{ backgroundColor: "#fff8f8" }}>
-                        <div className="flex items-center justify-between mb-2">
+                    <div className="bg-gradient-to-br from-warm-bg to-white rounded-xl p-4 border border-gray-200 shadow-sm">
+                        <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center">
-                                    <i className="ph ph-user text-red-500"></i>
+                                <div className="w-10 h-10 bg-gradient-to-br from-red-50 to-white rounded-lg flex items-center justify-center shadow-sm">
+                                    <i className="ph ph-user text-red-500 text-lg"></i>
                                 </div>
                                 <div>
                                     <h3 className="font-medium text-gray-900 truncate max-w-[160px]">
@@ -258,14 +268,14 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                                 <i className="ph ph-user-plus"></i>
                             </button>
                         </div>
-                        <div className="grid grid-cols-2 gap-3 mt-3 text-sm">
-                            <div className="bg-white bg-opacity-60 p-2 rounded-lg">
+                        <div className="grid grid-cols-2 gap-3 mt-3">
+                            <div className="bg-gradient-to-br from-gray-100 to-gray-50 p-2 rounded-lg">
                                 <p className="text-xs text-gray-500">Order ID</p>
-                                <p className="font-medium">#{order.id?.slice(-6)}</p>
+                                <p className="font-medium text-sm">#{order.id?.slice(-6)}</p>
                             </div>
-                            <div className="bg-white bg-opacity-60 p-2 rounded-lg">
+                            <div className="bg-gradient-to-br from-gray-100 to-gray-50 p-2 rounded-lg">
                                 <p className="text-xs text-gray-500">Date & Time</p>
-                                <p className="font-medium truncate">
+                                <p className="font-medium text-sm truncate">
                                     {formatDate(order.date, 'full')}
                                 </p>
                             </div>
@@ -280,8 +290,8 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                         </h3>
                         <div className="space-y-2">
                             {order.items?.map((item, index) => (
-                                <div key={index} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-red-100">
-                                    <div className="w-12 h-12 bg-red-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <div key={index} className="flex items-center gap-2 p-3 bg-gradient-to-br from-warm-bg to-white rounded-lg border border-gray-200 shadow-sm">
+                                    <div className="w-12 h-12 bg-gradient-to-br from-gray-100 to-white rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm">
                                         {item.image ? (
                                             <img
                                                 src={item.image}
@@ -289,7 +299,7 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                                                 className="w-full h-full object-cover rounded-lg"
                                             />
                                         ) : (
-                                            <i className="ph ph-hamburger text-red-300"></i>
+                                            <i className="ph ph-hamburger text-gray-400 text-lg"></i>
                                         )}
                                     </div>
                                     <div className="flex-1 min-w-0">
@@ -309,7 +319,7 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                     </div>
 
                     {/* Bill Details */}
-                    <div className="bg-white rounded-xl p-3 border border-red-100 shadow-sm" style={{ backgroundColor: "#fff8f8" }}>
+                    <div className="bg-gradient-to-br from-warm-bg to-white rounded-xl p-4 border border-gray-200 shadow-sm">
                         <h3 className="text-sm font-semibold mb-3 text-gray-700 flex items-center">
                             <i className="ph ph-receipt text-red-500 mr-1.5"></i>
                             Bill Details
@@ -323,7 +333,7 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                                 <span className="text-gray-600">Tax (18%)</span>
                                 <span className="font-medium">₹{taxAmount.toFixed(2)}</span>
                             </div>
-                            <div className="border-t border-red-50 pt-2 flex justify-between mt-2">
+                            <div className="border-t border-gray-200 pt-2 flex justify-between mt-2">
                                 <span className="font-medium">Grand Total</span>
                                 <span className="font-semibold text-red-600">₹{finalAmount.toFixed(2)}</span>
                             </div>
@@ -339,7 +349,7 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                                         onAccept && onAccept();
                                         onClose();
                                     }}
-                                    className="flex-1 py-2.5 bg-green-600 text-white rounded-lg flex items-center justify-center gap-1.5 hover:bg-green-700 transition-colors text-sm font-medium"
+                                    className="flex-1 py-2.5 bg-gradient-to-r from-green-600 to-green-500 text-white rounded-lg flex items-center justify-center gap-1.5 hover:from-green-700 hover:to-green-600 transition-colors text-sm font-medium shadow-sm"
                                 >
                                     <i className="ph ph-check"></i>
                                     <span>Accept Order</span>
@@ -349,7 +359,7 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                                         onReject && onReject();
                                         onClose();
                                     }}
-                                    className="flex-1 py-2.5 bg-red-600 text-white rounded-lg flex items-center justify-center gap-1.5 hover:bg-red-700 transition-colors text-sm font-medium"
+                                    className="flex-1 py-2.5 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg flex items-center justify-center gap-1.5 hover:from-red-700 hover:to-red-600 transition-colors text-sm font-medium shadow-sm"
                                 >
                                     <i className="ph ph-x"></i>
                                     <span>Reject Order</span>
@@ -360,7 +370,7 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                                     onDelete && onDelete();
                                     onClose();
                                 }}
-                                className="w-full py-2.5 bg-gray-100 text-gray-700 rounded-lg flex items-center justify-center gap-1.5 hover:bg-gray-200 transition-colors text-sm font-medium"
+                                className="w-full py-2.5 bg-gradient-to-r from-gray-100 to-gray-50 text-gray-700 rounded-lg flex items-center justify-center gap-1.5 hover:from-gray-200 hover:to-gray-100 transition-colors text-sm font-medium shadow-sm border border-gray-200"
                             >
                                 <i className="ph ph-trash"></i>
                                 <span>Delete Order</span>
@@ -373,7 +383,7 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                                     onPrintBill && onPrintBill();
                                     onClose();
                                 }}
-                                className="flex-1 py-2.5 bg-red-600 text-white rounded-lg flex items-center justify-center gap-1.5 hover:bg-red-700 transition-colors text-sm font-medium"
+                                className="flex-1 py-2.5 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg flex items-center justify-center gap-1.5 hover:from-red-700 hover:to-red-600 transition-colors text-sm font-medium shadow-sm"
                             >
                                 <i className="ph ph-printer"></i>
                                 <span>Print Bill</span>
@@ -383,7 +393,7 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                                     onDelete && onDelete();
                                     onClose();
                                 }}
-                                className="w-10 h-10 bg-red-50 text-red-600 rounded-lg flex items-center justify-center hover:bg-red-100 transition-colors"
+                                className="w-10 h-10 bg-gradient-to-r from-gray-100 to-gray-50 text-red-600 rounded-lg flex items-center justify-center hover:from-gray-200 hover:to-gray-100 transition-colors shadow-sm border border-gray-200"
                             >
                                 <i className="ph ph-trash"></i>
                             </button>

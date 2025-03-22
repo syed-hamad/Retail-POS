@@ -488,20 +488,20 @@ function Dashboard() {
 
     // Render the dashboard
     return (
-        <div className="p-4">
+        <div className="p-4 bg-page-bg">
             {/* Orders Dashboard */}
             <div className="mb-6">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-5">
                     <h2 className="text-xl font-bold text-gray-800 flex items-center">
                         <i className="ph ph-storefront text-red-500 mr-2"></i>
                         Orders Dashboard
                     </h2>
                     <button
                         onClick={() => setShowCompletedOrders(!showCompletedOrders)}
-                        className="px-3 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-2 shadow-sm"
+                        className="px-2 py-1.5 bg-gradient-to-r from-white to-gray-50 border border-gray-200 text-red-500 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1.5 text-sm shadow-sm"
                     >
                         <i className={`ph ${showCompletedOrders ? 'ph-x' : 'ph-check-circle'}`}></i>
-                        <span>{showCompletedOrders ? 'Back to Dashboard' : 'View Completed Orders'}</span>
+                        <span>{showCompletedOrders ? 'Back' : 'Completed Orders'}</span>
                     </button>
                 </div>
                 {!showCompletedOrders && (
@@ -545,7 +545,7 @@ function Dashboard() {
                                 <select
                                     value={dateFilter}
                                     onChange={(e) => setDateFilter(e.target.value)}
-                                    className="appearance-none bg-white border border-gray-300 text-gray-700 py-2 px-4 pr-8 rounded-lg leading-tight focus:outline-none focus:border-red-500"
+                                    className="appearance-none bg-gradient-to-r from-white to-gray-50 border border-gray-200 text-gray-700 py-1.5 px-4 pr-8 rounded-lg leading-tight focus:outline-none focus:border-red-500 text-sm"
                                 >
                                     <option value="today">Today</option>
                                     <option value="yesterday">Yesterday</option>
@@ -558,7 +558,7 @@ function Dashboard() {
                             </div>
 
                             <button
-                                className="px-3 py-2 text-red-500 border border-red-500 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-2"
+                                className="px-2 py-1.5 text-red-500 border border-gray-200 bg-gradient-to-r from-white to-gray-50 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1.5 text-sm"
                                 onClick={() => fetchCompletedOrders()}
                             >
                                 <i className="ph ph-arrows-clockwise"></i>
@@ -567,7 +567,7 @@ function Dashboard() {
                         </div>
                     </div>
 
-                    <div className="bg-white rounded-xl shadow-sm border border-red-100 overflow-hidden" style={{ backgroundColor: "#fff8f8" }}>
+                    <div className="bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
                         <div className="p-4 space-y-4">
                             {loadingCompletedOrders ? (
                                 <div className="text-center py-10">
@@ -580,7 +580,7 @@ function Dashboard() {
                                 </div>
                             ) : completedOrders.length === 0 ? (
                                 <div className="text-center py-10">
-                                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
                                         <i className="ph ph-check-circle text-2xl text-red-500"></i>
                                     </div>
                                     <h3 className="text-lg font-medium text-gray-700 mb-1">No Completed Orders</h3>
@@ -602,12 +602,10 @@ function Dashboard() {
                 /* Main Dashboard View */
                 <>
                     {/* Order Channels Section */}
-                    <div className="mb-6 bg-white rounded-xl shadow-sm overflow-hidden border border-red-100" style={{ backgroundColor: "#fff8f8" }}>
-                        <div className="px-4 py-3 border-b border-red-50">
-                            <h2 className="text-lg font-semibold text-gray-800 flex items-center">
-                                <i className="ph ph-globe text-red-500 mr-2"></i>
-                                Order Channels
-                            </h2>
+                    <div className="mb-6 bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
+                        <div className="px-4 py-3 border-b border-gray-200 flex items-center">
+                            <i className="ph ph-globe text-red-500 text-xl mr-2"></i>
+                            <h2 className="text-lg font-semibold text-gray-800">Order Channels</h2>
                         </div>
                         <div className="p-4">
                             {loading ? (
@@ -620,21 +618,56 @@ function Dashboard() {
                                     <p>{error}</p>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                                     {tables
                                         .filter(table => table.type === 'aggregator' || table.type === 'qr')
                                         .map(table => (
                                             <div
                                                 key={table.id}
-                                                className="cursor-pointer"
+                                                className="cursor-pointer h-full"
                                                 onClick={() => handleRoomClick(table.id, table.variant)}
                                             >
-                                                <DashboardTile
-                                                    tableId={table.id}
-                                                    variant={table.variant}
-                                                    orders={table.orders}
-                                                    onTap={() => handleRoomClick(table.id, table.variant)}
-                                                />
+                                                <div className={`bg-gradient-to-br rounded-xl p-4 border border-gray-200 shadow-sm hover:shadow-md transition-all h-full flex flex-col ${table.id === 'default' ? 'from-gray-50 to-white' :
+                                                    table.id === 'zomato' ? 'from-red-50 to-white' :
+                                                        table.id === 'swiggy' ? 'from-orange-50 to-white' :
+                                                            'from-card-bg to-white'
+                                                    }`}>
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <h3 className="text-lg font-bold text-gray-800 truncate">
+                                                            {table.id.charAt(0).toUpperCase() + table.id.slice(1)}
+                                                        </h3>
+                                                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-white to-white/80 flex items-center justify-center shadow-sm">
+                                                            <i className={`ph ${table.id === 'default' ? 'ph-globe text-gray-500' :
+                                                                table.id === 'zomato' ? 'ph-pizza text-red-500' :
+                                                                    table.id === 'swiggy' ? 'ph-bicycle text-orange-500' :
+                                                                        'ph-globe text-gray-500'
+                                                                } text-xl`}></i>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="mt-auto">
+                                                        {table.orders.length > 0 ? (
+                                                            <div className={`py-1.5 px-3 rounded-full inline-flex items-center self-start ${table.id === 'default' ? 'bg-gradient-to-r from-gray-100 to-gray-50 text-gray-600' :
+                                                                'bg-gradient-to-r from-red-100 to-red-50 text-red-600'
+                                                                }`}>
+                                                                <i className="ph ph-shopping-bag text-xs mr-1.5"></i>
+                                                                <span className="font-medium">{table.orders.length} {table.orders.length === 1 ? 'order' : 'orders'}</span>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="bg-gradient-to-r from-gray-100 to-gray-50 text-gray-600 py-1.5 px-3 rounded-full inline-flex items-center self-start">
+                                                                <i className="ph ph-tray-empty text-xs mr-1.5"></i>
+                                                                <span>No orders</span>
+                                                            </div>
+                                                        )}
+
+                                                        {table.duration && (
+                                                            <div className="text-xs bg-gradient-to-r from-gray-100 to-gray-50 px-2 py-1 rounded-full inline-flex items-center mt-2">
+                                                                <i className="ph ph-clock text-red-500 text-xs mr-1"></i>
+                                                                <span>{table.duration.display}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </div>
                                         ))}
                                 </div>
@@ -643,14 +676,14 @@ function Dashboard() {
                     </div>
 
                     {/* Dine-In Section */}
-                    <div className="mb-6 bg-white rounded-xl shadow-sm overflow-hidden border border-red-100" style={{ backgroundColor: "#fff8f8" }}>
-                        <div className="px-4 py-3 border-b border-red-50 flex items-center justify-between">
-                            <h2 className="text-lg font-semibold text-gray-800 flex items-center">
-                                <i className="ph ph-coffee text-red-500 mr-2"></i>
-                                Dine In
-                            </h2>
+                    <div className="mb-6 bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
+                        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                            <div className="flex items-center">
+                                <i className="ph ph-coffee text-red-500 text-xl mr-2"></i>
+                                <h2 className="text-lg font-semibold text-gray-800">Dine In</h2>
+                            </div>
                             <button
-                                className="px-3 py-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center gap-1.5 text-sm"
+                                className="px-2 py-1.5 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg hover:from-red-700 hover:to-red-600 transition-colors flex items-center gap-1.5 text-sm"
                                 onClick={showAddTableModal}
                             >
                                 <i className="ph ph-plus"></i>
@@ -674,7 +707,7 @@ function Dashboard() {
                                         .map(table => (
                                             <div
                                                 key={table.id}
-                                                className="cursor-pointer"
+                                                className="cursor-pointer h-full"
                                                 onClick={() => handleRoomClick(table.id, table.variant)}
                                             >
                                                 <TableCard
@@ -692,14 +725,14 @@ function Dashboard() {
                     </div>
 
                     {/* QR Orders Section */}
-                    <div className="mb-6 bg-white rounded-xl shadow-sm overflow-hidden border border-red-100" style={{ backgroundColor: "#fff8f8" }}>
-                        <div className="px-4 py-3 border-b border-red-50 flex items-center justify-between">
-                            <h2 className="text-lg font-semibold text-gray-800 flex items-center">
-                                <i className="ph ph-qr-code text-red-500 mr-2"></i>
-                                QR Orders
-                            </h2>
+                    <div className="mb-6 bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
+                        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                            <div className="flex items-center">
+                                <i className="ph ph-qr-code text-red-500 text-xl mr-2"></i>
+                                <h2 className="text-lg font-semibold text-gray-800">QR Orders</h2>
+                            </div>
                             <button
-                                className="px-3 py-1.5 text-red-500 border border-red-500 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1.5 text-sm"
+                                className="px-2 py-1.5 text-red-500 border border-gray-200 bg-gradient-to-r from-white to-gray-50 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1.5 text-sm"
                                 onClick={refreshOrders}
                             >
                                 <i className="ph ph-arrows-clockwise"></i>
@@ -718,7 +751,7 @@ function Dashboard() {
                                 </div>
                             ) : qrOrders.length === 0 ? (
                                 <div className="text-center py-10">
-                                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
                                         <i className="ph ph-qr-code text-2xl text-red-500"></i>
                                     </div>
                                     <h3 className="text-lg font-medium text-gray-700 mb-1">No QR Orders Found</h3>
