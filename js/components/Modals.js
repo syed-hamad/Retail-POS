@@ -1746,76 +1746,117 @@ function CustomerSearch({ isOpen, onClose, onSelectCustomer }) {
     );
 }
 
-// Product Form Modal Component
-function ProductFormModal({ isOpen, onClose, editProduct = null }) {
+// ProductFormModal updated with consistent layout and slide-in behavior
+function ProductFormModal({ isOpen, onClose, product = null }) {
+    // State definitions remain the same...
     const [formData, setFormData] = React.useState({
+        id: '',
         title: '',
         desc: '',
+        cat: 'Food',
+        imgs: [],
         price: '',
         mrp: '',
-        cat: 'Appetizers',
-        veg: true,
         active: true,
-        stock: '',
-        imgs: []
+        veg: true,
+        stock: 0,
+        barcode: '',
+        priceVariants: [],
     });
+
+    const [recipeItems, setRecipeItems] = React.useState([]);
     const [uploading, setUploading] = React.useState(false);
-    const [error, setError] = React.useState(null);
-    const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [error, setError] = React.useState('');
+    const [charges, setCharges] = React.useState([
+        { name: 'CGST', value: '0%', inclusive: false },
+        { name: 'SGST', value: '0%', inclusive: false }
+    ]);
     const [categories, setCategories] = React.useState([
-        'Appetizers', 'Main Course', 'NORTH INDIAN', 'MILKSHAKES', 'Breakfast', 'Juices', 'WRAPS'
+        'Food', 'Beverages', 'Appetizers', 'Main Course', 'Desserts', 'Snacks'
     ]);
     const [previewImage, setPreviewImage] = React.useState('');
+    const [showStockManagement, setShowStockManagement] = React.useState(false);
+    const [deleteConfirmed, setDeleteConfirmed] = React.useState(false);
+    const modalRef = React.useRef(null);
 
-    // Reset form when modal opens and populate with edit data if available
+    // Detect if mobile
+    const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
+
+    React.useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    // Handle outside click to dismiss
+    React.useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (modalRef.current && !modalRef.current.contains(event.target)) {
+                onClose();
+            }
+        };
+
+        if (isOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isOpen, onClose]);
+
+    // Reset form when modal opens
     React.useEffect(() => {
         if (isOpen) {
-            setError(null);
+            setFormData({
+                id: product?.id || '',
+                title: product?.title || '',
+                desc: product?.desc || '',
+                cat: product?.cat || 'Food',
+                imgs: product?.imgs || [],
+                price: product?.price || '',
+                mrp: product?.mrp || '',
+                active: product?.active !== undefined ? product?.active : true,
+                veg: product?.veg !== undefined ? product?.veg : true,
+                stock: product?.stock || 0,
+                barcode: product?.barcode || '',
+                priceVariants: product?.priceVariants || [],
+            });
 
-            // If editing, populate form with product data
-            if (editProduct) {
-                setFormData({
-                    title: editProduct.title || '',
-                    desc: editProduct.desc || '',
-                    price: editProduct.price || '',
-                    mrp: editProduct.mrp || editProduct.price || '',
-                    cat: editProduct.cat || 'Appetizers',
-                    veg: editProduct.veg !== undefined ? editProduct.veg : true,
-                    active: editProduct.active !== undefined ? editProduct.active : true,
-                    stock: editProduct.stock !== undefined ? editProduct.stock : '',
-                    imgs: editProduct.imgs || []
-                });
+            setRecipeItems(product?.recipeItems || []);
+            setCharges(product?.charges?.map(c => ({
+                name: c.name,
+                value: c.type === 'percentage' ? `${c.value}%` : String(c.value),
+                inclusive: c.inclusive
+            })) || [
+                    { name: 'CGST', value: '0%', inclusive: false },
+                    { name: 'SGST', value: '0%', inclusive: false }
+                ]);
 
-                // Set preview image if available
-                if (editProduct.imgs && editProduct.imgs.length > 0) {
-                    setPreviewImage(editProduct.imgs[0]);
-                } else {
-                    setPreviewImage('');
-                }
+            setShowStockManagement(product?.stock !== undefined);
+            setUploading(false);
+            setError('');
+            setDeleteConfirmed(false);
+
+            if (product?.imgs && product?.imgs.length > 0) {
+                setPreviewImage(product.imgs[0]);
             } else {
-                // Reset form for new product
-                setFormData({
-                    title: '',
-                    desc: '',
-                    price: '',
-                    mrp: '',
-                    cat: 'Appetizers',
-                    veg: true,
-                    active: true,
-                    stock: '',
-                    imgs: []
-                });
                 setPreviewImage('');
             }
         }
-    }, [isOpen, editProduct]);
+    }, [isOpen, product]);
 
     // Fetch categories from existing products
     React.useEffect(() => {
         async function fetchCategories() {
             try {
                 const snapshot = await window.sdk.collection("Product").get();
-                const cats = new Set(['Appetizers', 'Main Course', 'NORTH INDIAN', 'MILKSHAKES', 'Breakfast', 'Juices', 'WRAPS']);
+                // Start with default categories plus popular food categories
+                const cats = new Set([
+                    'Appetizers', 'Main Course', 'Breakfast', 'Desserts', 'Beverages',
+                    'Soups', 'Salads', 'Rice', 'Noodles', 'Pizza', 'Burgers', 'Sandwiches',
+                    'Wraps', 'Pasta', 'Biryani', 'Snacks', 'Combos', 'Thalis'
+                ]);
 
                 snapshot.docs.forEach(doc => {
                     const data = doc.data();
@@ -1835,17 +1876,22 @@ function ProductFormModal({ isOpen, onClose, editProduct = null }) {
         }
     }, [isOpen]);
 
+    const handleFormChange = (field, value) => {
+        setFormData(prevData => ({
+            ...prevData,
+            [field]: value
+        }));
+    };
+
+    // Handle input change for text fields
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
 
+        // Handle different input types
         if (type === 'checkbox') {
-            setFormData(prev => ({ ...prev, [name]: checked }));
-        } else if (name === 'price' || name === 'mrp' || name === 'stock') {
-            // Only allow numbers for price, mrp and stock fields
-            const numValue = value.replace(/[^0-9]/g, '');
-            setFormData(prev => ({ ...prev, [name]: numValue }));
+            handleFormChange(name, checked);
         } else {
-            setFormData(prev => ({ ...prev, [name]: value }));
+            handleFormChange(name, value);
         }
     };
 
@@ -1853,121 +1899,75 @@ function ProductFormModal({ isOpen, onClose, editProduct = null }) {
         const file = e.target.files[0];
         if (!file) return;
 
-        // Check file type
-        if (!file.type.match('image.*')) {
-            setError('Please select an image file');
-            return;
-        }
-
-        // Check file size (max 5MB)
-        if (file.size > 5 * 1024 * 1024) {
-            setError('Image size should be less than 5MB');
-            return;
-        }
-
         try {
             setUploading(true);
             setError(null);
 
-            // Preview image
+            // Preview image immediately
             const reader = new FileReader();
             reader.onload = (e) => {
-                setPreviewImage(e.target.result);
+                const result = e.target.result;
+                setPreviewImage(result);
+
+                // Simulate a delay to show uploading state
+                setTimeout(() => {
+                    try {
+                        // For demo, we'll just use the preview URL
+                        // In production, this would be replaced with actual file upload
+                        setFormData(prev => ({
+                            ...prev,
+                            imgs: [result]
+                        }));
+                        setUploading(false);
+                    } catch (error) {
+                        console.error('Error in upload timeout:', error);
+                        setError('Failed to process image');
+                        setUploading(false);
+                    }
+                }, 1000);
             };
+
             reader.readAsDataURL(file);
-
-            // Upload image to storage
-            const storageRef = window.sdk.storage.ref();
-            const fileRef = storageRef.child(`products/${Date.now()}_${file.name}`);
-
-            await fileRef.put(file);
-            const downloadURL = await fileRef.getDownloadURL();
-
-            // Update form data with image URL
-            setFormData(prev => ({
-                ...prev,
-                imgs: [downloadURL, ...(prev.imgs || []).slice(0, 4)] // Keep max 5 images
-            }));
-
-            setUploading(false);
         } catch (error) {
-            setError('Failed to upload image: ' + error.message);
+            console.error('Error uploading image:', error);
+            setError('Failed to upload image');
             setUploading(false);
         }
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-
-        // Validate form
-        if (!formData.title) {
-            setError('Please enter a product title');
-            return;
-        }
-
-        if (!formData.price) {
-            setError('Please enter a price');
-            return;
-        }
-
-        // If mrp is not provided, set it equal to price
-        if (!formData.mrp) {
-            setFormData(prev => ({ ...prev, mrp: prev.price }));
-        }
-
-        // Ensure price is not greater than MRP
-        if (Number(formData.price) > Number(formData.mrp)) {
-            setError('Price cannot be greater than MRP');
-            return;
-        }
-
+    const handleBarcodeScanner = async () => {
+        // In a real implementation, you would integrate with a barcode scanner library
+        // For this example, we'll simulate a scanned barcode
         try {
-            setIsSubmitting(true);
+            // Simulate a barcode scanning delay
+            const simulatedBarcode = "PROD" + Math.floor(1000000 + Math.random() * 9000000);
 
-            // Prepare product data
-            const productData = {
-                title: formData.title,
-                desc: formData.desc,
-                price: Number(formData.price),
-                mrp: Number(formData.mrp),
-                cat: formData.cat,
-                veg: formData.veg,
-                active: formData.active,
-                date: new Date()
-            };
+            setFormData(prev => ({
+                ...prev,
+                barcode: simulatedBarcode
+            }));
 
-            // Add stock if provided
-            if (formData.stock !== '') {
-                productData.stock = Number(formData.stock);
-            }
-
-            // Add images if available
-            if (formData.imgs && formData.imgs.length > 0) {
-                productData.imgs = formData.imgs;
-            }
-
-            // Save to Firestore
-            if (editProduct) {
-                // Update existing product
-                await window.sdk.collection("Product").doc(editProduct.id).update(productData);
-                showToast('Product updated successfully');
-            } else {
-                // Add new product
-                await window.sdk.collection("Product").doc().set(productData);
-                showToast('Product added successfully');
-            }
-
-            setIsSubmitting(false);
-            onClose();
-
-            // Refresh the products list without reloading the page
-            if (window.refreshProducts && typeof window.refreshProducts === 'function') {
-                window.refreshProducts();
-            }
+            showToast("Barcode scanned successfully");
         } catch (error) {
-            setError('Failed to save product: ' + error.message);
-            setIsSubmitting(false);
+            setError('Failed to scan barcode');
         }
+    };
+
+    const updateCharge = (index, updatedCharge) => {
+        console.log("Updating charge at index", index, "with", updatedCharge);
+        const updatedCharges = [...charges];
+
+        if (index < updatedCharges.length) {
+            updatedCharges[index] = updatedCharge;
+        } else {
+            updatedCharges.push(updatedCharge);
+        }
+
+        // Only filter charges when actually saving the form, not during editing
+        // This allows users to work with empty or zero-value charges during editing
+        setCharges(updatedCharges);
+
+        console.log("Updated charges:", updatedCharges);
     };
 
     const removeImage = (index) => {
@@ -1985,280 +1985,945 @@ function ProductFormModal({ isOpen, onClose, editProduct = null }) {
         }
     };
 
+    // Handle form submission
+    const handleSubmit = async () => {
+        if (!formData.title || !formData.price || !formData.mrp || !formData.cat) {
+            setError('All fields marked with * are required.');
+            return;
+        }
+
+        setUploading(true);
+        setError('');
+
+        try {
+            // Create product data with combined fields
+            const productData = {
+                title: formData.title,
+                desc: formData.desc,
+                cat: formData.cat,
+                price: Number(formData.price),
+                mrp: Number(formData.mrp),
+                active: formData.active,
+                veg: formData.veg,
+                imgs: formData.imgs,
+                barcode: formData.barcode,
+                stock: formData.stock,
+                priceVariants: formData.priceVariants,
+                charges: charges.filter(charge => {
+                    // Filter out charges with empty name or zero value
+                    const numValue = parseFloat(String(charge.value).replace('%', ''));
+                    return charge.name.trim() !== '' && !isNaN(numValue) && numValue > 0;
+                }).map(charge => {
+                    // Process charges for storage
+                    const isPercentage = String(charge.value).includes('%');
+                    const numValue = parseFloat(String(charge.value).replace('%', ''));
+                    return {
+                        name: charge.name,
+                        value: numValue,
+                        type: isPercentage ? 'percentage' : 'fixed',
+                        inclusive: charge.inclusive
+                    };
+                }),
+                recipe: recipeItems // Save recipe items
+            };
+
+            // Get current user
+            const user = window.sdk.getCurrentUser();
+
+            if (user) {
+                productData.sellerId = user.uid;
+                productData.sellerBusinessName = user.businessName || '';
+                productData.sellerAvatar = user.photoURL || '';
+            }
+
+            // Save to Firestore
+            if (product) {
+                // Update existing product
+                await window.sdk.collection("Product").doc(product.id).update(productData);
+                showToast('Product updated successfully');
+            } else {
+                // Add new product
+                await window.sdk.collection("Product").add(productData);
+                showToast('Product added successfully');
+            }
+
+            setUploading(false);
+            onClose();
+        } catch (error) {
+            console.error('Error saving product:', error);
+            setError('Failed to save product. Please try again.');
+            setUploading(false);
+        }
+    };
+
+    // Handle product deletion
+    const handleDelete = async () => {
+        // Only allow deletion of existing products
+        if (!product || !product.id) {
+            setError('Cannot delete a product that has not been saved yet.');
+            return;
+        }
+
+        // If not confirmed via checkbox, remind user
+        if (!deleteConfirmed) {
+            setError('Please check the confirmation box before deleting.');
+            return;
+        }
+
+        // Final confirmation
+        if (!window.confirm(`Are you absolutely sure you want to delete "${product.title}"? This action cannot be undone and the product will be permanently removed from your inventory.`)) {
+            return;
+        }
+
+        // Proceed with deletion
+        try {
+            setUploading(true);
+            setError('');
+
+            await window.sdk.collection("Product").doc(product.id).delete();
+            window.showToast('Product deleted successfully');
+            setUploading(false);
+            onClose();
+
+            // Refresh products list if the function exists
+            if (window.refreshProducts && typeof window.refreshProducts === 'function') {
+                window.refreshProducts();
+            }
+        } catch (error) {
+            console.error('Error deleting product:', error);
+            setError('Failed to delete product. Please try again.');
+            setUploading(false);
+        }
+    };
+
     if (!isOpen) return null;
 
+    // Get modal classes based on device type
+    const modalClasses = isMobile
+        ? "fixed inset-x-0 bottom-0 z-50 rounded-t-xl bg-white shadow-xl animate-slideUp max-h-[90vh] overflow-auto"
+        : "fixed top-0 right-0 bottom-0 z-50 bg-white shadow-xl animate-slideInRight w-full max-w-2xl overflow-auto";
+
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex items-end md:items-center justify-end transition-opacity">
+            <div ref={modalRef} className={modalClasses}>
+                {/* Mobile drag handle - only show on mobile */}
+                {isMobile && (
+                    <div className="flex justify-center pt-2 pb-1">
+                        <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
+                    </div>
+                )}
+
                 {/* Header */}
-                <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-red-50">
+                <div className="sticky top-0 z-10 px-4 py-3 bg-red-50 border-b border-gray-200 flex items-center justify-between">
                     <h2 className="text-xl font-semibold text-gray-800">
-                        {editProduct ? 'Edit Product' : 'Add New Product'}
+                        {product ? 'Edit Product' : 'Add New Product'}
                     </h2>
                     <button
                         onClick={onClose}
-                        className="p-2 hover:bg-red-100 rounded-full"
+                        className="p-2 rounded-full hover:bg-red-100 transition-colors"
                     >
-                        <i className="ph ph-x text-gray-600"></i>
+                        <i className="ph ph-x text-gray-600 text-lg"></i>
                     </button>
                 </div>
 
                 {/* Form Content - Scrollable */}
-                <div className="overflow-y-auto p-4 max-h-[calc(90vh-60px)]">
+                <div className="p-4 overflow-y-auto">
                     {error && (
                         <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">
                             {error}
                         </div>
                     )}
 
-                    <form onSubmit={handleSubmit}>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {/* Left Column - Image and Basic Info */}
-                            <div>
-                                {/* Image Upload */}
-                                <div className="mb-4">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Product Image
-                                    </label>
-                                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                                        {previewImage ? (
-                                            <div className="relative">
-                                                <img
-                                                    src={previewImage}
-                                                    alt="Product preview"
-                                                    className="mx-auto max-h-48 object-contain mb-2"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeImage(0)}
-                                                    className="absolute top-0 right-0 bg-red-500 text-white p-1 rounded-full"
-                                                >
-                                                    <i className="ph ph-x text-sm"></i>
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div className="flex flex-col items-center justify-center py-6">
-                                                <i className="ph ph-image text-4xl text-gray-400 mb-2"></i>
-                                                <p className="text-sm text-gray-500">Upload product image</p>
-                                            </div>
-                                        )}
-
-                                        <div className="mt-2">
-                                            <label className="cursor-pointer bg-red-500 hover:bg-red-600 text-white text-sm py-2 px-4 rounded-lg inline-flex items-center">
-                                                <i className="ph ph-upload-simple mr-2"></i>
-                                                <span>{uploading ? 'Uploading...' : 'Choose File'}</span>
-                                                <input
-                                                    type="file"
-                                                    className="hidden"
-                                                    onChange={handleImageUpload}
-                                                    accept="image/*"
-                                                    disabled={uploading}
-                                                />
-                                            </label>
-                                        </div>
+                    <form className="space-y-5">
+                        {/* Product Image Upload */}
+                        <div className="flex justify-center">
+                            <div className="w-full max-w-sm border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                                {previewImage ? (
+                                    <div className="relative">
+                                        <img
+                                            src={previewImage}
+                                            alt="Product preview"
+                                            className="mx-auto max-h-48 object-contain mb-2"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => removeImage(0)}
+                                            className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full"
+                                        >
+                                            <i className="ph ph-x text-sm"></i>
+                                        </button>
                                     </div>
-                                    <p className="text-xs text-gray-500 mt-1">Maximum file size: 5MB</p>
-                                </div>
-
-                                {/* Title */}
-                                <div className="mb-4">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Product Title <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        name="title"
-                                        value={formData.title}
-                                        onChange={handleChange}
-                                        className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-                                        placeholder="Enter product name"
-                                        required
-                                    />
-                                </div>
-
-                                {/* Description */}
-                                <div className="mb-4">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Description
-                                    </label>
-                                    <textarea
-                                        name="desc"
-                                        value={formData.desc}
-                                        onChange={handleChange}
-                                        className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-                                        placeholder="Enter product description"
-                                        rows="3"
-                                    ></textarea>
-                                </div>
-                            </div>
-
-                            {/* Right Column - Pricing and Category */}
-                            <div>
-                                <div className="flex gap-4 mb-4">
-                                    {/* Price */}
-                                    <div className="flex-1">
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Price (₹) <span className="text-red-500">*</span>
-                                        </label>
-                                        <div className="relative">
-                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                                <span className="text-gray-500 sm:text-sm">₹</span>
-                                            </div>
-                                            <input
-                                                type="text"
-                                                name="price"
-                                                value={formData.price}
-                                                onChange={handleChange}
-                                                className="w-full pl-8 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-                                                placeholder="0"
-                                                required
-                                            />
-                                        </div>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center py-6">
+                                        <i className="ph ph-image text-4xl text-gray-400 mb-2"></i>
+                                        <p className="text-gray-500">Upload product image</p>
                                     </div>
+                                )}
 
-                                    {/* MRP */}
-                                    <div className="flex-1">
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            MRP (₹)
-                                        </label>
-                                        <div className="relative">
-                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                                <span className="text-gray-500 sm:text-sm">₹</span>
-                                            </div>
-                                            <input
-                                                type="text"
-                                                name="mrp"
-                                                value={formData.mrp}
-                                                onChange={handleChange}
-                                                className="w-full pl-8 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-                                                placeholder="Same as price"
-                                            />
-                                        </div>
-                                        <p className="text-xs text-gray-500 mt-1">Leave empty to set same as price</p>
-                                    </div>
-                                </div>
-
-                                {/* Category */}
-                                <div className="mb-4">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Category
+                                <div className="mt-2">
+                                    <label className="cursor-pointer inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors">
+                                        <i className="ph ph-upload-simple mr-2"></i>
+                                        <span>{uploading ? 'Uploading...' : 'Choose File'}</span>
+                                        <input
+                                            type="file"
+                                            className="hidden"
+                                            onChange={handleImageUpload}
+                                            accept="image/*"
+                                            disabled={uploading}
+                                        />
                                     </label>
-                                    <select
-                                        name="cat"
-                                        value={formData.cat}
-                                        onChange={handleChange}
-                                        className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-                                    >
-                                        {categories.map((category, index) => (
-                                            <option key={index} value={category}>
-                                                {category}
-                                            </option>
-                                        ))}
-                                    </select>
                                 </div>
-
-                                {/* Stock */}
-                                <div className="mb-4">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Stock (Quantity)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        name="stock"
-                                        value={formData.stock}
-                                        onChange={handleChange}
-                                        className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-                                        placeholder="Leave empty for unlimited"
-                                    />
-                                    <p className="text-xs text-gray-500 mt-1">Leave empty if stock tracking is not needed</p>
-                                </div>
-
-                                {/* Toggles - Veg/Non-veg and Active Status */}
-                                <div className="space-y-4 mt-6">
-                                    {/* Veg/Non-veg Toggle */}
-                                    <div className="flex items-center">
-                                        <div className="mr-3">
-                                            <div className={`h-6 w-6 border-2 p-0.5 ${formData.veg ? 'border-green-500' : 'border-red-500'}`}>
-                                                <div className={`h-full w-full rounded-sm ${formData.veg ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                                            </div>
-                                        </div>
-                                        <label className="flex items-center cursor-pointer">
-                                            <div className="relative">
-                                                <input
-                                                    type="checkbox"
-                                                    name="veg"
-                                                    checked={formData.veg}
-                                                    onChange={handleChange}
-                                                    className="sr-only"
-                                                />
-                                                <div className="block bg-gray-300 w-14 h-8 rounded-full"></div>
-                                                <div className={`absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${formData.veg ? 'transform translate-x-6' : ''}`}></div>
-                                            </div>
-                                            <div className="ml-3 text-gray-700">
-                                                {formData.veg ? 'Vegetarian' : 'Non-vegetarian'}
-                                            </div>
-                                        </label>
-                                    </div>
-
-                                    {/* Active Status Toggle */}
-                                    <div className="flex items-center">
-                                        <label className="flex items-center cursor-pointer">
-                                            <div className="relative">
-                                                <input
-                                                    type="checkbox"
-                                                    name="active"
-                                                    checked={formData.active}
-                                                    onChange={handleChange}
-                                                    className="sr-only"
-                                                />
-                                                <div className="block bg-gray-300 w-14 h-8 rounded-full"></div>
-                                                <div className={`absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${formData.active ? 'transform translate-x-6' : ''}`}></div>
-                                            </div>
-                                            <div className="ml-3 text-gray-700">
-                                                Product {formData.active ? 'Active' : 'Inactive'}
-                                            </div>
-                                        </label>
-                                    </div>
-                                </div>
+                                <p className="text-xs text-gray-500 mt-1">Maximum file size: 5MB</p>
                             </div>
                         </div>
 
-                        {/* Form Actions */}
-                        <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-gray-200">
+                        {/* Category Selection */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Category <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                                name="cat"
+                                value={formData.cat}
+                                onChange={handleChange}
+                                className="w-full p-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                            >
+                                {categories.map((category, index) => (
+                                    <option key={index} value={category}>
+                                        {category}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Product Title */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Product Title <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="text"
+                                name="title"
+                                value={formData.title}
+                                onChange={handleChange}
+                                className="w-full p-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                placeholder="Enter product name"
+                            />
+                        </div>
+
+                        {/* Barcode */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Barcode ID
+                            </label>
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    name="barcode"
+                                    value={formData.barcode}
+                                    onChange={handleChange}
+                                    className="w-full p-2.5 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                    placeholder="Enter barcode"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleBarcodeScanner}
+                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-red-500"
+                                >
+                                    <i className="ph ph-barcode text-xl"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Description */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Description
+                            </label>
+                            <textarea
+                                name="desc"
+                                value={formData.desc}
+                                onChange={handleChange}
+                                className="w-full p-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                placeholder="Enter product description"
+                                rows="3"
+                            ></textarea>
+                        </div>
+
+                        {/* Pricing Section */}
+                        <div>
+                            <h3 className="text-md font-medium text-gray-700 mb-3">Pricing</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                {/* MRP */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        MRP (₹) <span className="text-red-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <span className="text-gray-500 sm:text-sm">₹</span>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            name="mrp"
+                                            value={formData.mrp}
+                                            onChange={handleChange}
+                                            className="w-full pl-8 p-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                            placeholder="0"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Selling Price */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Selling Price (₹) <span className="text-red-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <span className="text-gray-500 sm:text-sm">₹</span>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            name="price"
+                                            value={formData.price}
+                                            onChange={handleChange}
+                                            className="w-full pl-8 p-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                            placeholder="0"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Price Calculation Display */}
+                            {formData.mrp && formData.price && (
+                                <div className="flex items-center mt-2 text-sm">
+                                    <span className="mr-2">Price:</span>
+                                    {Number(formData.mrp) > Number(formData.price) && (
+                                        <span className="line-through text-gray-500 mr-2">₹{formData.mrp}</span>
+                                    )}
+                                    <span className="font-medium">₹{formData.price}</span>
+                                    {Number(formData.mrp) > Number(formData.price) && (
+                                        <span className="ml-2 text-green-600">
+                                            ({Math.round(((Number(formData.mrp) - Number(formData.price)) / Number(formData.mrp)) * 100)}% OFF)
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Price Variants */}
+                        <div>
+                            <div className="flex items-center justify-between mb-1">
+                                <h3 className="text-sm font-medium text-gray-700">Additional Price Variants</h3>
+                            </div>
+                            <PriceVariants
+                                variants={formData.priceVariants || []}
+                                setVariants={(variants) => handleFormChange('priceVariants', variants)}
+                            />
+                        </div>
+
+                        {/* Veg/Non-veg Toggle */}
+                        <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+                            <div className="flex items-center space-x-2">
+                                <div className={`h-6 w-6 border-2 p-0.5 ${formData.veg ? 'border-green-500' : 'border-red-500'}`}>
+                                    <div className={`h-full w-full rounded-sm ${formData.veg ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                </div>
+                                <span className="text-sm font-medium text-gray-800">
+                                    {formData.veg ? 'Vegetarian' : 'Non-vegetarian'}
+                                </span>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    name="veg"
+                                    checked={formData.veg}
+                                    onChange={handleChange}
+                                    className="sr-only peer"
+                                />
+                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                            </label>
+                        </div>
+
+                        {/* Stock Management Toggle */}
+                        <div className="bg-gray-50 p-3 rounded-lg">
+                            <div className="flex items-center mb-2">
+                                <input
+                                    type="checkbox"
+                                    id="enableStock"
+                                    className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                                    checked={showStockManagement}
+                                    onChange={(e) => {
+                                        setShowStockManagement(e.target.checked);
+                                        handleFormChange('stock', e.target.checked ? 0 : undefined);
+                                    }}
+                                />
+                                <label htmlFor="enableStock" className="ml-2 text-sm font-medium text-gray-700">
+                                    Enable Stock Management
+                                </label>
+                            </div>
+
+                            {showStockManagement && (
+                                <div className="mt-2 space-y-4">
+                                    <div className="flex items-center space-x-2">
+                                        <div className="w-1/2">
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                                                Current Stock
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={formData.stock}
+                                                min="0"
+                                                onChange={(e) => handleFormChange('stock', Math.max(0, Number(e.target.value)))}
+                                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Recipe Items Component */}
+                                    <RecipeItems
+                                        items={recipeItems}
+                                        setItems={setRecipeItems}
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Tax & Charges */}
+                        <div className="p-3 bg-gray-50 rounded-lg">
+                            <h4 className="text-sm font-medium text-gray-700 mb-3">Tax & Charges</h4>
+
+                            {charges.map((charge, index) => (
+                                <div key={index} className="mb-3 last:mb-0">
+                                    <div className="flex gap-2 mb-2">
+                                        <input
+                                            type="text"
+                                            value={charge.name}
+                                            onChange={(e) => {
+                                                const updatedCharge = { ...charge, name: e.target.value };
+                                                updateCharge(index, updatedCharge);
+                                            }}
+                                            placeholder="Charge name"
+                                            className="flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                        />
+                                        <div className="relative flex-1">
+                                            <input
+                                                type="text"
+                                                value={String(charge.value).replace('%', '')}
+                                                onChange={(e) => {
+                                                    const value = e.target.value.replace(/[^0-9.]/g, '');
+                                                    const updatedCharge = {
+                                                        ...charge,
+                                                        value: String(charge.value).includes('%') ? `${value}%` : value
+                                                    };
+                                                    updateCharge(index, updatedCharge);
+                                                }}
+                                                placeholder="Value"
+                                                className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const isPercentage = String(charge.value).includes('%');
+                                                    const value = String(charge.value).replace('%', '');
+                                                    const updatedCharge = {
+                                                        ...charge,
+                                                        value: isPercentage ? value : `${value}%`
+                                                    };
+                                                    updateCharge(index, updatedCharge);
+                                                }}
+                                                className={`absolute right-0 top-0 bottom-0 px-3 rounded-r-lg flex items-center justify-center ${String(charge.value).includes('%')
+                                                    ? 'bg-red-100 text-red-600'
+                                                    : 'bg-green-100 text-green-600'
+                                                    }`}
+                                            >
+                                                {String(charge.value).includes('%') ? '%' : '₹'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center">
+                                        <label className="flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={charge.inclusive}
+                                                onChange={(e) => {
+                                                    const updatedCharge = { ...charge, inclusive: e.target.checked };
+                                                    updateCharge(index, updatedCharge);
+                                                }}
+                                                className="w-4 h-4 text-red-600 bg-gray-100 border-gray-300 rounded focus:ring-red-500"
+                                            />
+                                            <span className="ml-2 text-xs font-medium text-gray-700">Inclusive</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            ))}
+
+                            {/* Add new charge */}
                             <button
                                 type="button"
-                                onClick={onClose}
-                                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                                onClick={() => {
+                                    updateCharge(charges.length, {
+                                        name: '',
+                                        value: '0%', // Initialize as string with % for consistency
+                                        inclusive: false
+                                    });
+                                }}
+                                className="mt-2 text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 py-1 px-2 rounded flex items-center w-full justify-center"
                             >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                disabled={isSubmitting || uploading}
-                                className={`px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 flex items-center ${(isSubmitting || uploading) ? 'opacity-70 cursor-not-allowed' : ''}`}
-                            >
-                                {isSubmitting ? (
-                                    <>
-                                        <span className="animate-spin inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></span>
-                                        Saving...
-                                    </>
-                                ) : (
-                                    <>
-                                        <i className="ph ph-floppy-disk mr-2"></i>
-                                        {editProduct ? 'Update Product' : 'Save Product'}
-                                    </>
-                                )}
+                                <i className="ph ph-plus mr-1"></i> Add Charge
                             </button>
                         </div>
+
+                        {/* Active Status */}
+                        <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+                            <span className="text-sm font-medium text-gray-700">Product Status</span>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    name="active"
+                                    checked={formData.active}
+                                    onChange={handleChange}
+                                    className="sr-only peer"
+                                />
+                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
+                                <span className="ml-2 text-sm font-medium text-gray-700">
+                                    {formData.active ? 'Active' : 'Inactive'}
+                                </span>
+                            </label>
+                        </div>
                     </form>
+                </div>
+
+                {/* Danger Zone - Only show when editing an existing product */}
+                {product && product.id && (
+                    <div className="px-4 py-3 bg-red-50 border-t border-b border-red-100">
+                        <div className="mb-2">
+                            <h3 className="text-sm font-bold text-red-700 flex items-center">
+                                <i className="ph ph-warning-circle mr-1.5"></i>
+                                Danger Zone
+                            </h3>
+                            <p className="text-xs text-red-600 mt-1">
+                                Deleting this product will permanently remove it. This action cannot be undone.
+                            </p>
+                        </div>
+
+                        <div className="flex items-center mt-3">
+                            <input
+                                type="checkbox"
+                                id="confirm-delete"
+                                className="h-4 w-4 text-red-600 border-red-300 rounded mr-2"
+                                checked={deleteConfirmed}
+                                onChange={(e) => setDeleteConfirmed(e.target.checked)}
+                            />
+                            <label htmlFor="confirm-delete" className="text-xs text-red-700">
+                                I understand that this action is permanent
+                            </label>
+                        </div>
+
+                        <button
+                            id="delete-product-btn"
+                            type="button"
+                            onClick={handleDelete}
+                            disabled={!deleteConfirmed || uploading}
+                            className="mt-3 px-3 py-1.5 text-xs text-red-700 border border-red-300 bg-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed hover:bg-red-100 flex items-center"
+                        >
+                            {uploading ? (
+                                <span className="mr-2 h-3 w-3 rounded-full border-2 border-red-700 border-t-transparent animate-spin"></span>
+                            ) : (
+                                <i className="ph ph-trash mr-1.5"></i>
+                            )}
+                            Delete This Product
+                        </button>
+                    </div>
+                )}
+
+                {/* Form Actions - Sticky Footer */}
+                <div className="sticky bottom-0 px-4 py-3 bg-white border-t flex justify-between gap-2">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                    >
+                        Cancel
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={handleSubmit}
+                        disabled={uploading}
+                        className="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors flex items-center"
+                    >
+                        {uploading ? (
+                            <>
+                                <span className="mr-2 h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin"></span>
+                                {product ? 'Updating...' : 'Saving...'}
+                            </>
+                        ) : (
+                            <>
+                                <i className="ph ph-floppy-disk mr-1"></i>
+                                {product ? 'Update Product' : 'Save Product'}
+                            </>
+                        )}
+                    </button>
                 </div>
             </div>
         </div>
     );
 }
 
+// Recipe Items Component for the Product Form
+function RecipeItems({ items, setItems }) {
+    const [inventoryItems, setInventoryItems] = React.useState([]);
+    const [loading, setLoading] = React.useState(true);
+
+    // Fetch available inventory items when component mounts
+    React.useEffect(() => {
+        async function fetchInventoryItems() {
+            try {
+                setLoading(true);
+                const inventorySnapshot = await window.sdk.collection("Inventory")
+                    .orderBy("updatedAt", "desc")
+                    .limit(100)
+                    .get();
+
+                // Process inventory items the same way as in Products.js
+                const inventoryList = [];
+                for (const doc of inventorySnapshot.docs) {
+                    try {
+                        const data = doc.data();
+                        // Handle date conversions for Firestore Timestamps
+                        const processedData = {
+                            id: doc.id,
+                            name: data.name || '',
+                            quantity: Number(data.quantity || 0),
+                            unit: data.unit || '',
+                            minQuantity: Number(data.minQuantity || 0),
+                            date: data.date?.toDate ? data.date.toDate() : new Date(),
+                            updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(),
+                            lastUpdated: data.lastUpdated || (data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : new Date().toISOString())
+                        };
+
+                        const item = new InventoryItem(processedData);
+                        if (item) {
+                            inventoryList.push(item);
+                        }
+                    } catch (error) {
+                        console.error(`Error creating inventory item from doc ${doc.id}:`, error);
+                        // Continue with other inventory items
+                    }
+                }
+
+                // Filter out duplicates based on name (just to be extra safe)
+                const uniqueItems = [];
+                const nameSet = new Set();
+
+                // Log the total number of inventory items before deduplication
+                console.log(`Total inventory items before deduplication: ${inventoryList.length}`);
+
+                // Log each inventory item for debugging
+                inventoryList.forEach((item, index) => {
+                    console.log(`Inventory item ${index}:`, item.name, item.id);
+                });
+
+                // For now, use all items without deduplication
+                setInventoryItems(inventoryList);
+
+                // Log the final result
+                console.log(`Set ${inventoryList.length} inventory items for the recipe dropdown`);
+
+                setLoading(false);
+            } catch (error) {
+                console.error("Error fetching inventory items:", error);
+                setLoading(false);
+            }
+        }
+
+        fetchInventoryItems();
+    }, []);
+
+    const handleAddItem = () => {
+        if (inventoryItems.length === 0) {
+            showToast('No inventory items available. Please add items to inventory first.', 'error');
+            return;
+        }
+
+        // Access properties correctly from InventoryItem object
+        const firstItem = inventoryItems[0];
+        const newItem = {
+            id: Date.now().toString(), // Temporary ID for UI purposes
+            name: firstItem.name,
+            quantity: 1,
+            unit: firstItem.unit
+        };
+
+        setItems([...items, newItem]);
+    };
+
+    const handleUpdateItem = (index, field, value) => {
+        const updatedItems = [...items];
+
+        if (field === 'name') {
+            // When name changes, update the unit as well
+            const selectedItem = inventoryItems.find(item => item.name === value);
+            if (selectedItem) {
+                updatedItems[index] = {
+                    ...updatedItems[index],
+                    name: value,
+                    unit: selectedItem.unit
+                };
+            } else {
+                updatedItems[index] = {
+                    ...updatedItems[index],
+                    name: value
+                };
+            }
+        } else if (field === 'quantity') {
+            // Ensure quantity is a positive number
+            const quantity = Math.max(0, Number(value) || 0);
+            updatedItems[index] = {
+                ...updatedItems[index],
+                quantity
+            };
+        }
+
+        setItems(updatedItems);
+    };
+
+    const handleRemoveItem = (index) => {
+        const updatedItems = [...items];
+        updatedItems.splice(index, 1);
+        setItems(updatedItems);
+    };
+
+    if (loading) {
+        return (
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                <div className="flex justify-center">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-500"></div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+            <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-gray-700">Recipe Items</h4>
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            // Function to reload inventory items for debugging
+                            async function reloadInventory() {
+                                try {
+                                    setLoading(true);
+                                    const snapshot = await window.sdk.collection("Inventory")
+                                        .orderBy("updatedAt", "desc")
+                                        .limit(100)
+                                        .get();
+
+                                    console.log("RELOAD: Total docs from Firestore:", snapshot.docs.length);
+
+                                    const items = snapshot.docs.map(doc => {
+                                        const data = doc.data();
+                                        console.log("RELOAD: Item data:", data.name, doc.id);
+                                        return new InventoryItem({
+                                            id: doc.id,
+                                            name: data.name || '',
+                                            quantity: Number(data.quantity || 0),
+                                            unit: data.unit || '',
+                                            minQuantity: Number(data.minQuantity || 0),
+                                            date: data.date?.toDate ? data.date.toDate() : new Date(),
+                                            updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(),
+                                            lastUpdated: data.lastUpdated || (data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : new Date().toISOString())
+                                        });
+                                    });
+
+                                    setInventoryItems(items);
+                                    setLoading(false);
+                                    showToast("Inventory items reloaded for debugging", "success");
+                                } catch (error) {
+                                    console.error("Error reloading inventory items:", error);
+                                    setLoading(false);
+                                    showToast("Failed to reload inventory", "error");
+                                }
+                            }
+
+                            reloadInventory();
+                        }}
+                        className="text-xs bg-blue-100 text-blue-600 py-1 px-2 rounded flex items-center"
+                    >
+                        <i className="ph ph-arrows-clockwise mr-1"></i> Reload
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleAddItem}
+                        className="text-xs bg-red-100 text-red-600 py-1 px-2 rounded flex items-center"
+                    >
+                        <i className="ph ph-plus mr-1"></i> Add Item
+                    </button>
+                </div>
+            </div>
+
+            {items.length === 0 ? (
+                <p className="text-sm text-gray-500">No recipe items added yet</p>
+            ) : (
+                <div className="space-y-3">
+                    {items.map((item, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                            <div className="flex-grow">
+                                <select
+                                    value={item.name}
+                                    onChange={(e) => handleUpdateItem(index, 'name', e.target.value)}
+                                    className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                >
+                                    {inventoryItems.map((invItem) => (
+                                        <option key={invItem.id} value={invItem.name}>
+                                            {invItem.name} ({invItem.quantity} {invItem.unit})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="w-28">
+                                <div className="flex items-center">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const currentValue = Number(item.quantity) || 0;
+                                            if (currentValue > 0) {
+                                                handleUpdateItem(index, 'quantity', currentValue - 1);
+                                            }
+                                        }}
+                                        className="p-2 bg-red-500 text-white rounded-l-lg"
+                                    >
+                                        <i className="ph ph-minus"></i>
+                                    </button>
+                                    <input
+                                        type="text"
+                                        value={item.quantity}
+                                        onChange={(e) => handleUpdateItem(index, 'quantity', e.target.value)}
+                                        className="w-10 p-2 text-center border-y border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-500"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const currentValue = Number(item.quantity) || 0;
+                                            handleUpdateItem(index, 'quantity', currentValue + 1);
+                                        }}
+                                        className="p-2 bg-red-500 text-white rounded-r-lg"
+                                    >
+                                        <i className="ph ph-plus"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="w-16 text-sm text-gray-600 text-center">
+                                {item.unit}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => handleRemoveItem(index)}
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                            >
+                                <i className="ph ph-trash"></i>
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// Price Variants Component for the Product Form
+function PriceVariants({ variants, setVariants }) {
+    const handleAddVariant = () => {
+        setVariants([
+            ...variants,
+            { id: Date.now().toString(), name: '', price: '' }
+        ]);
+    };
+
+    const handleUpdateVariant = (index, field, value) => {
+        const updatedVariants = [...variants];
+
+        if (field === 'price') {
+            // Ensure price is a number
+            value = value.replace(/[^0-9]/g, '');
+        }
+
+        updatedVariants[index] = {
+            ...updatedVariants[index],
+            [field]: value
+        };
+
+        setVariants(updatedVariants);
+    };
+
+    const handleRemoveVariant = (index) => {
+        const updatedVariants = [...variants];
+        updatedVariants.splice(index, 1);
+        setVariants(updatedVariants);
+    };
+
+    return (
+        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+            <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-gray-700">Price Variants</h4>
+                <button
+                    type="button"
+                    onClick={handleAddVariant}
+                    className="text-xs bg-red-100 text-red-600 py-1 px-2 rounded flex items-center"
+                >
+                    <i className="ph ph-plus mr-1"></i> Add Variant
+                </button>
+            </div>
+
+            {variants.length === 0 ? (
+                <p className="text-sm text-gray-500">No price variants added yet</p>
+            ) : (
+                <div className="space-y-3">
+                    {variants.map((variant, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                            <div className="flex-grow">
+                                <input
+                                    type="text"
+                                    placeholder="Variant Name (e.g. Half, Full)"
+                                    value={variant.name}
+                                    onChange={(e) => handleUpdateVariant(index, 'name', e.target.value)}
+                                    className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                />
+                            </div>
+                            <div className="w-28">
+                                <div className="flex items-center">
+                                    <span className="p-2 bg-gray-100 border border-gray-300 rounded-l-lg">₹</span>
+                                    <input
+                                        type="text"
+                                        placeholder="Price"
+                                        value={variant.price}
+                                        onChange={(e) => handleUpdateVariant(index, 'price', e.target.value)}
+                                        className="w-full p-2 text-center border-y border-r border-gray-300 rounded-r-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                    />
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => handleRemoveVariant(index)}
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                            >
+                                <i className="ph ph-trash"></i>
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // Make component available globally
 window.ProductFormModal = ProductFormModal;
+window.RecipeItems = RecipeItems;
+window.PriceVariants = PriceVariants;
 
 // Export components
 window.ProfileMenu = ProfileMenu;

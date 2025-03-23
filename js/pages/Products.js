@@ -64,7 +64,7 @@ function Products() {
                         updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(),
                         lastUpdated: data.lastUpdated || (data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : new Date().toISOString())
                     };
-                    
+
                     const item = new InventoryItem(processedData);
                     if (item) {
                         inventoryList.push(item);
@@ -74,6 +74,12 @@ function Products() {
                     // Continue with other inventory items
                 }
             }
+
+            // Log each inventory item loaded in Products.js
+            console.log("Inventory items loaded in Products.js:");
+            inventoryList.forEach((item, index) => {
+                console.log(`Inventory tab item ${index}:`, item.name, item.id);
+            });
 
             setInventory(inventoryList);
             console.log(`Successfully loaded ${inventoryList.length} inventory items`);
@@ -115,7 +121,7 @@ function Products() {
 
     // Filter inventory items based on search query
     const filteredInventory = React.useMemo(() => {
-        return inventory.filter(item => 
+        return inventory.filter(item =>
             item.name.toLowerCase().includes(searchQuery.toLowerCase())
         );
     }, [inventory, searchQuery]);
@@ -123,21 +129,21 @@ function Products() {
     // Filter products based on search query and category
     const filteredProducts = React.useMemo(() => {
         let filtered = products;
-        
+
         // Filter by search query
         if (productSearchQuery) {
-            filtered = filtered.filter(product => 
+            filtered = filtered.filter(product =>
                 product.name.toLowerCase().includes(productSearchQuery.toLowerCase())
             );
         }
-        
+
         // Filter by category
         if (selectedCategory) {
-            filtered = filtered.filter(product => 
+            filtered = filtered.filter(product =>
                 product.cat === selectedCategory
             );
         }
-        
+
         // Sort products
         switch (sortBy) {
             case 'name':
@@ -151,7 +157,7 @@ function Products() {
                 // Sorting by date is the default from the query
                 break;
         }
-        
+
         return filtered;
     }, [products, productSearchQuery, selectedCategory, sortBy]);
 
@@ -309,7 +315,7 @@ function Products() {
                 onClose: () => {
                     ReactDOM.unmountComponentAtNode(modalContainer);
                 },
-                editProduct: null // null for add new product
+                product: null // null for add new product
             }),
             modalContainer
         );

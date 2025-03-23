@@ -61,11 +61,21 @@
                             '0%': { transform: 'scale(0.8)' },
                             '70%': { transform: 'scale(1.05)' },
                             '100%': { transform: 'scale(1)' },
+                        },
+                        slideInRight: {
+                            '0%': { transform: 'translateX(100%)' },
+                            '100%': { transform: 'translateX(0)' },
+                        },
+                        slideUp: {
+                            '0%': { transform: 'translateY(100%)' },
+                            '100%': { transform: 'translateY(0)' },
                         }
                     },
                     animation: {
                         fadeIn: 'fadeIn 0.3s ease-in-out',
                         scaleIn: 'scaleIn 0.3s ease-in-out',
+                        slideInRight: 'slideInRight 0.3s ease-out',
+                        slideUp: 'slideUp 0.3s ease-out',
                     }
                 }
             },
@@ -176,6 +186,16 @@
         }
 
         @keyframes slideInBottom {
+            from {
+                transform: translateY(100%);
+            }
+
+            to {
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes slideUp {
             from {
                 transform: translateY(100%);
             }

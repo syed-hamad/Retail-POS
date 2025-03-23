@@ -24,8 +24,13 @@ class Product {
         // Additional properties
         this.barcode = data.barcode || '';
         this.sku = data.sku || '';
-        this.stock = data.stock || 0;
+        this.stock = data.stock !== undefined ? data.stock : undefined;
         this.date = data.date ? new Date(data.date) : new Date();
+
+        // New fields for enhanced functionality
+        this.priceVariants = data.priceVariants || [];
+        this.charges = data.charges || [];
+        this.recipe = data.recipe || data.recipeItems || []; // Support both names for backward compatibility
     }
 
     // Create a Product from a Firestore document
@@ -44,9 +49,20 @@ class Product {
 
             data.id = doc.id;
 
-            // Handle price variants
-            if (data.priceVariants && data.priceVariants[priceVariant]) {
-                data.price = data.priceVariants[priceVariant];
+            // Handle price variants (both legacy object format and new array format)
+            if (data.priceVariants) {
+                if (Array.isArray(data.priceVariants)) {
+                    // New format: array of variant objects
+                    const variant = data.priceVariants.find(v => v.name === priceVariant);
+                    if (variant) {
+                        data.price = variant.price;
+                    }
+                } else if (typeof data.priceVariants === 'object') {
+                    // Legacy format: object with variant names as keys
+                    if (data.priceVariants[priceVariant]) {
+                        data.price = data.priceVariants[priceVariant];
+                    }
+                }
             }
 
             return new Product(data);
@@ -74,7 +90,10 @@ class Product {
             barcode: this.barcode,
             sku: this.sku,
             stock: this.stock,
-            date: this.date
+            date: this.date,
+            priceVariants: this.priceVariants,
+            charges: this.charges,
+            recipe: this.recipe
         };
     }
 
@@ -102,7 +121,10 @@ class Product {
             stock: this.stock,
             date: this.date,
             barcode: this.barcode,
-            sku: this.sku
+            sku: this.sku,
+            priceVariants: this.priceVariants,
+            charges: this.charges,
+            recipe: this.recipe
         };
     }
 
@@ -126,7 +148,10 @@ class Product {
     // Get recipe items
     get recipeItems() {
         if (!this.recipe || this.recipe.length === 0) return [];
-        return this.recipe.map(item => InventoryItem.fromJson(item));
+        return this.recipe.map(item => {
+            if (item instanceof InventoryItem) return item;
+            return InventoryItem.fromJson(item);
+        });
     }
 
     // Calculate maximum production based on inventory
