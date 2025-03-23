@@ -345,9 +345,21 @@ function Dashboard() {
                     section: table.section || 'ac'
                 }));
 
-                // Add default tables for aggregators if they don't exist
+                // Get price variants to add as pseudo-tables for the Order Channels section
+                // This follows the Flutter code's ordersDash() function
+                const priceVariants = (seller?.priceVariants || [])
+                    .map(v => v.title)
+                    .filter(Boolean);
+
+                // Add default variants for aggregators if they don't exist
+                // Always add the default variant as first item, like in the Flutter code
                 const defaultAggregators = [
                     { id: 'default', title: 'Default', type: 'qr' },
+                    ...priceVariants.filter(v => v !== 'Default').map(v => ({
+                        id: v,
+                        title: v,
+                        type: 'price_variant'
+                    })),
                     { id: 'zomato', title: 'Zomato', type: 'aggregator' },
                     { id: 'swiggy', title: 'Swiggy', type: 'aggregator' }
                 ];
@@ -361,7 +373,13 @@ function Dashboard() {
                     )
                 ];
 
-                // Group orders by table ID and also by order source for aggregators
+                // Process each order to ensure it has the orderSource property
+                // This mimics the getter in the MOrder class of Flutter
+                kitchenOrders.forEach(order => {
+                    order.orderSource = order.priceVariant || order.tableId;
+                });
+
+                // Group orders by table ID and variant/orderSource to match Flutter behavior
                 const tableOrders = kitchenOrders.reduce((acc, order) => {
                     // First, handle regular table assignments
                     if (order.tableId) {
@@ -371,41 +389,31 @@ function Dashboard() {
                         acc[order.tableId].push(order);
                     }
 
-                    // Then, handle aggregator assignments based on orderSource
-                    if (order.orderSource) {
-                        const source = order.orderSource.toLowerCase();
-
-                        // Handle Zomato orders
-                        if (source === 'zomato') {
-                            if (!acc['zomato']) {
-                                acc['zomato'] = [];
-                            }
-                            acc['zomato'].push(order);
+                    // Handle price variants exactly like in Flutter
+                    if (order.priceVariant) {
+                        if (!acc[order.priceVariant]) {
+                            acc[order.priceVariant] = [];
                         }
-
-                        // Handle Swiggy orders
-                        else if (source === 'swiggy') {
-                            if (!acc['swiggy']) {
-                                acc['swiggy'] = [];
-                            }
-                            acc['swiggy'].push(order);
-                        }
-
-                        // Handle other online orders as Default
-                        else if (source === 'online' || source === 'default') {
-                            if (!acc['default']) {
-                                acc['default'] = [];
-                            }
-                            acc['default'].push(order);
-                        }
-                    }
-
-                    // If no tableId and no orderSource, put in Default
-                    if (!order.tableId && !order.orderSource) {
+                        acc[order.priceVariant].push(order);
+                    } else if (!order.tableId) {
+                        // No priceVariant and no tableId means it's a Default order
                         if (!acc['default']) {
                             acc['default'] = [];
                         }
                         acc['default'].push(order);
+                    }
+
+                    // Special handling for Zomato & Swiggy orders
+                    if (order.orderSource === 'zomato') {
+                        if (!acc['zomato']) {
+                            acc['zomato'] = [];
+                        }
+                        acc['zomato'].push(order);
+                    } else if (order.orderSource === 'swiggy') {
+                        if (!acc['swiggy']) {
+                            acc['swiggy'] = [];
+                        }
+                        acc['swiggy'].push(order);
                     }
 
                     return acc;

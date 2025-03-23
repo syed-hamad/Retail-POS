@@ -546,44 +546,123 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
 
         let unsubscribe = () => { };
 
-        try {
-            // Create query similar to the Flutter implementation
-            let query = window.sdk.collection("Orders")
-                .where("currentStatus.label", "==", "KITCHEN");
+        // Immediately invoked async function
+        (async () => {
+            try {
+                // Create a more general query first to get all recent orders
+                let query = window.sdk.collection("Orders")
+                    .orderBy("date", "desc")
+                    .limit(100);
 
-            if (tableId) {
-                query = query.where("tableId", "==", tableId);
-            } else if (variant) {
-                query = query.where("priceVariant", "==", variant);
-            }
+                const snapshot = await query.get();
 
-            // Set up real-time listener
-            unsubscribe = query.onSnapshot(
-                (snapshot) => {
-                    const ordersList = snapshot.docs.map(doc => ({
-                        id: doc.id,
-                        ...doc.data()
-                    })).filter(order => order.items && order.items.length > 0);
+                // Get all orders and process them
+                const allOrders = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
 
-                    setOrders(ordersList);
-                    setLoading(false);
-                },
-                (err) => {
-                    console.error('Error listening to orders:', err);
-                    setError('Failed to load orders');
-                    setLoading(false);
+                console.log(`[OrderRoom Debug] Fetched ${allOrders.length} total orders`);
+
+                // Filter orders based on criteria matching the Dashboard
+                let filteredOrders = allOrders.filter(order => {
+                    // 1. Match status - same as in Dashboard
+                    const isKitchenStatus = order.currentStatus?.label === "KITCHEN";
+                    if (!isKitchenStatus) {
+                        return false;
+                    }
+
+                    // 2. Match table ID or variant - EXACT MATCH with Flutter code logic
+                    if (tableId) {
+                        // For tables, just match the tableId directly
+                        return order.tableId === tableId;
+                    } else if (variant) {
+                        // For variants like Default, zomato, swiggy, etc.
+                        if (variant === 'zomato' || variant === 'swiggy') {
+                            // These are treated as orderSource in Flutter
+                            return order.orderSource?.toLowerCase() === variant.toLowerCase();
+                        } else if (variant === 'default') {
+                            // Default orders have either:
+                            // 1. priceVariant === "Default"
+                            // 2. No priceVariant and no tableId
+                            return order.priceVariant === "Default" ||
+                                (!order.priceVariant && !order.tableId);
+                        } else {
+                            // Other variants are direct price variants
+                            return order.priceVariant === variant;
+                        }
+                    }
+
+                    return false;
+                });
+
+                // Log for debugging
+                console.log(`[OrderRoom Debug] Filtered to ${filteredOrders.length} orders for ${tableId || variant}`);
+
+                // Only keep orders with items
+                filteredOrders = filteredOrders.filter(order => order.items && order.items.length > 0);
+                console.log(`[OrderRoom Debug] After filtering items: ${filteredOrders.length} orders`);
+
+                setOrders(filteredOrders);
+                setLoading(false);
+
+                // After loading initial data, set up a real-time listener for new changes
+                // This ensures we get both consistent counts (from our initial filter) 
+                // and real-time updates for any new orders or status changes
+                let realtimeQuery = window.sdk.collection("Orders")
+                    .where("currentStatus.label", "==", "KITCHEN")
+                    .orderBy("date", "desc")
+                    .limit(50);
+
+                // Add specific filters for table or variant
+                if (tableId) {
+                    realtimeQuery = realtimeQuery.where("tableId", "==", tableId);
+                } else if (variant) {
+                    if (variant !== 'zomato' && variant !== 'swiggy' && variant !== 'default') {
+                        // For price variants, filter normally by priceVariant field
+                        realtimeQuery = realtimeQuery.where("priceVariant", "==", variant);
+                    }
+                    // For zomato, swiggy, and default, we do client-side filtering
+                    // because Firebase doesn't support OR conditions easily
                 }
-            );
-        } catch (err) {
-            console.error('Error setting up orders listener:', err);
-            setError('Failed to set up orders listener');
-            setLoading(false);
-        }
 
-        // Clean up listener when component unmounts or modal closes
-        return () => {
-            unsubscribe();
-        };
+                // Set up the real-time listener
+                unsubscribe = realtimeQuery.onSnapshot(
+                    (snapshotUpdate) => {
+                        const newOrdersList = snapshotUpdate.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        })).filter(order => order.items && order.items.length > 0);
+
+                        // For special variants, do additional filtering
+                        let updatedOrders = newOrdersList;
+                        if (variant) {
+                            if (variant === 'zomato' || variant === 'swiggy') {
+                                updatedOrders = newOrdersList.filter(order =>
+                                    order.orderSource?.toLowerCase() === variant.toLowerCase());
+                            } else if (variant === 'default') {
+                                updatedOrders = newOrdersList.filter(order =>
+                                    order.priceVariant === "Default" ||
+                                    (!order.priceVariant && !order.tableId));
+                            }
+                        }
+
+                        console.log(`[OrderRoom Debug] Real-time update: ${updatedOrders.length} orders`);
+                        setOrders(updatedOrders);
+                    },
+                    (err) => {
+                        console.error('Error in real-time listener:', err);
+                        // Don't set error here as we already have the initial data
+                    }
+                );
+            } catch (err) {
+                console.error('Error loading orders:', err);
+                setError('Failed to load orders');
+                setLoading(false);
+            }
+        })();
+
+        return () => unsubscribe();
     }, [isOpen, tableId, variant]);
 
     // Set up refresh interval (every 30 seconds)
@@ -664,26 +743,64 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
     const loadOrders = async () => {
         setLoading(true);
         try {
-            // Create query similar to the Flutter implementation
+            // Create a more general query first to get all recent orders
             let query = window.sdk.collection("Orders")
-                .where("currentStatus.label", "==", "KITCHEN");
-
-            if (tableId) {
-                query = query.where("tableId", "==", tableId);
-            } else if (variant) {
-                query = query.where("priceVariant", "==", variant);
-            }
+                .orderBy("date", "desc")
+                .limit(100);
 
             const snapshot = await query.get();
-            const ordersList = snapshot.docs.map(doc => ({
+
+            // Get all orders and process them
+            const allOrders = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
-            })).filter(order => order.items && order.items.length > 0);
+            }));
 
-            setOrders(ordersList);
+            console.log(`[OrderRoom Debug] Fetched ${allOrders.length} total orders during refresh`);
+
+            // Filter orders based on criteria matching the Dashboard
+            let filteredOrders = allOrders.filter(order => {
+                // 1. Match status - same as in Dashboard
+                const isKitchenStatus = order.currentStatus?.label === "KITCHEN";
+                if (!isKitchenStatus) {
+                    return false;
+                }
+
+                // 2. Match table ID or variant - EXACT MATCH with Flutter code logic
+                if (tableId) {
+                    // For tables, just match the tableId directly
+                    return order.tableId === tableId;
+                } else if (variant) {
+                    // For variants like Default, zomato, swiggy, etc.
+                    if (variant === 'zomato' || variant === 'swiggy') {
+                        // These are treated as orderSource in Flutter
+                        return order.orderSource?.toLowerCase() === variant.toLowerCase();
+                    } else if (variant === 'default') {
+                        // Default orders have either:
+                        // 1. priceVariant === "Default"
+                        // 2. No priceVariant and no tableId
+                        return order.priceVariant === "Default" ||
+                            (!order.priceVariant && !order.tableId);
+                    } else {
+                        // Other variants are direct price variants
+                        return order.priceVariant === variant;
+                    }
+                }
+
+                return false;
+            });
+
+            // Log for debugging
+            console.log(`[OrderRoom Debug] Filtered to ${filteredOrders.length} orders for ${tableId || variant} during refresh`);
+
+            // Only keep orders with items
+            filteredOrders = filteredOrders.filter(order => order.items && order.items.length > 0);
+            console.log(`[OrderRoom Debug] After filtering items: ${filteredOrders.length} orders during refresh`);
+
+            setOrders(filteredOrders);
             setLoading(false);
         } catch (err) {
-            console.error('Error loading orders:', err);
+            console.error('Error loading orders during refresh:', err);
             setError('Failed to load orders');
             setLoading(false);
         }

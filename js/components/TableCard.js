@@ -154,17 +154,42 @@ function OrderThumb({ order }) {
 function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
     const [isExpanded, setIsExpanded] = React.useState(false);
 
+    // Calculate time ago
+    const orderDate = order.date instanceof Date ? order.date : new Date(order.date?.seconds ? order.date.seconds * 1000 : order.date);
+    const timeAgo = prettyTime(orderDate);
+
+    // Calculate total amount and items
+    const totalAmount = order.items?.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || item.qnt || 1), 0) || 0;
+    const totalItems = order.items?.reduce((sum, item) => sum + (item.quantity || item.qnt || 1), 0) || 0;
+
+    // Order source (price variant or table) - using the same logic as Flutter
+    const orderSource = getOrderSource(order);
+
     const handleOrderClick = () => {
-        setIsExpanded(true);
+        // Create a modal that displays the order details using the OrderDetailsModal component
+        const modalContainer = document.createElement('div');
+        modalContainer.id = 'order-details-modal';
+        document.body.appendChild(modalContainer);
+
+        try {
+            ReactDOM.render(
+                React.createElement(OrderDetailsModal, {
+                    order: order,
+                    onClose: () => {
+                        ReactDOM.unmountComponentAtNode(modalContainer);
+                        document.body.removeChild(modalContainer);
+                    },
+                    onAccept,
+                    onReject,
+                    onDelete,
+                    onPrintBill
+                }),
+                modalContainer
+            );
+        } catch (error) {
+            console.error('Error rendering order details modal:', error);
+        }
     };
-
-    // Calculate total items and amount
-    const totalItems = order.items?.reduce((sum, item) => sum + (item.quantity || 1), 0) || 0;
-    const totalAmount = order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0) || 0;
-
-    // Get time ago duration
-    const duration = getTimeDuration(order.date);
-    const timeAgo = duration ? duration.display + ' ago' : 'Just now';
 
     // Get status color
     const getStatusColor = (status) => {
@@ -224,7 +249,7 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
                             </span>
                         </div>
                         <span className="text-2xs md:text-xs text-gray-500">
-                            {order.orderSource || "In-store"}
+                            {orderSource}
                         </span>
                     </div>
 
@@ -253,18 +278,6 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
                     </div>
                 </div>
             </div>
-
-            {/* Order Details Modal */}
-            {isExpanded && (
-                <OrderDetailsModal
-                    order={order}
-                    onClose={() => setIsExpanded(false)}
-                    onAccept={onAccept}
-                    onReject={onReject}
-                    onDelete={onDelete}
-                    onPrintBill={onPrintBill}
-                />
-            )}
         </div>
     );
 }

@@ -510,4 +510,10 @@ function createSlidingPanel(content, { title, position = 'right', onClose, custo
     panel.addEventListener('click', (e) => e.stopPropagation());
 
     // ... existing code ...
+}
+
+// Get orderSource from an order object, matching the Flutter MOrder orderSource getter
+function getOrderSource(order) {
+    if (!order) return null;
+    return order.priceVariant || order.tableId || null;
 } 
