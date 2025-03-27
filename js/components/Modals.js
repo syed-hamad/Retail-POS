@@ -748,7 +748,7 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
                 className="absolute right-4 top-16 w-48 bg-white rounded-lg shadow-section border border-gray-200 overflow-hidden z-50"
             >
                 <div className="py-1">
-                    <button
+                <button
                         className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
                         onClick={() => {
                             setIsMenuOpen(false);
@@ -757,9 +757,9 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
                     >
                         <i className="ph ph-qr-code text-red-500"></i>
                         <span>Show QR Code</span>
-                    </button>
+                </button>
 
-                    <button
+                            <button
                         className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
                         onClick={() => {
                             if (confirm(`Are you sure you want to delete all orders for ${tableId || variant}?`)) {
@@ -770,9 +770,9 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
                     >
                         <i className="ph ph-trash text-red-500"></i>
                         <span>Clear All Orders</span>
-                    </button>
+                            </button>
 
-                    <button
+                            <button
                         className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
                         onClick={() => {
                             setIsMenuOpen(false);
@@ -781,7 +781,7 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
                     >
                         <i className="ph ph-pencil-simple text-red-500"></i>
                         <span>Rename {tableId ? 'Table' : 'Channel'}</span>
-                    </button>
+                            </button>
 
                     {tableId && (
                         <button
@@ -833,13 +833,13 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
                                 >
                                     <i className="ph ph-arrows-clockwise text-xl"></i>
                                 </button>
-                                <button
-                                    onClick={handleClose}
-                                    className="p-2 hover:bg-gray-100 rounded-full"
+                            <button
+                                onClick={handleClose}
+                                className="p-2 hover:bg-gray-100 rounded-full"
                                     title="Close"
-                                >
-                                    <i className="ph ph-x text-xl"></i>
-                                </button>
+                            >
+                                <i className="ph ph-x text-xl"></i>
+                            </button>
                                 <div className="relative" ref={menuRef}>
                                     <button
                                         className="p-2 hover:bg-gray-100 rounded-full"
@@ -995,12 +995,12 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
                                     };
 
                                     return (
-                                        <OrderView
-                                            key={order.id}
+                                    <OrderView
+                                        key={order.id}
                                             order={mOrder}
-                                            tableId={tableId}
-                                            variant={variant}
-                                        />
+                                        tableId={tableId}
+                                        variant={variant}
+                                    />
                                     );
                                 })}
                             </div>
@@ -1115,7 +1115,7 @@ function OrderView({ order, tableId, variant }) {
                 window.sdk.kot.print(order.id);
                 showToast('KOT Printed successfully', 'success');
             } else {
-                console.log('Print KOT for order:', order.id);
+            console.log('Print KOT for order:', order.id);
                 showToast('KOT Printed successfully (simulation)', 'success');
             }
         } catch (err) {
@@ -1310,11 +1310,11 @@ function OrderView({ order, tableId, variant }) {
 
             // If quantity is 1, remove the item completely
             if (currentQty <= 1) {
-                // Remove the item from the items array
-                const updatedItems = orderData.items.filter(i => i.pid !== item.pid);
-                // Update the order with the modified items array
-                await orderRef.update({ items: updatedItems });
-                showToast(`${item.title} removed from order`);
+            // Remove the item from the items array
+            const updatedItems = orderData.items.filter(i => i.pid !== item.pid);
+            // Update the order with the modified items array
+            await orderRef.update({ items: updatedItems });
+            showToast(`${item.title} removed from order`);
             } else {
                 // Decrease quantity by 1
                 const updatedItems = [...orderData.items];
@@ -1442,29 +1442,29 @@ function OrderView({ order, tableId, variant }) {
             <div className="divide-y divide-pink-50">
                 {order.items?.map((item, index) => (
                     <div key={index} className="p-4 hover:bg-pink-50 transition-colors">
-                        <div className="flex items-center gap-3">
-                            <input
-                                type="checkbox"
-                                checked={item.served || false}
-                                onChange={(e) => toggleItemServed(item, e.target.checked)}
+                            <div className="flex items-center gap-3">
+                                <input
+                                    type="checkbox"
+                                    checked={item.served || false}
+                                    onChange={(e) => toggleItemServed(item, e.target.checked)}
                                 className="w-5 h-5 rounded border-gray-300 text-red-500 focus:ring-red-500 focus:ring-offset-0"
-                                id={`item-${order.id}-${index}`}
-                            />
+                                    id={`item-${order.id}-${index}`}
+                                />
                             <div className="w-14 h-14 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
-                                {getItemImage(item) ? (
-                                    <img
-                                        src={getItemImage(item)}
-                                        alt={item.title}
-                                        className="w-full h-full object-cover"
-                                        onError={(e) => {
-                                            e.target.onerror = null;
+                                    {getItemImage(item) ? (
+                                        <img
+                                            src={getItemImage(item)}
+                                            alt={item.title}
+                                            className="w-full h-full object-cover"
+                                            onError={(e) => {
+                                                e.target.onerror = null;
                                             e.target.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="%23ccc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
-                                        }}
-                                    />
-                                ) : (
+                                            }}
+                                        />
+                                    ) : (
                                     <i className={`ph ${getCategoryIcon(item)} text-gray-400 text-xl`}></i>
-                                )}
-                            </div>
+                                    )}
+                                </div>
                             <div className="flex-1 min-w-0">
                                 <h4 className="font-medium text-gray-800 truncate">{item.title}</h4>
                                 <div className="flex items-center mt-1">
@@ -1475,7 +1475,7 @@ function OrderView({ order, tableId, variant }) {
                                             <span className="text-sm text-gray-600">{item.cat}</span>
                                         </>
                                     )}
-                                </div>
+                            </div>
                                 {item.veg !== undefined && (
                                     <div className="mt-1">
                                         <span className={`inline-block w-4 h-4 border ${item.veg ? 'border-green-500' : 'border-red-500'} p-0.5 rounded-sm`}>
@@ -1486,23 +1486,23 @@ function OrderView({ order, tableId, variant }) {
                             </div>
                             <div className="flex items-center">
                                 <div className="bg-gray-100 rounded-full px-1 py-0.5 flex items-center gap-1">
-                                    <button
+                                <button
                                         className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-full"
-                                        onClick={() => handleRemoveItem(item)}
-                                        aria-label="Remove item"
-                                    >
-                                        <i className="ph ph-minus"></i>
-                                    </button>
+                                    onClick={() => handleRemoveItem(item)}
+                                    aria-label="Remove item"
+                                >
+                                    <i className="ph ph-minus"></i>
+                                </button>
                                     <span className="w-8 text-center font-medium">
                                         {item.quantity || item.qnt || 1}
                                     </span>
-                                    <button
+                                <button
                                         className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-full"
-                                        onClick={() => handleAddItem(item)}
-                                        aria-label="Add item"
-                                    >
-                                        <i className="ph ph-plus"></i>
-                                    </button>
+                                    onClick={() => handleAddItem(item)}
+                                    aria-label="Add item"
+                                >
+                                    <i className="ph ph-plus"></i>
+                                </button>
                                 </div>
                             </div>
                         </div>
@@ -1636,8 +1636,8 @@ function CustomerSearch({ isOpen, onClose, onSelectCustomer }) {
     return (
         <div
             className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${isOpen ? 'visible' : 'invisible'}`}
-            onClick={onClose}
-        >
+                        onClick={onClose}
+                    >
             <div className="fixed inset-0 bg-black bg-opacity-50"></div>
             <div className="bg-section-bg w-full max-w-md rounded-lg shadow-section overflow-hidden relative z-10" onClick={e => e.stopPropagation()}>
                 <div className="p-4">
@@ -1645,130 +1645,130 @@ function CustomerSearch({ isOpen, onClose, onSelectCustomer }) {
                         <h2 className="text-xl font-bold">Select Customer</h2>
                         <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
                             <i className="ph ph-x text-xl"></i>
-                        </button>
+                    </button>
+                </div>
+
+                {error && (
+                    <div className="mb-4 p-2 bg-red-50 text-red-600 rounded">
+                        {error}
                     </div>
+                )}
 
-                    {error && (
-                        <div className="mb-4 p-2 bg-red-50 text-red-600 rounded">
-                            {error}
+                {!showAddForm ? (
+                    <>
+                        <div className="mb-4">
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    value={searchTerm}
+                                    onChange={e => setSearchTerm(e.target.value)}
+                                    placeholder="Search by name or phone"
+                                    className="w-full px-3 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <i className="ph ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                            </div>
                         </div>
-                    )}
 
-                    {!showAddForm ? (
-                        <>
-                            <div className="mb-4">
-                                <div className="relative">
-                                    <input
-                                        type="text"
-                                        value={searchTerm}
-                                        onChange={e => setSearchTerm(e.target.value)}
-                                        placeholder="Search by name or phone"
-                                        className="w-full px-3 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    />
-                                    <i className="ph ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                        <div className="max-h-60 overflow-y-auto mb-4">
+                            {loading ? (
+                                <div className="p-4 text-center">
+                                    <div className="animate-spin inline-block w-6 h-6 border-3 border-primary border-t-transparent rounded-full"></div>
                                 </div>
-                            </div>
-
-                            <div className="max-h-60 overflow-y-auto mb-4">
-                                {loading ? (
-                                    <div className="p-4 text-center">
-                                        <div className="animate-spin inline-block w-6 h-6 border-3 border-primary border-t-transparent rounded-full"></div>
-                                    </div>
-                                ) : customers.length > 0 ? (
-                                    <div className="space-y-2">
-                                        {customers.map(customer => (
-                                            <div
-                                                key={customer.id}
-                                                className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
-                                                onClick={() => handleSelectCustomer(customer)}
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                                                        <i className="ph ph-user text-blue-600"></i>
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="font-medium">{customer.name}</h4>
-                                                        <p className="text-sm text-gray-600">{customer.phone}</p>
-                                                    </div>
-                                                    {customer.orderCount > 0 && (
-                                                        <div className="ml-auto text-right">
-                                                            <span className="text-sm text-gray-600">{customer.orderCount} orders</span>
-                                                            <p className="text-sm font-medium">₹{customer.totalSpent}</p>
-                                                        </div>
-                                                    )}
+                            ) : customers.length > 0 ? (
+                                <div className="space-y-2">
+                                    {customers.map(customer => (
+                                        <div
+                                            key={customer.id}
+                                            className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
+                                            onClick={() => handleSelectCustomer(customer)}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                                    <i className="ph ph-user text-blue-600"></i>
                                                 </div>
+                                                <div>
+                                                    <h4 className="font-medium">{customer.name}</h4>
+                                                    <p className="text-sm text-gray-600">{customer.phone}</p>
+                                                </div>
+                                                {customer.orderCount > 0 && (
+                                                    <div className="ml-auto text-right">
+                                                        <span className="text-sm text-gray-600">{customer.orderCount} orders</span>
+                                                        <p className="text-sm font-medium">₹{customer.totalSpent}</p>
+                                                    </div>
+                                                )}
                                             </div>
-                                        ))}
-                                    </div>
-                                ) : searchTerm.length >= 2 ? (
-                                    <div className="p-4 text-center text-gray-500">
-                                        No customers found
-                                    </div>
-                                ) : (
-                                    <div className="p-4 text-center text-gray-500">
-                                        Type at least 2 characters to search
-                                    </div>
-                                )}
-                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : searchTerm.length >= 2 ? (
+                                <div className="p-4 text-center text-gray-500">
+                                    No customers found
+                                </div>
+                            ) : (
+                                <div className="p-4 text-center text-gray-500">
+                                    Type at least 2 characters to search
+                                </div>
+                            )}
+                        </div>
 
+                        <button
+                            className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                            onClick={() => setShowAddForm(true)}
+                        >
+                            Add New Customer
+                        </button>
+                    </>
+                ) : (
+                    <>
+                        <div className="space-y-4 mb-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Name
+                                </label>
+                                <input
+                                    type="text"
+                                    value={newCustomer.name}
+                                    onChange={e => setNewCustomer({ ...newCustomer, name: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Enter customer name"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Phone
+                                </label>
+                                <input
+                                    type="tel"
+                                    value={newCustomer.phone}
+                                    onChange={e => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Enter phone number"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3">
                             <button
-                                className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                                onClick={() => setShowAddForm(true)}
+                                className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                                onClick={() => setShowAddForm(false)}
+                                disabled={loading}
                             >
-                                Add New Customer
+                                Cancel
                             </button>
-                        </>
-                    ) : (
-                        <>
-                            <div className="space-y-4 mb-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Name
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={newCustomer.name}
-                                        onChange={e => setNewCustomer({ ...newCustomer, name: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        placeholder="Enter customer name"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Phone
-                                    </label>
-                                    <input
-                                        type="tel"
-                                        value={newCustomer.phone}
-                                        onChange={e => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        placeholder="Enter phone number"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="flex gap-3">
-                                <button
-                                    className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                                    onClick={() => setShowAddForm(false)}
-                                    disabled={loading}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                                    onClick={handleCreateCustomer}
-                                    disabled={loading}
-                                >
-                                    {loading ? (
-                                        <div className="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
-                                    ) : (
-                                        'Create Customer'
-                                    )}
-                                </button>
-                            </div>
-                        </>
-                    )}
+                            <button
+                                className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                onClick={handleCreateCustomer}
+                                disabled={loading}
+                            >
+                                {loading ? (
+                                    <div className="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
+                                ) : (
+                                    'Create Customer'
+                                )}
+                            </button>
+                        </div>
+                    </>
+                )}
                 </div>
             </div>
         </div>
@@ -2960,7 +2960,7 @@ window.AddTableModal = AddTableModal;
 window.RenameRoomModal = RenameRoomModal;
 window.OrderRoom = OrderRoom;
 window.OrderView = OrderView;
-window.CustomerSearch = CustomerSearch;
+window.CustomerSearch = CustomerSearch; 
 
 // Context Menu Component
 function ContextMenu() {

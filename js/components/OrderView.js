@@ -115,11 +115,11 @@ function OrderView({ order, tableId, variant, onClose }) {
                     <div className="flex items-center">
                         <span className="text-lg font-bold text-gray-800">
                             Bill No: <span className="text-red-500">#{order.billNo}</span>
-                        </span>
+                                </span>
                         <span className="ml-2 px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
                             Served
-                        </span>
-                    </div>
+                                </span>
+                            </div>
                     <div className="flex items-center text-sm text-gray-600 mt-1">
                         <span>{order.date?.toLocaleString()}</span>
                         <span className="mx-2">•</span>
@@ -133,9 +133,9 @@ function OrderView({ order, tableId, variant, onClose }) {
                 >
                     <i className="ph ph-plus-circle text-2xl" />
                 </button>
-            </div>
+                </div>
 
-            {/* Progress Bar */}
+                {/* Progress Bar */}
             <div className="mb-4">
                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div
@@ -143,60 +143,60 @@ function OrderView({ order, tableId, variant, onClose }) {
                         style={{ width: `${(order.servedItems / order.totalItems) * 100}%` }}
                     />
                 </div>
-            </div>
+                </div>
 
             {/* Order Items */}
             <div className="space-y-3 mb-4">
-                {order.items.map((item, index) => (
+                    {order.items.map((item, index) => (
                     <div key={index} className="flex items-center gap-3 p-3 hover:bg-pink-50 rounded-xl border border-gray-100 shadow-sm">
-                        <input
-                            type="checkbox"
-                            checked={item.served}
+                                    <input
+                                        type="checkbox"
+                                        checked={item.served}
                             onChange={(e) => handleServeStatusChange(item, e.target.checked)}
                             className="w-5 h-5 text-red-500 rounded border-gray-300 focus:ring-red-500"
                         />
 
                         <div className="w-14 h-14 rounded-lg overflow-hidden bg-gray-100">
-                            <img
-                                src={item.thumb}
-                                alt={item.title}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                    e.target.onerror = null;
+                                            <img
+                                                src={item.thumb}
+                                                alt={item.title}
+                                                className="w-full h-full object-cover"
+                                                onError={(e) => {
+                                                    e.target.onerror = null;
                                     e.target.src = 'https://via.placeholder.com/150';
-                                }}
-                            />
-                        </div>
+                                                }}
+                                            />
+                                            </div>
 
                         <div className="flex-1">
                             <div className="font-medium text-gray-800">{item.title}</div>
                             <div className="text-sm text-gray-600">
                                 <span className="font-medium text-red-500">₹{item.price}</span> • {item.cat || 'Uncategorized'}
-                            </div>
-                        </div>
+                                    </div>
+                                </div>
 
                         <div className="flex items-center gap-2">
                             <div className="bg-gray-100 rounded-full px-1 py-0.5 flex items-center gap-1">
-                                <button
+                                    <button
                                     onClick={() => handleQuantityChange(item, false)}
                                     className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-full"
                                 >
                                     <i className="ph ph-minus text-lg" />
-                                </button>
+                                    </button>
                                 <span className="w-8 text-center font-medium">
                                     {item.qnt}
                                 </span>
-                                <button
+                                    <button
                                     onClick={() => handleQuantityChange(item, true)}
                                     className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-full"
                                 >
                                     <i className="ph ph-plus text-lg" />
-                                </button>
+                                    </button>
+                            </div>
                             </div>
                         </div>
-                    </div>
-                ))}
-            </div>
+                    ))}
+                </div>
 
             {/* Order Summary */}
             <div className="border-t pt-4">
@@ -204,11 +204,11 @@ function OrderView({ order, tableId, variant, onClose }) {
                     <span>Sub Total:</span>
                     <span className="text-red-500">₹{order.subTotal}</span>
                 </div>
-            </div>
+                </div>
 
-            {/* Action Buttons */}
+                {/* Action Buttons */}
             <div className="flex gap-2 mt-4">
-                <button
+                        <button
                     onClick={async () => {
                         try {
                             // Try Bluetooth printing first if available
@@ -255,15 +255,15 @@ function OrderView({ order, tableId, variant, onClose }) {
                     className="flex-1 py-2.5 border border-red-500 text-red-500 rounded-lg font-medium hover:bg-red-50 transition-colors"
                 >
                     <i className="ph ph-printer mr-2"></i>
-                    Print KOT
-                </button>
-                <button
+                            Print KOT
+                        </button>
+                        <button
                     onClick={() => setShowCheckout(true)}
                     className="flex-1 py-2.5 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition-colors"
-                >
+                        >
                     <i className="ph ph-credit-card mr-2"></i>
-                    Checkout
-                </button>
+                            Checkout
+                        </button>
             </div>
 
             {/* Checkout Sheet */}
