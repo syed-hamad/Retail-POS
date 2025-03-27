@@ -519,6 +519,10 @@ function AddInventoryModal({ isOpen, onClose, onSave, editItem = null }) {
 
 // OrderRoom Modal Component
 function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
+    const { getOrdersForSource, isLoading: contextLoading } = window.useOrders ? window.useOrders() : {
+        getOrdersForSource: () => [],
+        isLoading: true
+    };
     const [orders, setOrders] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState(null);
@@ -540,138 +544,23 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
         };
     }, []);
 
-    // Set up real-time listener for orders (equivalent to StreamBuilder in Flutter)
+    // Use OrderContext to get orders for this table/variant
     React.useEffect(() => {
         if (!isOpen) return;
 
-        let unsubscribe = () => { };
+        try {
+            // Get orders for this table or variant from context
+            const filteredOrders = getOrdersForSource(tableId, variant);
+            console.log(`[OrderRoom] Using context data: ${filteredOrders.length} orders for ${tableId || variant}`);
 
-        // Immediately invoked async function
-        (async () => {
-            try {
-                // Create a more general query first to get all recent orders
-                let query = window.sdk.collection("Orders")
-                    .orderBy("date", "desc")
-                    .limit(100);
-
-                const snapshot = await query.get();
-
-                // Get all orders and process them
-                const allOrders = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
-
-                console.log(`[OrderRoom Debug] Fetched ${allOrders.length} total orders`);
-
-                // For debugging: Check how each order's priceVariant is set
-                if (variant && !tableId) {
-                    console.log(`[OrderRoom Debug] Looking for variant "${variant}"`);
-                    allOrders.forEach(order => {
-                        if (order.currentStatus?.label === "KITCHEN") {
-                            console.log(`[OrderRoom Debug] Order ${order.id}: priceVariant="${order.priceVariant || 'NONE'}", tableId="${order.tableId || 'NONE'}"`);
-                        }
-                    });
-                }
-
-                // Filter orders based on criteria matching the Dashboard
-                let filteredOrders = allOrders.filter(order => {
-                    // 1. Match status - same as in Dashboard
-                    const isKitchenStatus = order.currentStatus?.label === "KITCHEN";
-                    if (!isKitchenStatus) return false;
-
-                    // 2. Match table ID or variant - EXACTLY matching Dashboard.js logic
-                    if (tableId) {
-                        return order.tableId === tableId;
-                    } else if (variant) {
-                        // For explicit price variant assignments
-                        if (order.priceVariant === variant) {
-                            return true;
-                        }
-
-                        // Special case for Default: no priceVariant AND no tableId
-                        if (variant === 'Default' && !order.priceVariant && !order.tableId) {
-                            return true;
-                        }
-
-                        return false;
-                    }
-                    return false;
-                });
-
-                // Only keep orders with items - Dashboard now has the same filter
-                filteredOrders = filteredOrders.filter(order => order.items && order.items.length > 0);
-
-                console.log(`[OrderRoom Debug] Filtered to ${filteredOrders.length} orders for ${tableId || variant}`);
-                setOrders(filteredOrders);
-                setLoading(false);
-
-                // After loading initial data, set up a real-time listener for new changes
-                let realtimeQuery = window.sdk.collection("Orders")
-                    .where("currentStatus.label", "==", "KITCHEN")
-                    .orderBy("date", "desc")
-                    .limit(50);
-
-                if (tableId) {
-                    realtimeQuery = realtimeQuery.where("tableId", "==", tableId);
-                } else if (variant && variant.toLowerCase() !== 'default') {
-                    realtimeQuery = realtimeQuery.where("priceVariant", "==", variant);
-                }
-
-                // Set up the real-time listener
-                unsubscribe = realtimeQuery.onSnapshot(
-                    (snapshotUpdate) => {
-                        // Map documents to objects and filter for ones with items
-                        const newOrdersList = snapshotUpdate.docs
-                            .map(doc => ({ id: doc.id, ...doc.data() }))
-                            .filter(order => order.items && order.items.length > 0);
-
-                        // Apply the same filtering logic as initial load
-                        let updatedOrders = newOrdersList;
-                        if (variant) {
-                            updatedOrders = newOrdersList.filter(order => {
-                                // For explicit price variant assignments
-                                if (order.priceVariant === variant) {
-                                    return true;
-                                }
-
-                                // Special case for Default: no priceVariant AND no tableId
-                                if (variant === 'Default' && !order.priceVariant && !order.tableId) {
-                                    return true;
-                                }
-
-                                return false;
-                            });
-                        }
-
-                        console.log(`[OrderRoom Debug] Real-time update: ${updatedOrders.length} orders`);
-                        setOrders(updatedOrders);
-                    },
-                    (err) => {
-                        console.error('Error in real-time listener:', err);
-                    }
-                );
-            } catch (err) {
-                console.error('Error loading orders:', err);
-                setError('Failed to load orders');
-                setLoading(false);
-            }
-        })();
-
-        return () => unsubscribe();
-    }, [isOpen, tableId, variant]);
-
-    // Set up refresh interval (every 30 seconds)
-    React.useEffect(() => {
-        if (!isOpen) return;
-
-        const intervalId = setInterval(() => {
-            console.log('Refreshing orders data...');
-            // The real-time listener will handle the refresh
-        }, 30000);
-
-        return () => clearInterval(intervalId);
-    }, [isOpen]);
+            setOrders(filteredOrders);
+            setLoading(false);
+        } catch (err) {
+            console.error('[OrderRoom] Error getting orders from context:', err);
+            setError('Failed to load orders');
+            setLoading(false);
+        }
+    }, [isOpen, tableId, variant, getOrdersForSource, contextLoading]);
 
     // Add click event listener to close menu when clicking outside
     React.useEffect(() => {
@@ -739,54 +628,14 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
     const loadOrders = async () => {
         setLoading(true);
         try {
-            // Create a more general query first to get all recent orders
-            let query = window.sdk.collection("Orders")
-                .orderBy("date", "desc")
-                .limit(100);
-
-            const snapshot = await query.get();
-
-            // Get all orders and process them
-            const allOrders = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-
-            console.log(`[OrderRoom Debug] Fetched ${allOrders.length} total orders during refresh`);
-
-            // Filter orders based on criteria matching the Dashboard
-            let filteredOrders = allOrders.filter(order => {
-                // 1. Match status - same as in Dashboard
-                const isKitchenStatus = order.currentStatus?.label === "KITCHEN";
-                if (!isKitchenStatus) return false;
-
-                // 2. Match table ID or variant - EXACTLY matching Dashboard.js logic
-                if (tableId) {
-                    return order.tableId === tableId;
-                } else if (variant) {
-                    // For explicit price variant assignments
-                    if (order.priceVariant === variant) {
-                        return true;
-                    }
-
-                    // Special case for Default: no priceVariant AND no tableId
-                    if (variant === 'Default' && !order.priceVariant && !order.tableId) {
-                        return true;
-                    }
-
-                    return false;
-                }
-                return false;
-            });
-
-            // Only keep orders with items - Dashboard now has the same filter
-            filteredOrders = filteredOrders.filter(order => order.items && order.items.length > 0);
-
-            console.log(`[OrderRoom Debug] Refresh - filtered to ${filteredOrders.length} orders for ${tableId || variant}`);
-            setOrders(filteredOrders);
-            setLoading(false);
+            // Get fresh data from context
+            const freshOrders = getOrdersForSource(tableId, variant);
+            console.log(`[OrderRoom] Refreshed from context: ${freshOrders.length} orders`);
+            setOrders(freshOrders);
         } catch (err) {
             console.error('Error reloading orders:', err);
+            setError('Failed to load orders');
+        } finally {
             setLoading(false);
         }
     };
@@ -989,19 +838,29 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
             <div className="absolute right-0 top-0 h-full w-full md:w-2/3 lg:w-1/2 bg-section-bg shadow-section overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="sticky top-0 bg-white border-b z-10">
                     <div className="p-4 flex items-center justify-between">
-                        <h2 className="text-xl font-semibold flex items-center gap-2">
-                            {variant ? (
-                                <><i className="ph ph-storefront text-blue-600"></i> {variant}</>
-                            ) : (
-                                <><i className="ph ph-table text-blue-600"></i> Table {tableId}</>
-                            )}
+                        <h2 className="text-xl font-semibold">
+                            {variant || `Table ${tableId}`}
                         </h2>
-                        <div className="flex items-center">
-                            {renderContextMenu()}
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={loadOrders}
+                                className="p-2 hover:bg-gray-100 rounded-full"
+                                title="Refresh Orders"
+                            >
+                                <i className="ph ph-arrows-clockwise text-xl"></i>
+                            </button>
+                            <div className="relative" ref={menuRef}>
+                                <button
+                                    className="p-2 hover:bg-gray-100 rounded-full"
+                                    onClick={() => setIsMenuOpen(!isMenuOpen)}
+                                >
+                                    <i className="ph ph-dots-three-vertical text-xl"></i>
+                                </button>
+                                {isMenuOpen && renderContextMenu()}
+                            </div>
                             <button
                                 onClick={handleClose}
                                 className="p-2 hover:bg-gray-100 rounded-full"
-                                aria-label="Close"
                             >
                                 <i className="ph ph-x text-xl"></i>
                             </button>
@@ -3072,4 +2931,83 @@ window.AddTableModal = AddTableModal;
 window.RenameRoomModal = RenameRoomModal;
 window.OrderRoom = OrderRoom;
 window.OrderView = OrderView;
-window.CustomerSearch = CustomerSearch; 
+window.CustomerSearch = CustomerSearch;
+
+// Context Menu Component
+function ContextMenu() {
+    return (
+        <div className="relative" ref={menuRef}>
+            <button
+                className="p-2 hover:bg-gray-100 rounded-full"
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+            >
+                <i className="ph ph-dots-three-vertical text-xl"></i>
+            </button>
+            {isMenuOpen && renderContextMenu()}
+        </div>
+    );
+}
+
+const renderContextMenu = () => {
+    return (
+        <div
+            className="absolute right-0 top-10 w-48 bg-white rounded-lg shadow-section border border-gray-200 overflow-hidden z-50"
+        >
+            <div className="py-1">
+                <button
+                    className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
+                    onClick={() => {
+                        setIsMenuOpen(false);
+                        handleShowQR();
+                    }}
+                >
+                    <i className="ph ph-qr-code text-red-500"></i>
+                    <span>Show QR Code</span>
+                </button>
+
+                <button
+                    className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
+                    onClick={() => {
+                        if (confirm(`Are you sure you want to delete all orders for ${tableId || variant}?`)) {
+                            confirmDelete();
+                        }
+                        setIsMenuOpen(false);
+                    }}
+                >
+                    <i className="ph ph-trash text-red-500"></i>
+                    <span>Clear All Orders</span>
+                </button>
+
+                <button
+                    className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
+                    onClick={() => {
+                        setIsMenuOpen(false);
+                        showRenameRoomModal(tableId, variant);
+                    }}
+                >
+                    <i className="ph ph-pencil-simple text-red-500"></i>
+                    <span>Rename {tableId ? 'Table' : 'Channel'}</span>
+                </button>
+
+                {tableId && (
+                    <button
+                        className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
+                        onClick={() => {
+                            if (confirm(`Are you sure you want to delete table ${tableId}?`)) {
+                                deleteTable(tableId);
+                                handleClose();
+                            }
+                            setIsMenuOpen(false);
+                        }}
+                    >
+                        <i className="ph ph-trash text-red-500"></i>
+                        <span>Delete Table</span>
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// ... existing code ...
+// ... existing code ...

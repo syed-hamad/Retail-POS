@@ -1,7 +1,11 @@
+// Main JS App Entry Point
+
 // Render the main App component
 ReactDOM.createRoot(document.getElementById('root')).render(
     <ProfileProvider>
-        <App />
+        <OrderProvider>
+            <App />
+        </OrderProvider>
     </ProfileProvider>
 );
 

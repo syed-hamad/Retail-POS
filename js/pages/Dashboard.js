@@ -1,13 +1,25 @@
 // Dashboard Component
 function Dashboard() {
     const { profile: seller, tables: profileTables } = window.useProfile ? window.useProfile() : { profile: null, tables: [] };
-    const [tables, setTables] = React.useState([]);
-    const [channels, setChannels] = React.useState([]);
-    const [loading, setLoading] = React.useState(true);
+    const {
+        activeOrders,
+        completedOrders,
+        isLoading,
+        error: orderError,
+        getOrdersByTableAndChannel,
+        loadCompletedOrders
+    } = window.useOrders ? window.useOrders() : {
+        activeOrders: [],
+        completedOrders: [],
+        isLoading: true,
+        error: null,
+        getOrdersByTableAndChannel: () => ({ tableOrders: {}, channelOrders: {} }),
+        loadCompletedOrders: () => { }
+    };
+
     const [error, setError] = React.useState(null);
     const [isProfileOpen, setIsProfileOpen] = React.useState(false);
     const [showCompletedOrders, setShowCompletedOrders] = React.useState(false);
-    const [completedOrders, setCompletedOrders] = React.useState([]);
     const [qrOrders, setQrOrders] = React.useState([]);
     const [loadingQrOrders, setLoadingQrOrders] = React.useState(true);
     const [errorQrOrders, setErrorQrOrders] = React.useState(null);
@@ -37,12 +49,130 @@ function Dashboard() {
         avgServiceTimeTrend: 0
     });
 
+    // Computed state for tables and channels
+    const [tables, setTables] = React.useState([]);
+    const [channels, setChannels] = React.useState([]);
+
     // State for date filtering in completed orders
     const [dateFilter, setDateFilter] = React.useState('7days'); // Options: today, yesterday, 7days, custom
     const [customDateRange, setCustomDateRange] = React.useState({
         startDate: null,
         endDate: null
     });
+
+    // Use the OrderContext data to update tables and channels
+    React.useEffect(() => {
+        if (!seller) return;
+
+        try {
+            // Get orders grouped by table and channel
+            const { tableOrders, channelOrders } = getOrdersByTableAndChannel();
+
+            // Get price variants from seller profile
+            const priceVariants = (seller?.priceVariants || [])
+                .map(v => v.title)
+                .filter(Boolean);
+
+            // Always ensure we have a Default variant
+            if (!priceVariants.includes('Default')) {
+                priceVariants.unshift('Default');
+            }
+
+            // Create channel tiles for price variants
+            const normalizedNames = new Set();
+            const orderChannels = [];
+
+            // Add all price variants as channels
+            priceVariants.forEach(variant => {
+                const normalizedName = variant.toLowerCase();
+                if (!normalizedNames.has(normalizedName)) {
+                    normalizedNames.add(normalizedName);
+                    orderChannels.push({
+                        id: variant,
+                        title: variant,
+                        type: 'price_variant',
+                        isChannel: true
+                    });
+                }
+            });
+
+            // Convert seller tables to the format we need
+            const formattedTables = (seller?.tables || []).map(table => ({
+                id: table.id || table.title,
+                title: table.title,
+                desc: table.desc,
+                type: table.type || 'dine_in',
+                section: table.section || 'ac',
+                isTable: true
+            }));
+
+            // Assign orders to tables
+            const tablesWithOrders = formattedTables.map(table => {
+                // Get orders for this table
+                const tableOrdersList = tableOrders[table.id] || [];
+
+                // Find the oldest order date for color-coding
+                let oldestOrderDate = null;
+                if (tableOrdersList.length > 0) {
+                    oldestOrderDate = tableOrdersList
+                        .map(o => o.currentStatus?.date)
+                        .reduce((a, b) => {
+                            const dateA = parseDate(a);
+                            const dateB = parseDate(b);
+                            return dateA && dateB && dateA < dateB ? a : b;
+                        }, tableOrdersList[0].currentStatus?.date);
+                }
+
+                return {
+                    ...table,
+                    orders: tableOrdersList,
+                    duration: oldestOrderDate ? getTimeDuration(oldestOrderDate) : null
+                };
+            });
+
+            // Assign orders to channels
+            const channelsWithOrders = orderChannels.map(channel => {
+                // Get orders for this channel
+                const channelOrdersList = channelOrders[channel.id] || [];
+
+                // Find the oldest order date for color-coding
+                let oldestOrderDate = null;
+                if (channelOrdersList.length > 0) {
+                    oldestOrderDate = channelOrdersList
+                        .map(o => o.currentStatus?.date)
+                        .reduce((a, b) => {
+                            const dateA = parseDate(a);
+                            const dateB = parseDate(b);
+                            return dateA && dateB && dateA < dateB ? a : b;
+                        }, channelOrdersList[0].currentStatus?.date);
+                }
+
+                return {
+                    ...channel,
+                    orders: channelOrdersList,
+                    duration: oldestOrderDate ? getTimeDuration(oldestOrderDate) : null
+                };
+            });
+
+            // Update state
+            setTables(tablesWithOrders);
+            setChannels(channelsWithOrders);
+
+            // Update dashboard metrics
+            const metrics = calculateDashboardMetrics([...activeOrders, ...completedOrders]);
+            setDashboardMetrics(metrics);
+        } catch (err) {
+            console.error('Error processing orders:', err);
+            setError('Failed to process orders data');
+        }
+    }, [seller, activeOrders, getOrdersByTableAndChannel]);
+
+    // Load completed orders when showCompletedOrders is enabled
+    React.useEffect(() => {
+        if (showCompletedOrders) {
+            loadCompletedOrders(true);
+        }
+    }, [showCompletedOrders, loadCompletedOrders]);
 
     // Function to show the add table modal
     const showAddTableModal = () => {
@@ -306,182 +436,6 @@ function Dashboard() {
             };
         }
     };
-
-    // Load tables and orders data
-    React.useEffect(() => {
-        async function fetchData() {
-            try {
-                const ordersSnapshot = await sdk.collection("Orders")
-                    .orderBy("date", "desc")
-                    .limit(100)
-                    .get();
-
-                const allOrders = ordersSnapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
-
-                // Calculate dashboard metrics
-                const metrics = calculateDashboardMetrics(allOrders);
-                setDashboardMetrics(metrics);
-
-                // Filter orders by status - only show orders with KITCHEN status
-                // This matches the Flutter implementation: .where("currentStatus.label", isEqualTo: OrderStatus.KITCHEN.name)
-                const kitchenOrders = allOrders.filter(order => {
-                    return order.currentStatus?.label === 'KITCHEN';
-                });
-
-                pp('All orders:', allOrders.length);
-                pp('Kitchen orders:', kitchenOrders.length);
-
-                // Use real tables from seller object instead of fake data
-                const realTables = seller?.tables || [];
-
-                // Get price variants from seller profile
-                const priceVariants = (seller?.priceVariants || [])
-                    .map(v => v.title)
-                    .filter(Boolean);
-
-                // Always ensure we have a Default variant
-                if (!priceVariants.includes('Default')) {
-                    priceVariants.unshift('Default');
-                }
-
-                // Create channel tiles for price variants without any hardcoding
-                const normalizedNames = new Set();
-                const orderChannels = [];
-
-                // Add all price variants as channels
-                priceVariants.forEach(variant => {
-                    const normalizedName = variant.toLowerCase();
-                    if (!normalizedNames.has(normalizedName)) {
-                        normalizedNames.add(normalizedName);
-                        orderChannels.push({
-                            id: variant,
-                            title: variant,
-                            type: 'price_variant',
-                            isChannel: true
-                        });
-                    }
-                });
-
-                // Convert seller tables to the format we need - ONLY TABLES, not channels
-                const formattedTables = realTables.map(table => ({
-                    id: table.id || table.title,
-                    title: table.title,
-                    desc: table.desc,
-                    type: table.type || 'dine_in',
-                    section: table.section || 'ac',
-                    isTable: true
-                }));
-
-                // Process each order to ensure it has the orderSource property
-                kitchenOrders.forEach(order => {
-                    order.orderSource = order.priceVariant || order.tableId;
-                });
-
-                // Group orders for tables and channels separately
-                const tableOrders = {};
-                const channelOrders = {};
-
-                // First filter out orders without items to ensure consistency with OrderRoom view
-                const ordersWithItems = kitchenOrders.filter(order => order.items && order.items.length > 0);
-                console.log(`Filtered to ${ordersWithItems.length} KITCHEN orders with items`);
-
-                ordersWithItems.forEach(order => {
-                    // 1. Handle table assignments
-                    if (order.tableId) {
-                        if (!tableOrders[order.tableId]) {
-                            tableOrders[order.tableId] = [];
-                        }
-                        tableOrders[order.tableId].push(order);
-                    }
-
-                    // 2. Handle channel assignments with price variants
-                    // 2a. Explicit price variant assignment
-                    if (order.priceVariant) {
-                        const normalizedVariant = order.priceVariant;
-                        if (!channelOrders[normalizedVariant]) {
-                            channelOrders[normalizedVariant] = [];
-                        }
-                        channelOrders[normalizedVariant].push(order);
-                    }
-                    // 2b. Default channel (no priceVariant and no tableId)
-                    else if (!order.tableId) {
-                        if (!channelOrders['Default']) {
-                            channelOrders['Default'] = [];
-                        }
-                        channelOrders['Default'].push(order);
-                    }
-                });
-
-                // Assign orders to tables
-                const tablesWithOrders = formattedTables.map(table => {
-                    // Get orders for this table
-                    const tableOrdersList = tableOrders[table.id] || [];
-
-                    // Find the oldest order date for color-coding
-                    let oldestOrderDate = null;
-                    if (tableOrdersList.length > 0) {
-                        oldestOrderDate = tableOrdersList
-                            .map(o => o.currentStatus?.date)
-                            .reduce((a, b) => {
-                                const dateA = parseDate(a);
-                                const dateB = parseDate(b);
-                                return dateA && dateB && dateA < dateB ? a : b;
-                            }, tableOrdersList[0].currentStatus?.date);
-                    }
-
-                    return {
-                        ...table,
-                        orders: tableOrdersList,
-                        duration: oldestOrderDate ? getTimeDuration(oldestOrderDate) : null
-                    };
-                });
-
-                // Assign orders to channels
-                const channelsWithOrders = orderChannels.map(channel => {
-                    // Get orders for this channel
-                    const channelOrdersList = channelOrders[channel.id] || [];
-
-                    // Find the oldest order date for color-coding
-                    let oldestOrderDate = null;
-                    if (channelOrdersList.length > 0) {
-                        oldestOrderDate = channelOrdersList
-                            .map(o => o.currentStatus?.date)
-                            .reduce((a, b) => {
-                                const dateA = parseDate(a);
-                                const dateB = parseDate(b);
-                                return dateA && dateB && dateA < dateB ? a : b;
-                            }, channelOrdersList[0].currentStatus?.date);
-                    }
-
-                    return {
-                        ...channel,
-                        orders: channelOrdersList,
-                        duration: oldestOrderDate ? getTimeDuration(oldestOrderDate) : null
-                    };
-                });
-
-                // Set tables for the main section and channels for the channels section
-                setTables(tablesWithOrders);
-                setChannels(channelsWithOrders);
-                setLoading(false);
-            } catch (err) {
-                console.error('Error fetching table data:', err);
-                setError('Failed to load table data');
-                setLoading(false);
-            }
-        }
-
-        fetchData();
-
-        // Set up interval to fetch orders every 30 seconds
-        const interval = setInterval(fetchData, 30000);
-
-        // Cleanup interval on component unmount
-        return () => clearInterval(interval);
-    }, [seller]);
 
     // Fetch QR orders
     React.useEffect(() => {
@@ -964,7 +918,7 @@ function Dashboard() {
                             <h2 className="text-lg font-semibold text-gray-800">Order Channels</h2>
                         </div>
                         <div className="p-3">
-                            {loading ? (
+                            {isLoading ? (
                                 <div className="text-center py-10">
                                     <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
                                     <p className="mt-3 text-gray-600">Loading online orders...</p>
@@ -1021,7 +975,7 @@ function Dashboard() {
                             </button>
                         </div>
                         <div className="p-3">
-                            {loading ? (
+                            {isLoading ? (
                                 <div className="text-center py-10">
                                     <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
                                     <p className="mt-3 text-gray-600">Loading tables...</p>
