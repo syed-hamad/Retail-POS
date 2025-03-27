@@ -2,6 +2,7 @@
 function Dashboard() {
     const { profile: seller, tables: profileTables } = window.useProfile ? window.useProfile() : { profile: null, tables: [] };
     const [tables, setTables] = React.useState([]);
+    const [channels, setChannels] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState(null);
     const [isProfileOpen, setIsProfileOpen] = React.useState(false);
@@ -336,90 +337,86 @@ function Dashboard() {
                 // Use real tables from seller object instead of fake data
                 const realTables = seller?.tables || [];
 
-                // Convert seller tables to the format we need
+                // Get price variants from seller profile
+                const priceVariants = (seller?.priceVariants || [])
+                    .map(v => v.title)
+                    .filter(Boolean);
+
+                // Always ensure we have a Default variant
+                if (!priceVariants.includes('Default')) {
+                    priceVariants.unshift('Default');
+                }
+
+                // Create channel tiles for price variants without any hardcoding
+                const normalizedNames = new Set();
+                const orderChannels = [];
+
+                // Add all price variants as channels
+                priceVariants.forEach(variant => {
+                    const normalizedName = variant.toLowerCase();
+                    if (!normalizedNames.has(normalizedName)) {
+                        normalizedNames.add(normalizedName);
+                        orderChannels.push({
+                            id: variant,
+                            title: variant,
+                            type: 'price_variant',
+                            isChannel: true
+                        });
+                    }
+                });
+
+                // Convert seller tables to the format we need - ONLY TABLES, not channels
                 const formattedTables = realTables.map(table => ({
                     id: table.id || table.title,
                     title: table.title,
                     desc: table.desc,
                     type: table.type || 'dine_in',
-                    section: table.section || 'ac'
+                    section: table.section || 'ac',
+                    isTable: true
                 }));
 
-                // Get price variants to add as pseudo-tables for the Order Channels section
-                // This follows the Flutter code's ordersDash() function
-                const priceVariants = (seller?.priceVariants || [])
-                    .map(v => v.title)
-                    .filter(Boolean);
-
-                // Add default variants for aggregators if they don't exist
-                // Always add the default variant as first item, like in the Flutter code
-                const defaultAggregators = [
-                    { id: 'default', title: 'Default', type: 'qr' },
-                    ...priceVariants.filter(v => v !== 'Default').map(v => ({
-                        id: v,
-                        title: v,
-                        type: 'price_variant'
-                    })),
-                    { id: 'zomato', title: 'Zomato', type: 'aggregator' },
-                    { id: 'swiggy', title: 'Swiggy', type: 'aggregator' }
-                ];
-
-                // Combine real tables with default aggregators
-                // Only add default aggregators if they don't already exist in real tables
-                const combinedTables = [
-                    ...formattedTables,
-                    ...defaultAggregators.filter(agg =>
-                        !formattedTables.some(t => t.id === agg.id)
-                    )
-                ];
-
                 // Process each order to ensure it has the orderSource property
-                // This mimics the getter in the MOrder class of Flutter
                 kitchenOrders.forEach(order => {
                     order.orderSource = order.priceVariant || order.tableId;
                 });
 
-                // Group orders by table ID and variant/orderSource to match Flutter behavior
-                const tableOrders = kitchenOrders.reduce((acc, order) => {
-                    // First, handle regular table assignments
+                // Group orders for tables and channels separately
+                const tableOrders = {};
+                const channelOrders = {};
+
+                // First filter out orders without items to ensure consistency with OrderRoom view
+                const ordersWithItems = kitchenOrders.filter(order => order.items && order.items.length > 0);
+                console.log(`Filtered to ${ordersWithItems.length} KITCHEN orders with items`);
+
+                ordersWithItems.forEach(order => {
+                    // 1. Handle table assignments
                     if (order.tableId) {
-                        if (!acc[order.tableId]) {
-                            acc[order.tableId] = [];
+                        if (!tableOrders[order.tableId]) {
+                            tableOrders[order.tableId] = [];
                         }
-                        acc[order.tableId].push(order);
+                        tableOrders[order.tableId].push(order);
                     }
 
-                    // Handle price variants exactly like in Flutter
+                    // 2. Handle channel assignments with price variants
+                    // 2a. Explicit price variant assignment
                     if (order.priceVariant) {
-                        if (!acc[order.priceVariant]) {
-                            acc[order.priceVariant] = [];
+                        const normalizedVariant = order.priceVariant;
+                        if (!channelOrders[normalizedVariant]) {
+                            channelOrders[normalizedVariant] = [];
                         }
-                        acc[order.priceVariant].push(order);
-                    } else if (!order.tableId) {
-                        // No priceVariant and no tableId means it's a Default order
-                        if (!acc['default']) {
-                            acc['default'] = [];
-                        }
-                        acc['default'].push(order);
+                        channelOrders[normalizedVariant].push(order);
                     }
-
-                    // Special handling for Zomato & Swiggy orders
-                    if (order.orderSource === 'zomato') {
-                        if (!acc['zomato']) {
-                            acc['zomato'] = [];
+                    // 2b. Default channel (no priceVariant and no tableId)
+                    else if (!order.tableId) {
+                        if (!channelOrders['Default']) {
+                            channelOrders['Default'] = [];
                         }
-                        acc['zomato'].push(order);
-                    } else if (order.orderSource === 'swiggy') {
-                        if (!acc['swiggy']) {
-                            acc['swiggy'] = [];
-                        }
-                        acc['swiggy'].push(order);
+                        channelOrders['Default'].push(order);
                     }
+                });
 
-                    return acc;
-                }, {});
-
-                const tablesWithOrders = combinedTables.map(table => {
+                // Assign orders to tables
+                const tablesWithOrders = formattedTables.map(table => {
                     // Get orders for this table
                     const tableOrdersList = tableOrders[table.id] || [];
 
@@ -442,7 +439,33 @@ function Dashboard() {
                     };
                 });
 
+                // Assign orders to channels
+                const channelsWithOrders = orderChannels.map(channel => {
+                    // Get orders for this channel
+                    const channelOrdersList = channelOrders[channel.id] || [];
+
+                    // Find the oldest order date for color-coding
+                    let oldestOrderDate = null;
+                    if (channelOrdersList.length > 0) {
+                        oldestOrderDate = channelOrdersList
+                            .map(o => o.currentStatus?.date)
+                            .reduce((a, b) => {
+                                const dateA = parseDate(a);
+                                const dateB = parseDate(b);
+                                return dateA && dateB && dateA < dateB ? a : b;
+                            }, channelOrdersList[0].currentStatus?.date);
+                    }
+
+                    return {
+                        ...channel,
+                        orders: channelOrdersList,
+                        duration: oldestOrderDate ? getTimeDuration(oldestOrderDate) : null
+                    };
+                });
+
+                // Set tables for the main section and channels for the channels section
                 setTables(tablesWithOrders);
+                setChannels(channelsWithOrders);
                 setLoading(false);
             } catch (err) {
                 console.error('Error fetching table data:', err);
@@ -947,81 +970,51 @@ function Dashboard() {
                                     <p className="mt-3 text-gray-600">Loading online orders...</p>
                                 </div>
                             ) : error ? (
-                                <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">
-                                    <p>{error}</p>
+                                <div className="text-center py-10">
+                                    <div className="rounded-full h-10 w-10 bg-red-100 flex items-center justify-center mx-auto">
+                                        <i className="ph ph-x text-red-500 text-xl"></i>
+                                    </div>
+                                    <p className="mt-3 text-gray-600">{error}</p>
                                 </div>
                             ) : (
-                                <div className="overflow-x-auto -mx-3 px-3 pb-2">
-                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1.5 md:gap-2 min-w-[280px] md:min-w-0">
-                                        {tables
-                                            .filter(table => table.type === 'aggregator' || table.type === 'qr')
-                                            .map(table => (
-                                                <div
-                                                    key={table.id}
-                                                    className="cursor-pointer h-full"
-                                                    onClick={() => handleRoomClick(table.id, table.variant)}
-                                                >
-                                                    <div className={`bg-gradient-to-br rounded-xl p-2.5 md:p-3 border border-gray-200 shadow-sm hover:shadow-md transition-all h-full ${table.id === 'default' ? 'from-gray-50 to-white' :
-                                                        table.id === 'zomato' ? 'from-red-50 to-white' :
-                                                            table.id === 'swiggy' ? 'from-orange-50 to-white' :
-                                                                'from-card-bg to-white'
-                                                        }`}>
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-7 h-7 md:w-9 md:h-9 rounded-lg bg-gradient-to-br from-white to-white/80 flex items-center justify-center shadow-sm flex-shrink-0">
-                                                                <i className={`ph ${table.id === 'default' ? 'ph-globe text-gray-500' :
-                                                                    table.id === 'zomato' ? 'ph-pizza text-red-500' :
-                                                                        table.id === 'swiggy' ? 'ph-bicycle text-orange-500' :
-                                                                            'ph-globe text-gray-500'
-                                                                    } text-base md:text-lg`}></i>
-                                                            </div>
-                                                            <div className="flex-1 min-w-0">
-                                                                <h3 className="text-sm md:text-base font-bold text-gray-800 line-clamp-1">
-                                                                    {table.id.charAt(0).toUpperCase() + table.id.slice(1)}
-                                                                </h3>
-                                                                <div className="flex items-center text-xs md:text-sm flex-wrap gap-y-1 mt-1">
-                                                                    {table.orders.length > 0 ? (
-                                                                        <span className="text-red-500 font-medium truncate flex items-center">
-                                                                            <i className="ph ph-shopping-bag text-xs mr-1"></i>
-                                                                            {table.orders.length} {table.orders.length === 1 ? 'order' : 'orders'}
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-gray-500 truncate flex items-center">
-                                                                            <i className="ph ph-tray-empty text-xs mr-1"></i>
-                                                                            No orders
-                                                                        </span>
-                                                                    )}
-                                                                    {table.duration && (
-                                                                        <span className="text-xs text-gray-500 ml-auto flex items-center">
-                                                                            <i className="ph ph-clock text-red-500 text-xs mr-1"></i>
-                                                                            {table.duration.display}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                    </div>
-                                    <div className="md:hidden text-center text-xs text-gray-400 mt-1 flex items-center justify-center">
-                                        <i className="ph ph-arrows-horizontal mr-1 text-gray-300"></i>
-                                        <span>Swipe to see more</span>
-                                    </div>
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                                    {channels
+                                        .filter(channel => channel.isChannel)
+                                        .map(channel => (
+                                            <div
+                                                key={channel.id}
+                                                className="mb-2"
+                                                onClick={() => handleRoomClick(null, channel.id)}
+                                                onContextMenu={(e) => {
+                                                    e.preventDefault();
+                                                    showRenameRoomModal(null, channel.id);
+                                                }}
+                                            >
+                                                <TableCard
+                                                    title={channel.title}
+                                                    orders={channel.orders || []}
+                                                    duration={channel.duration}
+                                                    onTap={() => handleRoomClick(null, channel.id)}
+                                                    onLongPress={() => showRenameRoomModal(null, channel.id)}
+                                                    compact={true}
+                                                />
+                                            </div>
+                                        ))}
                                 </div>
                             )}
                         </div>
                     </div>
 
-                    {/* Dine-In Section */}
+                    {/* Tables Section */}
                     <div className="mb-6 bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
                         <div className="px-3 py-3 border-b border-gray-200 flex items-center justify-between">
                             <div className="flex items-center">
-                                <i className="ph ph-coffee text-red-500 text-xl mr-2"></i>
-                                <h2 className="text-lg font-semibold text-gray-800">Dine In</h2>
+                                <i className="ph ph-table text-red-500 text-xl mr-2"></i>
+                                <h2 className="text-lg font-semibold text-gray-800">Dine In Tables</h2>
                             </div>
                             <button
-                                className="px-2 py-1.5 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg hover:from-red-700 hover:to-red-600 transition-colors flex items-center gap-1.5 text-sm"
                                 onClick={showAddTableModal}
+                                className="px-2 py-1 bg-gradient-to-r from-white to-gray-50 border border-gray-200 text-red-500 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1.5 text-sm shadow-sm"
                             >
                                 <i className="ph ph-plus"></i>
                                 <span>Add Table</span>
@@ -1034,25 +1027,34 @@ function Dashboard() {
                                     <p className="mt-3 text-gray-600">Loading tables...</p>
                                 </div>
                             ) : error ? (
-                                <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">
-                                    <p>{error}</p>
+                                <div className="text-center py-10">
+                                    <div className="rounded-full h-10 w-10 bg-red-100 flex items-center justify-center mx-auto">
+                                        <i className="ph ph-x text-red-500 text-xl"></i>
+                                    </div>
+                                    <p className="mt-3 text-gray-600">{error}</p>
                                 </div>
+                            ) : tables.length === 0 ? (
+                                <NoOrdersFound />
                             ) : (
-                                <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1.5 md:gap-4 overflow-visible">
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                                     {tables
-                                        .filter(table => table.type === 'dine_in')
+                                        .filter(table => table.isTable)
                                         .map(table => (
                                             <div
                                                 key={table.id}
-                                                className="cursor-pointer h-full"
-                                                onClick={() => handleRoomClick(table.id, table.variant)}
+                                                className="mb-2"
+                                                onClick={() => handleRoomClick(table.id, null)}
+                                                onContextMenu={(e) => {
+                                                    e.preventDefault();
+                                                    showRenameRoomModal(table.id, null);
+                                                }}
                                             >
                                                 <TableCard
                                                     title={table.title}
-                                                    orders={table.orders}
+                                                    orders={table.orders || []}
                                                     duration={table.duration}
-                                                    onTap={() => handleRoomClick(table.id, table.variant)}
-                                                    onLongPress={() => showRenameRoomModal(table.id, table.variant)}
+                                                    onTap={() => handleRoomClick(table.id, null)}
+                                                    onLongPress={() => showRenameRoomModal(table.id, null)}
                                                     compact={true}
                                                 />
                                             </div>

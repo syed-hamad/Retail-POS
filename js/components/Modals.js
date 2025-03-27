@@ -564,87 +564,84 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
 
                 console.log(`[OrderRoom Debug] Fetched ${allOrders.length} total orders`);
 
+                // For debugging: Check how each order's priceVariant is set
+                if (variant && !tableId) {
+                    console.log(`[OrderRoom Debug] Looking for variant "${variant}"`);
+                    allOrders.forEach(order => {
+                        if (order.currentStatus?.label === "KITCHEN") {
+                            console.log(`[OrderRoom Debug] Order ${order.id}: priceVariant="${order.priceVariant || 'NONE'}", tableId="${order.tableId || 'NONE'}"`);
+                        }
+                    });
+                }
+
                 // Filter orders based on criteria matching the Dashboard
                 let filteredOrders = allOrders.filter(order => {
                     // 1. Match status - same as in Dashboard
                     const isKitchenStatus = order.currentStatus?.label === "KITCHEN";
-                    if (!isKitchenStatus) {
-                        return false;
-                    }
+                    if (!isKitchenStatus) return false;
 
-                    // 2. Match table ID or variant - EXACT MATCH with Flutter code logic
+                    // 2. Match table ID or variant - EXACTLY matching Dashboard.js logic
                     if (tableId) {
-                        // For tables, just match the tableId directly
                         return order.tableId === tableId;
                     } else if (variant) {
-                        // For variants like Default, zomato, swiggy, etc.
-                        if (variant === 'zomato' || variant === 'swiggy') {
-                            // These are treated as orderSource in Flutter
-                            return order.orderSource?.toLowerCase() === variant.toLowerCase();
-                        } else if (variant === 'default') {
-                            // Default orders have either:
-                            // 1. priceVariant === "Default"
-                            // 2. No priceVariant and no tableId
-                            return order.priceVariant === "Default" ||
-                                (!order.priceVariant && !order.tableId);
-                        } else {
-                            // Other variants are direct price variants
-                            return order.priceVariant === variant;
+                        // For explicit price variant assignments
+                        if (order.priceVariant === variant) {
+                            return true;
                         }
-                    }
 
+                        // Special case for Default: no priceVariant AND no tableId
+                        if (variant === 'Default' && !order.priceVariant && !order.tableId) {
+                            return true;
+                        }
+
+                        return false;
+                    }
                     return false;
                 });
 
-                // Log for debugging
-                console.log(`[OrderRoom Debug] Filtered to ${filteredOrders.length} orders for ${tableId || variant}`);
-
-                // Only keep orders with items
+                // Only keep orders with items - Dashboard now has the same filter
                 filteredOrders = filteredOrders.filter(order => order.items && order.items.length > 0);
-                console.log(`[OrderRoom Debug] After filtering items: ${filteredOrders.length} orders`);
 
+                console.log(`[OrderRoom Debug] Filtered to ${filteredOrders.length} orders for ${tableId || variant}`);
                 setOrders(filteredOrders);
                 setLoading(false);
 
                 // After loading initial data, set up a real-time listener for new changes
-                // This ensures we get both consistent counts (from our initial filter) 
-                // and real-time updates for any new orders or status changes
                 let realtimeQuery = window.sdk.collection("Orders")
                     .where("currentStatus.label", "==", "KITCHEN")
                     .orderBy("date", "desc")
                     .limit(50);
 
-                // Add specific filters for table or variant
                 if (tableId) {
                     realtimeQuery = realtimeQuery.where("tableId", "==", tableId);
-                } else if (variant) {
-                    if (variant !== 'zomato' && variant !== 'swiggy' && variant !== 'default') {
-                        // For price variants, filter normally by priceVariant field
-                        realtimeQuery = realtimeQuery.where("priceVariant", "==", variant);
-                    }
-                    // For zomato, swiggy, and default, we do client-side filtering
-                    // because Firebase doesn't support OR conditions easily
+                } else if (variant && variant.toLowerCase() !== 'default') {
+                    realtimeQuery = realtimeQuery.where("priceVariant", "==", variant);
                 }
 
                 // Set up the real-time listener
                 unsubscribe = realtimeQuery.onSnapshot(
                     (snapshotUpdate) => {
-                        const newOrdersList = snapshotUpdate.docs.map(doc => ({
-                            id: doc.id,
-                            ...doc.data()
-                        })).filter(order => order.items && order.items.length > 0);
+                        // Map documents to objects and filter for ones with items
+                        const newOrdersList = snapshotUpdate.docs
+                            .map(doc => ({ id: doc.id, ...doc.data() }))
+                            .filter(order => order.items && order.items.length > 0);
 
-                        // For special variants, do additional filtering
+                        // Apply the same filtering logic as initial load
                         let updatedOrders = newOrdersList;
                         if (variant) {
-                            if (variant === 'zomato' || variant === 'swiggy') {
-                                updatedOrders = newOrdersList.filter(order =>
-                                    order.orderSource?.toLowerCase() === variant.toLowerCase());
-                            } else if (variant === 'default') {
-                                updatedOrders = newOrdersList.filter(order =>
-                                    order.priceVariant === "Default" ||
-                                    (!order.priceVariant && !order.tableId));
-                            }
+                            updatedOrders = newOrdersList.filter(order => {
+                                // For explicit price variant assignments
+                                if (order.priceVariant === variant) {
+                                    return true;
+                                }
+
+                                // Special case for Default: no priceVariant AND no tableId
+                                if (variant === 'Default' && !order.priceVariant && !order.tableId) {
+                                    return true;
+                                }
+
+                                return false;
+                            });
                         }
 
                         console.log(`[OrderRoom Debug] Real-time update: ${updatedOrders.length} orders`);
@@ -652,7 +649,6 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
                     },
                     (err) => {
                         console.error('Error in real-time listener:', err);
-                        // Don't set error here as we already have the initial data
                     }
                 );
             } catch (err) {
@@ -762,46 +758,35 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
             let filteredOrders = allOrders.filter(order => {
                 // 1. Match status - same as in Dashboard
                 const isKitchenStatus = order.currentStatus?.label === "KITCHEN";
-                if (!isKitchenStatus) {
-                    return false;
-                }
+                if (!isKitchenStatus) return false;
 
-                // 2. Match table ID or variant - EXACT MATCH with Flutter code logic
+                // 2. Match table ID or variant - EXACTLY matching Dashboard.js logic
                 if (tableId) {
-                    // For tables, just match the tableId directly
                     return order.tableId === tableId;
                 } else if (variant) {
-                    // For variants like Default, zomato, swiggy, etc.
-                    if (variant === 'zomato' || variant === 'swiggy') {
-                        // These are treated as orderSource in Flutter
-                        return order.orderSource?.toLowerCase() === variant.toLowerCase();
-                    } else if (variant === 'default') {
-                        // Default orders have either:
-                        // 1. priceVariant === "Default"
-                        // 2. No priceVariant and no tableId
-                        return order.priceVariant === "Default" ||
-                            (!order.priceVariant && !order.tableId);
-                    } else {
-                        // Other variants are direct price variants
-                        return order.priceVariant === variant;
+                    // For explicit price variant assignments
+                    if (order.priceVariant === variant) {
+                        return true;
                     }
-                }
 
+                    // Special case for Default: no priceVariant AND no tableId
+                    if (variant === 'Default' && !order.priceVariant && !order.tableId) {
+                        return true;
+                    }
+
+                    return false;
+                }
                 return false;
             });
 
-            // Log for debugging
-            console.log(`[OrderRoom Debug] Filtered to ${filteredOrders.length} orders for ${tableId || variant} during refresh`);
-
-            // Only keep orders with items
+            // Only keep orders with items - Dashboard now has the same filter
             filteredOrders = filteredOrders.filter(order => order.items && order.items.length > 0);
-            console.log(`[OrderRoom Debug] After filtering items: ${filteredOrders.length} orders during refresh`);
 
+            console.log(`[OrderRoom Debug] Refresh - filtered to ${filteredOrders.length} orders for ${tableId || variant}`);
             setOrders(filteredOrders);
             setLoading(false);
         } catch (err) {
-            console.error('Error loading orders during refresh:', err);
-            setError('Failed to load orders');
+            console.error('Error reloading orders:', err);
             setLoading(false);
         }
     };
@@ -890,45 +875,84 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
     // Render the no orders widget (equivalent to noOrderWidget in Flutter)
     const renderNoOrdersWidget = () => {
         return (
-            <div className="flex flex-col items-center justify-center py-10">
-                <div className="opacity-50 mb-8">
-                    <i className="ph ph-shopping-bag text-5xl text-blue-800 mb-4"></i>
-                    <p className="text-xl font-bold text-blue-800 text-center">No orders yet here</p>
+            <div className="flex flex-col items-center justify-center h-full py-10 text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-50 rounded-full flex items-center justify-center mb-4">
+                    <i className="ph ph-shopping-bag-open text-2xl text-red-500"></i>
                 </div>
+                <h3 className="text-lg font-medium text-gray-700 mb-1">No Orders Yet</h3>
+                <p className="text-gray-500 max-w-sm mb-6">Add new orders using the button below</p>
+                <button
+                    onClick={handleAddNewOrder}
+                    className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg hover:from-red-700 hover:to-red-600 transition-colors flex items-center gap-2"
+                >
+                    <i className="ph ph-plus-circle"></i>
+                    <span>Create Order</span>
+                </button>
             </div>
         );
     };
 
     // Render the context menu (equivalent to contextMenu in Flutter)
     const renderContextMenu = () => {
+        if (!isMenuOpen) return null;
+
         return (
-            <div className="relative" ref={menuRef}>
-                <button
-                    className="p-2 hover:bg-gray-100 rounded-full"
-                    onClick={() => setIsMenuOpen(!isMenuOpen)}
-                >
-                    <i className="ph ph-dots-three-vertical text-xl"></i>
-                </button>
-                {isMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-20">
-                        <div className="py-1">
-                            <button
-                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
-                                onClick={handleShowQR}
-                            >
-                                <i className="ph ph-qr-code mr-2"></i>
-                                Show QR
-                            </button>
-                            <button
-                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
-                                onClick={confirmDelete}
-                            >
-                                <i className="ph ph-trash mr-2"></i>
-                                Delete table
-                            </button>
-                        </div>
-                    </div>
-                )}
+            <div
+                ref={menuRef}
+                className="absolute right-4 top-16 w-48 bg-white rounded-lg shadow-section border border-gray-200 overflow-hidden z-50"
+            >
+                <div className="py-1">
+                    <button
+                        className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
+                        onClick={() => {
+                            setIsMenuOpen(false);
+                            handleShowQR();
+                        }}
+                    >
+                        <i className="ph ph-qr-code text-red-500"></i>
+                        <span>Show QR Code</span>
+                    </button>
+
+                    <button
+                        className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
+                        onClick={() => {
+                            if (confirm(`Are you sure you want to delete all orders for ${tableId || variant}?`)) {
+                                confirmDelete();
+                            }
+                            setIsMenuOpen(false);
+                        }}
+                    >
+                        <i className="ph ph-trash text-red-500"></i>
+                        <span>Clear All Orders</span>
+                    </button>
+
+                    <button
+                        className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
+                        onClick={() => {
+                            setIsMenuOpen(false);
+                            showRenameRoomModal(tableId, variant);
+                        }}
+                    >
+                        <i className="ph ph-pencil-simple text-red-500"></i>
+                        <span>Rename {tableId ? 'Table' : 'Channel'}</span>
+                    </button>
+
+                    {tableId && (
+                        <button
+                            className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
+                            onClick={() => {
+                                if (confirm(`Are you sure you want to delete table ${tableId}?`)) {
+                                    deleteTable(tableId);
+                                    handleClose();
+                                }
+                                setIsMenuOpen(false);
+                            }}
+                        >
+                            <i className="ph ph-trash text-red-500"></i>
+                            <span>Delete Table</span>
+                        </button>
+                    )}
+                </div>
             </div>
         );
     };
@@ -1017,10 +1041,10 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
                             </div>
                             <div className="p-4 mt-auto">
                                 <button
-                                    className="w-full py-3.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 font-medium"
+                                    className="w-full py-3 px-4 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg hover:from-red-700 hover:to-red-600 transition-colors flex items-center justify-center gap-2"
                                     onClick={handleAddNewOrder}
                                 >
-                                    <i className="ph ph-plus-circle text-xl"></i>
+                                    <i className="ph ph-plus-circle text-lg"></i>
                                     Add New Order
                                 </button>
                             </div>
@@ -1137,10 +1161,10 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
                             </div>
                             <div className="p-4 mt-auto border-t sticky bottom-0 bg-white">
                                 <button
-                                    className="w-full py-3.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 font-medium"
+                                    className="w-full py-3 px-4 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg hover:from-red-700 hover:to-red-600 transition-colors flex items-center justify-center gap-2"
                                     onClick={handleAddNewOrder}
                                 >
-                                    <i className="ph ph-plus-circle text-xl"></i>
+                                    <i className="ph ph-plus-circle text-lg"></i>
                                     Add New Order
                                 </button>
                             </div>
