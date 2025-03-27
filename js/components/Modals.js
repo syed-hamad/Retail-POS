@@ -1082,12 +1082,55 @@ function OrderView({ order, tableId, variant }) {
 
     const handlePrintKOT = async () => {
         try {
-            // In a real implementation, this would print the KOT
-            console.log('Print KOT for order:', order.id);
-            showToast('KOT Printed');
+            // Try Bluetooth printing first if available
+            if (window.BluetoothPrinting && window.BluetoothPrinting.isSupported()) {
+                try {
+                    showToast("Select your Bluetooth printer from the list", "info");
+                    await window.BluetoothPrinting.printKOT(order.id);
+                    showToast("KOT printed successfully via Bluetooth", "success");
+                    return; // Exit if Bluetooth printing succeeds
+                } catch (btError) {
+                    console.error("Bluetooth printing failed:", btError);
+
+                    // If it's a connection error, show helpful message
+                    if (btError.message.includes("No suitable service") ||
+                        btError.message.includes("No services found")) {
+                        showToast("Could not connect to printer. Make sure it's turned on and in pairing mode.", "error");
+                        return;
+                    }
+
+                    // If user cancelled device selection
+                    if (btError.name === "NotFoundError") {
+                        showToast("Printer selection cancelled", "info");
+                        return;
+                    }
+
+                    // Fall through to traditional printing for other errors
+                    showToast("Bluetooth printing failed, falling back to standard printing", "warning");
+                }
+            }
+
+            // Traditional KOT printing (fallback)
+            if (window.UserSession?.seller?.kotEnabled) {
+                window.sdk.kot.print(order.id);
+                showToast('KOT Printed successfully', 'success');
+            } else {
+                console.log('Print KOT for order:', order.id);
+                showToast('KOT Printed successfully (simulation)', 'success');
+            }
         } catch (err) {
             console.error('Error printing KOT:', err);
-            showToast('Failed to print KOT', 'error');
+            showToast(`Failed to print KOT: ${err.message}`, 'error');
+        }
+    };
+
+    const handleBluetoothPrint = async () => {
+        try {
+            // This function is no longer needed as we've integrated Bluetooth printing into handlePrintKOT
+            // Keeping it for backward compatibility, but just forwarding to handlePrintKOT
+            await handlePrintKOT();
+        } catch (error) {
+            console.error("Error printing:", error);
         }
     };
 

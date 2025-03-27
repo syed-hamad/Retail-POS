@@ -452,7 +452,7 @@ function Dashboard() {
     // Fetch orders based on current filter
     React.useEffect(() => {
         if (showCompletedOrders) {
-            fetchCompletedOrders();
+        fetchCompletedOrders();
         }
     }, [dateFilter, customDateRange, showCompletedOrders]);
 
@@ -476,7 +476,7 @@ function Dashboard() {
             const fetchedOrders = ordersSnapshot.docs.map(doc => {
                 const data = doc.data();
                 return {
-                    id: doc.id,
+                id: doc.id,
                     ...data,
                     // Ensure date is properly handled
                     date: parseDate(data.date)
@@ -531,7 +531,7 @@ function Dashboard() {
             const fetchedOrders = ordersSnapshot.docs.map(doc => {
                 const data = doc.data();
                 return {
-                    id: doc.id,
+                id: doc.id,
                     ...data,
                     // Ensure date is properly handled
                     date: parseDate(data.date)
@@ -722,7 +722,7 @@ function Dashboard() {
                 showToast("KOT printed successfully");
             } else {
                 // Fallback for development/testing
-                console.log('Print bill for order:', orderId);
+        console.log('Print bill for order:', orderId);
                 showToast("Print simulation: Bill printed successfully");
             }
         } catch (err) {
@@ -840,8 +840,8 @@ function Dashboard() {
                                     />
                                 ))
                             )}
-                        </div>
-                    </div>
+                </div>
+            </div>
                 </div>
             ) : (
                 /* Main Dashboard View */
@@ -916,7 +916,7 @@ function Dashboard() {
                         <div className="px-3 py-3 border-b border-gray-200 flex items-center">
                             <i className="ph ph-globe text-red-500 text-xl mr-2"></i>
                             <h2 className="text-lg font-semibold text-gray-800">Order Channels</h2>
-                        </div>
+                            </div>
                         <div className="p-3">
                             {isLoading ? (
                                 <div className="text-center py-10">
@@ -954,9 +954,9 @@ function Dashboard() {
                                                 />
                                             </div>
                                         ))}
-                                </div>
-                            )}
-                        </div>
+                                    </div>
+                                )}
+                            </div>
                     </div>
 
                     {/* Tables Section */}
@@ -1004,19 +1004,19 @@ function Dashboard() {
                                                 }}
                                             >
                                                 <TableCard
-                                                    title={table.title}
+                                                title={table.title}
                                                     orders={table.orders || []}
-                                                    duration={table.duration}
+                                                duration={table.duration}
                                                     onTap={() => handleRoomClick(table.id, null)}
                                                     onLongPress={() => showRenameRoomModal(table.id, null)}
                                                     compact={true}
-                                                />
+                                            />
                                             </div>
                                         ))}
                                 </div>
                             )}
                         </div>
-                    </div>
+                        </div>
 
                     {/* QR Orders Section */}
                     <div className="mb-6 bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
@@ -1055,7 +1055,7 @@ function Dashboard() {
                                         <div className="text-lg font-bold text-gray-800">
                                             {(() => {
                                                 // Filter orders accepted today
-                                                const today = new Date();
+                                            const today = new Date();
                                                 today.setHours(0, 0, 0, 0);
                                                 const acceptedToday = orders.filter(order => {
                                                     // Check if order has 'PROCESSING' status
@@ -1075,14 +1075,14 @@ function Dashboard() {
 
                                                 return acceptedToday.length;
                                             })()}
-                                        </div>
-                                    </div>
+                            </div>
+                        </div>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-50 to-white flex items-center justify-center shadow-sm flex-shrink-0">
                                         <i className="ph ph-clock-countdown text-orange-500 text-lg"></i>
                                     </div>
-                                    <div>
+                                <div>
                                         <div className="text-xs text-gray-500">Avg. Accept Time</div>
                                         <div className="text-lg font-bold text-gray-800">
                                             {(() => {
@@ -1136,8 +1136,8 @@ function Dashboard() {
                                 <div className="flex items-center gap-2">
                                     <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-50 to-white flex items-center justify-center shadow-sm flex-shrink-0">
                                         <i className="ph ph-money text-blue-500 text-lg"></i>
-                                    </div>
-                                    <div>
+                                </div>
+                                <div>
                                         <div className="text-xs text-gray-500">Avg. Order Value</div>
                                         <div className="text-lg font-bold text-gray-800">
                                             {(() => {
@@ -1155,8 +1155,8 @@ function Dashboard() {
                                                 const avgValue = Math.round(totalValue / qrOrders.length);
                                                 return `₹${avgValue}`;
                                             })()}
-                                        </div>
-                                    </div>
+                                </div>
+                            </div>
                                 </div>
                             </div>
                         </div>
@@ -1184,30 +1184,30 @@ function Dashboard() {
                                     <div className="overflow-x-auto md:overflow-visible">
                                         <div className="space-y-3 min-w-[100%] md:min-w-0">
                                             {qrOrders.map(order => (
-                                                <OrderGroupTile
-                                                    key={order.id}
-                                                    order={order}
+                                        <OrderGroupTile
+                                            key={order.id}
+                                            order={order}
                                                     onAccept={() => handleAcceptOrder(order.id)}
                                                     onReject={() => handleRejectOrder(order.id)}
-                                                    onDelete={() => handleDeleteOrder(order.id)}
-                                                    onPrintBill={() => handlePrintBill(order.id)}
-                                                />
-                                            ))}
+                                            onDelete={() => handleDeleteOrder(order.id)}
+                                            onPrintBill={() => handlePrintBill(order.id)}
+                                        />
+                                    ))}
 
                                             {isLoadingMore && (
                                                 <div className="text-center py-4">
                                                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-500 mx-auto"></div>
-                                                </div>
-                                            )}
+                                </div>
+                            )}
                                         </div>
                                     </div>
                                     <div className="md:hidden text-center text-xs text-gray-400 mt-3 flex items-center justify-center">
                                         <i className="ph ph-arrows-horizontal mr-1 text-gray-300"></i>
                                         <span>Swipe horizontally on orders if needed</span>
-                                    </div>
-                                </div>
-                            )}
                         </div>
+                    </div>
+                )}
+            </div>
                     </div>
                 </>
             )}

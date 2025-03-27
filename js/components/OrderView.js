@@ -209,21 +209,47 @@ function OrderView({ order, tableId, variant, onClose }) {
             {/* Action Buttons */}
             <div className="flex gap-2 mt-4">
                 <button
-                    onClick={() => {
+                    onClick={async () => {
                         try {
-                            // Implement KOT printing
+                            // Try Bluetooth printing first if available
+                            if (window.BluetoothPrinting && window.BluetoothPrinting.isSupported()) {
+                                try {
+                                    showToast("Select your Bluetooth printer from the list", "info");
+                                    await window.BluetoothPrinting.printKOT(order.id);
+                                    showToast("KOT printed successfully via Bluetooth", "success");
+                                    return; // Exit if Bluetooth printing succeeds
+                                } catch (btError) {
+                                    console.error("Bluetooth printing failed:", btError);
+
+                                    // If it's a connection error, show helpful message
+                                    if (btError.message.includes("No suitable service") ||
+                                        btError.message.includes("No services found")) {
+                                        showToast("Could not connect to printer. Make sure it's turned on and in pairing mode.", "error");
+                                        return;
+                                    }
+
+                                    // If user cancelled device selection
+                                    if (btError.name === "NotFoundError") {
+                                        showToast("Printer selection cancelled", "info");
+                                        return;
+                                    }
+
+                                    // Fall through to traditional printing for other errors
+                                    showToast("Bluetooth printing failed, falling back to standard printing", "warning");
+                                }
+                            }
+
+                            // Traditional KOT printing (fallback)
                             if (window.UserSession?.seller?.kotEnabled) {
-                                // If KOT functionality is supported by the seller
                                 window.sdk.kot.print(order.id);
-                                showToast("KOT printed successfully");
+                                showToast("KOT printed successfully", "success");
                             } else {
-                                // Fallback for testing
                                 console.log("KOT printed for order:", order.id);
-                                showToast("KOT printed successfully");
+                                showToast("KOT printed successfully (simulation)", "success");
                             }
                         } catch (error) {
                             console.error("Error printing KOT:", error);
-                            showToast("Failed to print KOT", "error");
+                            showToast(`Failed to print KOT: ${error.message}`, "error");
                         }
                     }}
                     className="flex-1 py-2.5 border border-red-500 text-red-500 rounded-lg font-medium hover:bg-red-50 transition-colors"
