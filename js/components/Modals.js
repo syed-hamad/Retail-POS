@@ -519,12 +519,41 @@ function AddInventoryModal({ isOpen, onClose, onSave, editItem = null }) {
 
 // OrderRoom Modal Component
 function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
-    const { getOrdersForSource, isLoading: contextLoading } = window.useOrders ? window.useOrders() : {
+    // Get order data and methods directly from OrderContext
+    const {
+        getOrdersForSource,
+        isLoading: ordersLoading,
+        refreshCompletedOrders
+    } = window.useOrders ? window.useOrders() : {
         getOrdersForSource: () => [],
-        isLoading: true
+        isLoading: true,
+        refreshCompletedOrders: () => { }
     };
-    const [orders, setOrders] = React.useState([]);
-    const [loading, setLoading] = React.useState(true);
+
+    // Get orders directly from context without maintaining separate state
+    const orders = getOrdersForSource(tableId, variant);
+
+    // Calculate totals for progress bar
+    const totalItems = React.useMemo(() => {
+        return orders.reduce((sum, order) => {
+            const itemCount = order.items?.reduce((itemSum, item) => itemSum + (item.quantity || item.qnt || 1), 0) || 0;
+            return sum + itemCount;
+        }, 0);
+    }, [orders]);
+
+    const servedItems = React.useMemo(() => {
+        return orders.reduce((sum, order) => {
+            const servedCount = order.items?.filter(item => item.served)
+                .reduce((itemSum, item) => itemSum + (item.quantity || item.qnt || 1), 0) || 0;
+            return sum + servedCount;
+        }, 0);
+    }, [orders]);
+
+    const progressPercent = React.useMemo(() => {
+        const progress = totalItems > 0 ? servedItems / totalItems : 0;
+        return Math.round(progress * 100);
+    }, [totalItems, servedItems]);
+
     const [error, setError] = React.useState(null);
     const [isMenuOpen, setIsMenuOpen] = React.useState(false);
     const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
@@ -543,24 +572,6 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
             window.removeEventListener('resize', handleResize);
         };
     }, []);
-
-    // Use OrderContext to get orders for this table/variant
-    React.useEffect(() => {
-        if (!isOpen) return;
-
-        try {
-            // Get orders for this table or variant from context
-            const filteredOrders = getOrdersForSource(tableId, variant);
-            console.log(`[OrderRoom] Using context data: ${filteredOrders.length} orders for ${tableId || variant}`);
-
-            setOrders(filteredOrders);
-            setLoading(false);
-        } catch (err) {
-            console.error('[OrderRoom] Error getting orders from context:', err);
-            setError('Failed to load orders');
-            setLoading(false);
-        }
-    }, [isOpen, tableId, variant, getOrdersForSource, contextLoading]);
 
     // Add click event listener to close menu when clicking outside
     React.useEffect(() => {
@@ -624,21 +635,8 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
         }, 300); // Match this with the CSS transition duration
     };
 
-    // Function to reload orders
-    const loadOrders = async () => {
-        setLoading(true);
-        try {
-            // Get fresh data from context
-            const freshOrders = getOrdersForSource(tableId, variant);
-            console.log(`[OrderRoom] Refreshed from context: ${freshOrders.length} orders`);
-            setOrders(freshOrders);
-        } catch (err) {
-            console.error('Error reloading orders:', err);
-            setError('Failed to load orders');
-        } finally {
-            setLoading(false);
-        }
-    };
+    // We've removed the loadOrders function since we're now directly using data from context
+    // The context will automatically update when orders change
 
     const handleAddNewOrder = () => {
         // Check if POS component is available
@@ -670,8 +668,7 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
                         if (document.body.contains(posContainer)) {
                             document.body.removeChild(posContainer);
                         }
-                        // Refresh orders list
-                        loadOrders();
+                        // No need to explicitly refresh orders, context will update automatically
                     }
                 })
             );
@@ -808,18 +805,6 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
 
     if (!isOpen) return null;
 
-    // Calculate total and served items across all orders
-    const totalItems = orders.reduce((sum, order) => {
-        return sum + (order.items?.reduce((itemSum, item) => itemSum + (item.quantity || item.qnt || 1), 0) || 0);
-    }, 0);
-
-    const servedItems = orders.reduce((sum, order) => {
-        return sum + (order.items?.filter(item => item.served).reduce((itemSum, item) => itemSum + (item.quantity || item.qnt || 1), 0) || 0);
-    }, 0);
-
-    const progress = totalItems > 0 ? servedItems / totalItems : 0;
-    const progressPercent = Math.round(progress * 100);
-
     // Use the utility function for modal classes
     const dialogClasses = getModalClasses({
         isMobile,
@@ -838,32 +823,33 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
             <div className="absolute right-0 top-0 h-full w-full md:w-2/3 lg:w-1/2 bg-section-bg shadow-section overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="sticky top-0 bg-white border-b z-10">
                     <div className="p-4 flex items-center justify-between">
-                        <h2 className="text-xl font-semibold">
-                            {variant || `Table ${tableId}`}
-                        </h2>
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={loadOrders}
-                                className="p-2 hover:bg-gray-100 rounded-full"
-                                title="Refresh Orders"
-                            >
-                                <i className="ph ph-arrows-clockwise text-xl"></i>
-                            </button>
-                            <div className="relative" ref={menuRef}>
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-xl font-semibold">{variant || `Table ${tableId}`}</h2>
+                            <div className="flex items-center gap-2">
                                 <button
                                     className="p-2 hover:bg-gray-100 rounded-full"
-                                    onClick={() => setIsMenuOpen(!isMenuOpen)}
+                                    onClick={() => refreshCompletedOrders(true)}
+                                    title="Refresh Orders"
                                 >
-                                    <i className="ph ph-dots-three-vertical text-xl"></i>
+                                    <i className="ph ph-arrows-clockwise text-xl"></i>
                                 </button>
-                                {isMenuOpen && renderContextMenu()}
+                                <button
+                                    onClick={handleClose}
+                                    className="p-2 hover:bg-gray-100 rounded-full"
+                                    title="Close"
+                                >
+                                    <i className="ph ph-x text-xl"></i>
+                                </button>
+                                <div className="relative" ref={menuRef}>
+                                    <button
+                                        className="p-2 hover:bg-gray-100 rounded-full"
+                                        onClick={() => setIsMenuOpen(!isMenuOpen)}
+                                    >
+                                        <i className="ph ph-dots-three-vertical text-xl"></i>
+                                    </button>
+                                    {isMenuOpen && renderContextMenu()}
+                                </div>
                             </div>
-                            <button
-                                onClick={handleClose}
-                                className="p-2 hover:bg-gray-100 rounded-full"
-                            >
-                                <i className="ph ph-x text-xl"></i>
-                            </button>
                         </div>
                     </div>
 
@@ -881,7 +867,7 @@ function OrderRoom({ isOpen, onClose, tableId, variant, seller }) {
                 </div>
 
                 <div className="flex flex-col h-[calc(100%-70px)]">
-                    {loading ? (
+                    {ordersLoading ? (
                         <div className="p-4 text-center flex-1 flex flex-col items-center justify-center">
                             <div className="animate-spin inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
                             <p className="mt-2 text-gray-600">Loading orders...</p>
