@@ -1,5 +1,5 @@
 // OrderRoom Component for Shopto
-function OrderRoom({ tableId, variant, onClose }) {
+function OrderRoom({ tableId, variant, orderStatus = "KITCHEN", onClose }) {
     const [orders, setOrders] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState(null);
@@ -19,15 +19,20 @@ function OrderRoom({ tableId, variant, onClose }) {
         let unsubscribe = () => { };
 
         try {
+            console.log(`Setting up real-time listener for ${orderStatus} orders in ${tableId ? `Table ${tableId}` : variant}`);
+
             // Create query similar to the Flutter implementation
             let query = window.sdk.collection("Orders")
-                .where("currentStatus.label", "==", "KITCHEN");
+                .where("currentStatus.label", "==", orderStatus);
 
             if (tableId) {
                 query = query.where("tableId", "==", tableId);
             } else if (variant) {
                 query = query.where("priceVariant", "==", variant);
             }
+
+            // Ensure we order by date for consistency
+            query = query.orderBy("date", "desc");
 
             // Set up real-time listener
             unsubscribe = query.onSnapshot(
@@ -39,22 +44,26 @@ function OrderRoom({ tableId, variant, onClose }) {
 
                     setOrders(ordersList);
                     setLoading(false);
+                    console.log(`Real-time update: ${ordersList.length} ${orderStatus} orders for ${tableId ? `Table ${tableId}` : variant}`);
                 },
                 (err) => {
                     console.error('Error listening to orders:', err);
-                    setError('Failed to load orders');
+                    setError(`Failed to load orders: ${err.message}`);
                     setLoading(false);
                 }
             );
         } catch (err) {
             console.error('Error setting up orders listener:', err);
-            setError('Failed to set up orders listener');
+            setError(`Failed to set up orders listener: ${err.message}`);
             setLoading(false);
         }
 
         // Clean up listener when component unmounts
-        return () => unsubscribe();
-    }, [tableId, variant]);
+        return () => {
+            console.log(`Cleaning up order listener for ${tableId ? `Table ${tableId}` : variant}`);
+            unsubscribe();
+        };
+    }, [tableId, variant, orderStatus]);
 
     // Handle showing QR code
     const handleShowQR = () => {

@@ -31,6 +31,7 @@ function Dashboard() {
     const [selectedTableId, setSelectedTableId] = React.useState(null);
     const [selectedVariant, setSelectedVariant] = React.useState(null);
     const [orders, setOrders] = React.useState([]);
+    const [kitchenOrders, setKitchenOrders] = React.useState([]); // New state for KITCHEN orders only
     const [loadingCompletedOrders, setLoadingCompletedOrders] = React.useState(true);
     const [errorCompletedOrders, setErrorCompletedOrders] = React.useState(null);
     const [isOrderRoomOpen, setIsOrderRoomOpen] = React.useState(false);
@@ -60,35 +61,63 @@ function Dashboard() {
         endDate: null
     });
 
+    // Add a state to store unsubscribe functions
+    const [kitchenOrdersUnsubscribe, setKitchenOrdersUnsubscribe] = React.useState(null);
+    const [completedOrdersUnsubscribe, setCompletedOrdersUnsubscribe] = React.useState(null);
+
     // Get the OrderContext data to update tables and channels
     React.useEffect(() => {
-        if (!seller) return;
+        // Depend on locally fetched 'kitchenOrders' state instead of 'orders'
+        if (!seller || !kitchenOrders) return;
 
         try {
-            // Get orders grouped by table and channel
-            const { tableOrders, channelOrders } = getOrdersByTableAndChannel();
+            // No need to filter - kitchenOrders already contains only KITCHEN status orders
+            const relevantOrders = kitchenOrders;
+
+            // --- Manual Grouping Logic ---
+            const tableOrdersMap = {};
+            const channelOrdersMap = {};
+
+            relevantOrders.forEach(order => {
+                const tableId = order.tableId;
+                // Assign to Default variant if no tableId and no specific priceVariant
+                const variant = order.priceVariant || (!tableId ? 'Default' : null);
+
+                if (tableId) {
+                    if (!tableOrdersMap[tableId]) {
+                        tableOrdersMap[tableId] = [];
+                    }
+                    tableOrdersMap[tableId].push(order);
+                } else if (variant) {
+                    // Group by variant, including 'Default'
+                    if (!channelOrdersMap[variant]) {
+                        channelOrdersMap[variant] = [];
+                    }
+                    channelOrdersMap[variant].push(order);
+                }
+            });
+            // --- End Manual Grouping Logic ---
 
             // Get price variants from seller profile
             const priceVariants = (seller?.priceVariants || [])
                 .map(v => v.title)
                 .filter(Boolean);
 
-            // Always ensure we have a Default variant
+            // Always ensure we have a Default variant for channel creation
             if (!priceVariants.includes('Default')) {
                 priceVariants.unshift('Default');
             }
 
-            // Create channel tiles for price variants
+            // Create channel definitions based on defined price variants
             const normalizedNames = new Set();
             const orderChannels = [];
 
-            // Add all price variants as channels
             priceVariants.forEach(variant => {
                 const normalizedName = variant.toLowerCase();
                 if (!normalizedNames.has(normalizedName)) {
                     normalizedNames.add(normalizedName);
                     orderChannels.push({
-                        id: variant,
+                        id: variant, // Use the variant title as ID
                         title: variant,
                         type: 'price_variant',
                         isChannel: true
@@ -98,29 +127,30 @@ function Dashboard() {
 
             // Convert seller tables to the format we need
             const formattedTables = (seller?.tables || []).map(table => ({
-                id: table.id || table.title,
+                id: table.id || table.title, // Use title as fallback id
                 title: table.title,
                 desc: table.desc,
                 type: table.type || 'dine_in',
-                section: table.section || 'ac',
+                section: table.section || 'main', // Provide a default section
                 isTable: true
             }));
 
-            // Assign orders to tables
+            // Assign orders to tables using the map
             const tablesWithOrders = formattedTables.map(table => {
-                // Get orders for this table
-                const tableOrdersList = tableOrders[table.id] || [];
-
-                // Find the oldest order date for color-coding
+                const tableOrdersList = tableOrdersMap[table.id] || []; // Use table.id for lookup
                 let oldestOrderDate = null;
                 if (tableOrdersList.length > 0) {
                     oldestOrderDate = tableOrdersList
                         .map(o => o.currentStatus?.date)
-                        .reduce((a, b) => {
-                            const dateA = parseDate(a);
-                            const dateB = parseDate(b);
-                            return dateA && dateB && dateA < dateB ? a : b;
-                        }, tableOrdersList[0].currentStatus?.date);
+                        .filter(Boolean) // Ensure date exists before parsing/comparing
+                        .reduce((oldest, current) => {
+                            const oldestD = parseDate(oldest);
+                            const currentD = parseDate(current);
+                            // Handle cases where parseDate might return null
+                            if (!currentD) return oldest;
+                            if (!oldestD) return current;
+                            return oldestD < currentD ? oldest : current;
+                        }); // No need for initial value if we filter nulls first
                 }
 
                 return {
@@ -130,21 +160,21 @@ function Dashboard() {
                 };
             });
 
-            // Assign orders to channels
+            // Assign orders to channels using the map
             const channelsWithOrders = orderChannels.map(channel => {
-                // Get orders for this channel
-                const channelOrdersList = channelOrders[channel.id] || [];
-
-                // Find the oldest order date for color-coding
+                const channelOrdersList = channelOrdersMap[channel.id] || []; // Use channel.id (variant title) for lookup
                 let oldestOrderDate = null;
                 if (channelOrdersList.length > 0) {
                     oldestOrderDate = channelOrdersList
                         .map(o => o.currentStatus?.date)
-                        .reduce((a, b) => {
-                            const dateA = parseDate(a);
-                            const dateB = parseDate(b);
-                            return dateA && dateB && dateA < dateB ? a : b;
-                        }, channelOrdersList[0].currentStatus?.date);
+                        .filter(Boolean)
+                        .reduce((oldest, current) => {
+                            const oldestD = parseDate(oldest);
+                            const currentD = parseDate(current);
+                            if (!currentD) return oldest;
+                            if (!oldestD) return current;
+                            return oldestD < currentD ? oldest : current;
+                        });
                 }
 
                 return {
@@ -158,14 +188,16 @@ function Dashboard() {
             setTables(tablesWithOrders);
             setChannels(channelsWithOrders);
 
-            // Update dashboard metrics
-            const metrics = calculateDashboardMetrics([...activeOrders, ...completedOrders]);
+            // Update dashboard metrics (use all fetched orders for metrics)
+            // Ensure calculateDashboardMetrics can handle the 'orders' state format
+            const metrics = calculateDashboardMetrics(orders);
             setDashboardMetrics(metrics);
         } catch (err) {
             console.error('Error processing orders:', err);
             setError('Failed to process orders data');
         }
-    }, [seller, activeOrders, getOrdersByTableAndChannel]);
+        // Update dependencies: Now depends on 'seller' and the locally fetched 'kitchenOrders'
+    }, [seller, kitchenOrders]);
 
     // Load completed orders when showCompletedOrders is enabled
     React.useEffect(() => {
@@ -186,6 +218,18 @@ function Dashboard() {
             }
         }
     }, [showCompletedOrders, dateFilter, customDateRange]);
+
+    // Fetch orders based on current filter
+    React.useEffect(() => {
+        if (showCompletedOrders) {
+            // Clean up any existing completed orders listener before creating a new one
+            if (completedOrdersUnsubscribe) {
+                completedOrdersUnsubscribe();
+            }
+            // Set up the listener for completed orders
+            setupCompletedOrdersListener();
+        }
+    }, [dateFilter, customDateRange, showCompletedOrders]);
 
     // Function to show the add table modal
     const showAddTableModal = () => {
@@ -279,7 +323,7 @@ function Dashboard() {
         setIsOrderRoomOpen(true);
 
         // Log analytics event
-        console.log(`Opening OrderRoom for ${tableId ? `Table ${tableId}` : variant}`);
+        console.log(`Opening OrderRoom for ${tableId ? `Table ${tableId}` : variant} showing KITCHEN status orders`);
     };
 
     // Calculate dashboard metrics from orders data
@@ -458,26 +502,115 @@ function Dashboard() {
         }
     }, []);
 
-    // Fetch QR orders
+    // Fetch QR orders and set up real-time listeners
     React.useEffect(() => {
-        // Initial fetch
-        fetchOrders();
+        // Initial fetch for PLACED orders (QR tab)
+        fetchPlacedOrders();
 
-        // Set up interval to fetch orders every 30 seconds
-        const interval = setInterval(fetchOrders, 30000);
+        // Set up real-time listener for KITCHEN orders
+        setupKitchenOrdersListener();
 
-        // Cleanup interval on component unmount
-        return () => clearInterval(interval);
+        // Set up interval to refresh PLACED orders every 30 seconds
+        const interval = setInterval(fetchPlacedOrders, 30000);
+
+        // Cleanup interval and listeners on component unmount
+        return () => {
+            clearInterval(interval);
+
+            // Clean up Firestore listeners
+            if (kitchenOrdersUnsubscribe) {
+                kitchenOrdersUnsubscribe();
+            }
+            if (completedOrdersUnsubscribe) {
+                completedOrdersUnsubscribe();
+            }
+        };
     }, []); // Empty dependency array means this runs once on mount
 
-    // Fetch orders based on current filter
-    React.useEffect(() => {
-        if (showCompletedOrders) {
-            fetchCompletedOrders();
-        }
-    }, [dateFilter, customDateRange, showCompletedOrders]);
+    // Set up real-time listener for KITCHEN orders
+    const setupKitchenOrdersListener = () => {
+        try {
+            // Check if SDK is available
+            if (!window.sdk || !window.sdk.collection) {
+                console.error("SDK is not available or not properly initialized");
+                setError("SDK is not available. Please try again later.");
+                return;
+            }
 
-    const fetchOrders = async () => {
+            // Query for KITCHEN orders - mirrors the Flutter implementation
+            const kitchenQuery = window.sdk.collection("Orders")
+                .where("currentStatus.label", "==", "KITCHEN")
+                .orderBy("date", "desc")
+                .limit(100);
+
+            // Set up real-time listener
+            const unsubscribe = kitchenQuery.onSnapshot(
+                (snapshot) => {
+                    // Process the snapshot data
+                    const kitchenOrdersData = snapshot.docs
+                        .map(doc => ({
+                            id: doc.id,
+                            ...doc.data(),
+                            date: parseDate(doc.data().date)
+                        }))
+                        .filter(order => order.items && order.items.length > 0);
+
+                    // Update state with the real-time KITCHEN orders data
+                    setKitchenOrders(kitchenOrdersData);
+
+                    // Also fetch recent COMPLETED orders for metrics
+                    fetchRecentCompletedOrders(kitchenOrdersData);
+
+                    console.log(`[Realtime update] ${kitchenOrdersData.length} KITCHEN orders`);
+                },
+                (error) => {
+                    console.error('Error in KITCHEN orders listener:', error);
+                    setError(`Failed to listen to kitchen orders updates: ${error.message}`);
+                }
+            );
+
+            // Save the unsubscribe function
+            setKitchenOrdersUnsubscribe(() => unsubscribe);
+        } catch (err) {
+            console.error('Error setting up kitchen orders listener:', err);
+            setError('Failed to set up kitchen orders listener');
+        }
+    };
+
+    // Fetch recent COMPLETED orders for metrics only
+    const fetchRecentCompletedOrders = async (kitchenOrdersData) => {
+        try {
+            // Check if SDK is available
+            if (!window.sdk || !window.sdk.collection) {
+                console.error("SDK is not available or not properly initialized");
+                return;
+            }
+
+            // Fetch recent COMPLETED orders for metrics only
+            const recentCompletedQuery = window.sdk.collection("Orders")
+                .where("currentStatus.label", "==", "COMPLETED")
+                .orderBy("date", "desc")
+                .limit(100);
+
+            const completedSnapshot = await recentCompletedQuery.get();
+
+            const completedOrdersData = completedSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                date: parseDate(doc.data().date)
+            }));
+
+            // Combine KITCHEN and recent COMPLETED for the metrics state
+            setOrders([...kitchenOrdersData, ...completedOrdersData]);
+
+            console.log(`Fetched ${completedOrdersData.length} COMPLETED orders for metrics`);
+        } catch (err) {
+            console.error('Error fetching completed orders for metrics:', err);
+        }
+    };
+
+    // Fetch only PLACED orders for the QR tab
+    const fetchPlacedOrders = async () => {
         try {
             setLoadingQrOrders(true);
             setErrorQrOrders(null);
@@ -490,134 +623,37 @@ function Dashboard() {
                 return [];
             }
 
-            // Create a query for the Orders collection
-            const ordersQuery = window.sdk.collection("Orders")
+            // Fetch PLACED orders for the QR tab
+            const placedQuery = window.sdk.collection("Orders")
+                .where("currentStatus.label", "==", "PLACED")
                 .orderBy("date", "desc")
                 .limit(100);
 
-            // Execute the query
-            const ordersSnapshot = await ordersQuery.get();
+            const placedSnapshot = await placedQuery.get();
 
-            if (!ordersSnapshot || !ordersSnapshot.docs) {
-                throw new Error("Failed to fetch orders data");
-            }
+            const placedOrders = placedSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                date: parseDate(doc.data().date)
+            }));
 
-            const fetchedOrders = ordersSnapshot.docs.map(doc => {
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    ...data,
-                    // Ensure date is properly handled
-                    date: parseDate(data.date)
-                };
-            });
-
-            // Store all orders for metrics calculations 
-            setOrders(fetchedOrders);
-
-            // Filter QR orders (orders with status "PLACED")
-            const filteredQrOrders = fetchedOrders.filter(order => {
-                return order.currentStatus?.label === "PLACED";
-            });
-
-            setQrOrders(filteredQrOrders);
+            // Update the dedicated QR orders state for the QR tab
+            setQrOrders(placedOrders);
             setLoadingQrOrders(false);
 
-            // Log order counts for debugging
-            console.log(`Fetched ${fetchedOrders.length} orders, ${filteredQrOrders.length} pending QR orders`);
-
-            return fetchedOrders;
+            console.log(`Fetched ${placedOrders.length} PLACED orders for QR tab`);
+            return placedOrders;
         } catch (err) {
-            console.error('Error fetching orders:', err);
-            setErrorQrOrders(`Failed to fetch orders: ${err.message}`);
+            console.error('Error fetching QR orders:', err);
+            setErrorQrOrders(`Failed to fetch QR orders: ${err.message}`);
             setLoadingQrOrders(false);
             return [];
         }
     };
 
-    // Fetch completed orders with date filtering
-    const fetchCompletedOrders = async () => {
-        try {
-            setLoadingCompletedOrders(true);
-            setErrorCompletedOrders(null);
-
-            // Check if SDK is available
-            if (!window.sdk || !window.sdk.collection) {
-                console.error("SDK is not available or not properly initialized");
-                setErrorCompletedOrders("SDK is not available. Please try again later.");
-                setLoadingCompletedOrders(false);
-                return;
-            }
-
-            // Calculate date range based on selected filter
-            const startDate = calculateStartDate(dateFilter, customDateRange.startDate);
-            const endDate = calculateEndDate(dateFilter, customDateRange.endDate);
-
-            // Create the query - we can't filter by date range directly in Firestore
-            // because the dates might be in different formats, so we fetch and filter client-side
-            const ordersQuery = window.sdk.collection("Orders")
-                .orderBy("date", "desc")
-                .limit(100);
-
-            const ordersSnapshot = await ordersQuery.get();
-
-            if (!ordersSnapshot || !ordersSnapshot.docs) {
-                throw new Error("Failed to fetch completed orders data");
-            }
-
-            const fetchedOrders = ordersSnapshot.docs.map(doc => {
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    ...data,
-                    // Ensure date is properly handled
-                    date: parseDate(data.date)
-                };
-            });
-
-            // Filter by completion status and date range
-            const filteredOrders = fetchedOrders.filter(order => {
-                // Check if completed or paid
-                const isCompleted = order.currentStatus?.label === "COMPLETED" || order.paid === true;
-                if (!isCompleted) return false;
-
-                // Get order date
-                const orderDate = order.date;
-                if (!orderDate) return false;
-
-                // Check if within date range
-                return orderDate >= startDate && orderDate <= endDate;
-            });
-
-            // Sort by date descending (newest first)
-            filteredOrders.sort((a, b) => {
-                const dateA = a.date;
-                const dateB = b.date;
-                return dateB - dateA;
-            });
-
-            // Store filtered completed orders in our local state for the completed orders tab
-            // We're using a separate state variable for qrOrders, so this won't affect the QR Orders tab
-            setOrders(filteredOrders);
-            setLoadingCompletedOrders(false);
-
-            console.log(`Fetched ${fetchedOrders.length} orders, ${filteredOrders.length} completed in selected date range`);
-        } catch (err) {
-            console.error('Error fetching completed orders:', err);
-            setErrorCompletedOrders(`Failed to fetch completed orders: ${err.message}`);
-            setLoadingCompletedOrders(false);
-        }
-    };
-
-    // Handle date range selection for custom filter
-    const handleDateRangeSelect = (startDate, endDate) => {
-        setCustomDateRange({ startDate, endDate });
-        setDateFilter('custom');
-    };
-
-    // Add a refresh function
+    // Add a refresh function that only refreshes QR/PLACED orders
     const refreshOrders = () => {
-        fetchOrders();
+        fetchPlacedOrders();
     };
 
     // Handle scroll to load more items
@@ -657,23 +693,33 @@ function Dashboard() {
 
             const order = orderDoc.data();
 
-            // Create status entry for processing
+            // Create status entry for kitchen processing - use KITCHEN status to be consistent with OrderRoom
             const statusEntry = {
-                label: 'PROCESSING',
+                label: 'KITCHEN',
                 date: new Date()
             };
 
-            // Update the order status
-            await orderRef.update({
+            // Prepare the update object
+            const updateObj = {
                 currentStatus: statusEntry,
                 status: [...(order.status || []), statusEntry]
-            });
+            };
+
+            // If the order doesn't have a tableId, assign it to the default channel
+            if (!order.tableId && !order.priceVariant) {
+                updateObj.priceVariant = 'Default';
+                console.log(`Order ${orderId} assigned to Default channel`);
+            }
+
+            // Update the order status
+            await orderRef.update(updateObj);
 
             // Show success message
             showToast("Order accepted successfully");
+            console.log("Order moved to KITCHEN status and will appear in tables/channels");
 
             // Refresh orders data
-            await fetchOrders();
+            await fetchPlacedOrders();
 
         } catch (err) {
             console.error('Error accepting order:', err);
@@ -717,7 +763,7 @@ function Dashboard() {
             showToast("Order rejected successfully");
 
             // Refresh orders data
-            await fetchOrders();
+            await fetchPlacedOrders();
 
         } catch (err) {
             console.error('Error rejecting order:', err);
@@ -747,7 +793,7 @@ function Dashboard() {
             showToast("Order deleted successfully");
 
             // Refresh orders data
-            await fetchOrders();
+            await fetchPlacedOrders();
 
         } catch (err) {
             console.error('Error deleting order:', err);
@@ -824,6 +870,105 @@ function Dashboard() {
         });
     };
 
+    // Set up real-time listener for COMPLETED orders with date filtering
+    const setupCompletedOrdersListener = () => {
+        try {
+            setLoadingCompletedOrders(true);
+            setErrorCompletedOrders(null);
+
+            // Check if SDK is available
+            if (!window.sdk || !window.sdk.collection) {
+                console.error("SDK is not available or not properly initialized");
+                setErrorCompletedOrders("SDK is not available. Please try again later.");
+                setLoadingCompletedOrders(false);
+                return;
+            }
+
+            // Calculate date range based on selected filter
+            const startDate = calculateStartDate(dateFilter, customDateRange.startDate);
+            const endDate = calculateEndDate(dateFilter, customDateRange.endDate);
+
+            // Create firestore timestamp from date if needed
+            const startTimestamp = startDate instanceof Date ?
+                window.firebase.firestore.Timestamp.fromDate(startDate) : startDate;
+            const endTimestamp = endDate instanceof Date ?
+                window.firebase.firestore.Timestamp.fromDate(endDate) : endDate;
+
+            // Query specifically for COMPLETED orders only
+            let ordersQuery = window.sdk.collection("Orders")
+                .where("currentStatus.label", "==", "COMPLETED")
+                .orderBy("date", "desc")
+                .limit(100);
+
+            // Try to add date filtering to query (may require index)
+            try {
+                ordersQuery = window.sdk.collection("Orders")
+                    .where("currentStatus.label", "==", "COMPLETED")
+                    .where("date", ">=", startTimestamp)
+                    .where("date", "<=", endTimestamp)
+                    .orderBy("date", "desc")
+                    .limit(100);
+            } catch (err) {
+                console.warn('Date filtering query requires index, using client-side filtering instead:', err);
+            }
+
+            // Set up real-time listener
+            const unsubscribe = ordersQuery.onSnapshot(
+                (snapshot) => {
+                    if (!snapshot || !snapshot.docs) {
+                        setErrorCompletedOrders("Failed to fetch completed orders data");
+                        setLoadingCompletedOrders(false);
+                        return;
+                    }
+
+                    const fetchedOrders = snapshot.docs.map(doc => {
+                        const data = doc.data();
+                        return {
+                            id: doc.id,
+                            ...data,
+                            // Ensure date is properly handled
+                            date: parseDate(data.date)
+                        };
+                    });
+
+                    // Client-side filtering if the query doesn't include date range
+                    const filteredOrders = fetchedOrders.filter(order => {
+                        // Get order date
+                        const orderDate = order.date;
+                        if (!orderDate) return false;
+
+                        // Check if within date range
+                        return orderDate >= startDate && orderDate <= endDate;
+                    });
+
+                    // Store filtered completed orders
+                    setOrders(filteredOrders);
+                    setLoadingCompletedOrders(false);
+
+                    console.log(`[Realtime update] Fetched ${fetchedOrders.length} COMPLETED orders, ${filteredOrders.length} matched the selected date range`);
+                },
+                (error) => {
+                    console.error('Error in COMPLETED orders listener:', error);
+                    setErrorCompletedOrders(`Failed to listen to completed orders updates: ${error.message}`);
+                    setLoadingCompletedOrders(false);
+                }
+            );
+
+            // Save the unsubscribe function
+            setCompletedOrdersUnsubscribe(() => unsubscribe);
+        } catch (err) {
+            console.error('Error setting up completed orders listener:', err);
+            setErrorCompletedOrders(`Failed to set up completed orders listener: ${err.message}`);
+            setLoadingCompletedOrders(false);
+        }
+    };
+
+    // Handle date range selection for custom filter
+    const handleDateRangeSelect = (startDate, endDate) => {
+        setCustomDateRange({ startDate, endDate });
+        setDateFilter('custom');
+    };
+
     // Render the dashboard
     return (
         <div className="pb-24 md:pb-4 px-4 mt-4">
@@ -888,7 +1033,7 @@ function Dashboard() {
             <div className="mb-6 bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
                 <div className="px-3 py-3 border-b border-gray-200 flex items-center">
                     <i className="ph ph-globe text-red-500 text-xl mr-2"></i>
-                    <h2 className="text-lg font-semibold text-gray-800">Order Channels</h2>
+                    <h2 className="text-lg font-semibold text-gray-800">Kitchen Orders by Channel</h2>
                 </div>
                 <div className="p-3">
                     {isLoading ? (
@@ -937,7 +1082,7 @@ function Dashboard() {
                 <div className="px-3 py-3 border-b border-gray-200 flex items-center justify-between">
                     <div className="flex items-center">
                         <i className="ph ph-table text-red-500 text-xl mr-2"></i>
-                        <h2 className="text-lg font-semibold text-gray-800">Dine In Tables</h2>
+                        <h2 className="text-lg font-semibold text-gray-800">Kitchen Orders by Table</h2>
                     </div>
                     <button
                         onClick={showAddTableModal}
@@ -1288,6 +1433,7 @@ function Dashboard() {
                 onClose={() => setIsOrderRoomOpen(false)}
                 tableId={selectedRoomTableId}
                 variant={selectedRoomVariant}
+                orderStatus="KITCHEN"
                 seller={seller}
             />
         </div>

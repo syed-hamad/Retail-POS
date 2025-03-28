@@ -17,11 +17,14 @@ function OrderProvider({ children }) {
 
     // Initialize listeners for active orders
     React.useEffect(() => {
+        console.log("[OrderContext] Setting up real-time listeners for active orders");
+
         // Set up listener for active orders (KITCHEN, PLACED)
         const unsubscribe = setupActiveOrdersListener();
 
         // Cleanup on unmount
         return () => {
+            console.log("[OrderContext] Cleaning up order listeners");
             unsubscribe();
         };
     }, []);
@@ -29,28 +32,36 @@ function OrderProvider({ children }) {
     const setupActiveOrdersListener = () => {
         setIsLoading(true);
 
-        // Create query for active orders (KITCHEN, PLACED)
-        const query = window.sdk.collection("Orders")
-            .where("currentStatus.label", "in", ["KITCHEN", "PLACED"])
-            .orderBy("date", "desc")
-            .limit(50);  // Reasonable limit
+        try {
+            // Create query for active orders (KITCHEN, PLACED)
+            const query = window.sdk.collection("Orders")
+                .where("currentStatus.label", "in", ["KITCHEN", "PLACED"])
+                .orderBy("date", "desc")
+                .limit(50);  // Reasonable limit
 
-        return query.onSnapshot(
-            snapshot => {
-                const orders = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
-                console.log("[OrderContext] Active orders updated:", orders.length);
-                setActiveOrders(orders);
-                setIsLoading(false);
-            },
-            error => {
-                console.error("[OrderContext] Error fetching active orders:", error);
-                setError(error);
-                setIsLoading(false);
-            }
-        );
+            return query.onSnapshot(
+                snapshot => {
+                    const orders = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+                    console.log("[OrderContext] Active orders updated:", orders.length);
+                    setActiveOrders(orders);
+                    setIsLoading(false);
+                },
+                error => {
+                    console.error("[OrderContext] Error fetching active orders:", error);
+                    setError(error);
+                    setIsLoading(false);
+                }
+            );
+        } catch (err) {
+            console.error("[OrderContext] Error setting up active orders listener:", err);
+            setError(err);
+            setIsLoading(false);
+            // Return a no-op function as a fallback
+            return () => { };
+        }
     };
 
     // Function to load completed orders (on-demand)
@@ -172,8 +183,42 @@ function OrderProvider({ children }) {
     }, [activeOrders, completedOrders]);
 
     // Get orders for a specific table or channel
-    const getOrdersForSource = React.useCallback((tableId, variant) => {
-        const { tableOrders, channelOrders } = getOrdersByTableAndChannel();
+    const getOrdersForSource = React.useCallback((tableId, variant, orderStatus = "KITCHEN") => {
+        // Filter active orders first by status
+        const statusFilteredOrders = activeOrders.filter(order =>
+            order.currentStatus?.label === orderStatus &&
+            order.items && order.items.length > 0
+        );
+
+        // Group into tables and channels
+        const tableOrders = {};
+        const channelOrders = {};
+
+        statusFilteredOrders.forEach(order => {
+            // 1. Handle table assignments
+            if (order.tableId) {
+                if (!tableOrders[order.tableId]) {
+                    tableOrders[order.tableId] = [];
+                }
+                tableOrders[order.tableId].push(order);
+            }
+
+            // 2. Handle channel assignments with price variants
+            if (order.priceVariant) {
+                const variant = order.priceVariant;
+                if (!channelOrders[variant]) {
+                    channelOrders[variant] = [];
+                }
+                channelOrders[variant].push(order);
+            }
+            // 2b. Default channel (no priceVariant and no tableId)
+            else if (!order.tableId) {
+                if (!channelOrders['Default']) {
+                    channelOrders['Default'] = [];
+                }
+                channelOrders['Default'].push(order);
+            }
+        });
 
         if (tableId) {
             return tableOrders[tableId] || [];
@@ -182,7 +227,7 @@ function OrderProvider({ children }) {
         }
 
         return [];
-    }, [getOrdersByTableAndChannel]);
+    }, [activeOrders]);
 
     // Value object with all context data and functions
     const value = {
