@@ -389,9 +389,9 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center">
                                                 <i className="ph ph-image text-gray-400 text-xl" />
-                        </div>
+                                            </div>
                                         )}
-                        </div>
+                                    </div>
                                     <div className="flex-1 min-w-0">
                                         <div className="font-medium text-gray-900 text-lg">{item.product.title}</div>
                                         <div className="text-sm text-gray-600 mt-0.5">
@@ -401,54 +401,54 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                                             <div className="mt-1">
                                                 <span className={`inline-block w-4 h-4 border ${item.product.veg ? 'border-green-500' : 'border-red-500'} p-0.5 rounded-sm`}>
                                                     <span className={`block w-full h-full rounded-sm ${item.product.veg ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                                                </span>
-                            </div>
-                        )}
+                            </span>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="font-medium text-right whitespace-nowrap text-red-600">
                                         ₹{(item.quantity * item.product.price).toFixed(2)}
+                                    </div>
                         </div>
+                    ))}
                         </div>
-                            ))}
                     </div>
-                </div>
 
-                {/* Instructions */}
+                    {/* Instructions */}
                     <div className="px-4 pb-4">
                         <h3 className="font-medium text-gray-700 mb-2">Special Instructions</h3>
-                <textarea
-                    value={instructions}
-                    onChange={(e) => setInstructions(e.target.value)}
-                    placeholder="Add any special instructions here"
+                        <textarea
+                            value={instructions}
+                            onChange={(e) => setInstructions(e.target.value)}
+                            placeholder="Add any special instructions here"
                             className="w-full p-3 border border-gray-200 rounded-lg resize-none text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white"
                             rows="2"
-                    maxLength={300}
-                />
-            </div>
-        </div>
+                            maxLength={300}
+                        />
+                    </div>
+                </div>
 
                 {/* Order summary - Fixed at bottom */}
                 <div className="bg-white border-t shadow-md" style={{ backgroundColor: "#fff8f8" }}>
                     <div className="p-4">
                         <div className="space-y-2">
-                            <div className="flex justify-between">
+                        <div className="flex justify-between">
                                 <span className="text-gray-600">Sub Total</span>
                                 <span>₹{cartSubTotal.toFixed(2)}</span>
-                            </div>
+                        </div>
 
-                            {/* Charges */}
+                        {/* Charges */}
                             {charges && charges.length > 0 && (
                                 <div className="flex justify-between text-gray-600">
                                     <span>Tax & Charges</span>
-                                    <div className="text-right">
-                                        {charges.map((charge, index) => (
+                                <div className="text-right">
+                                    {charges.map((charge, index) => (
                                             <div key={index}>
                                                 ₹{charge.value}
-                                            </div>
-                                        ))}
-                                    </div>
+                                        </div>
+                                    ))}
                                 </div>
-                            )}
+                            </div>
+                        )}
 
                             {discount > 0 && (
                                 <div className="flex justify-between text-green-600">
@@ -486,25 +486,6 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                             </div>
                         ) : (
                             <div className="mt-4 space-y-3">
-                                {/* KOT Button (when in checkout mode) */}
-                                <button
-                                    onClick={() => {
-                                        try {
-                                            if (window.UserSession?.seller?.kotEnabled) {
-                                                window.sdk.kot.print(orderId);
-                                            }
-                                            showToast("KOT Printed Successfully");
-                                        } catch (error) {
-                                            console.error("Error printing KOT:", error);
-                                            showToast("Failed to print KOT", "error");
-                                        }
-                                    }}
-                                    className="w-full py-3 border border-red-500 text-red-500 rounded-lg font-medium flex items-center justify-center hover:bg-red-50 transition-colors"
-                                >
-                                    <i className="ph ph-printer mr-2" />
-                                    Print KOT
-                                </button>
-
                                 {/* Payment options - Now these directly complete the order */}
                                 <h3 className="font-medium text-center text-gray-700 mb-2">Select Payment Method</h3>
                                 <div className="grid grid-cols-3 gap-2">
@@ -541,7 +522,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                                         Processing payment...
                                     </div>
                                 )}
-                            </div>
+                        </div>
                         )}
                     </div>
                 </div>
@@ -559,7 +540,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                             >
                                 <i className="ph ph-x text-gray-600"></i>
                             </button>
-                        </div>
+        </div>
 
                         {/* Toggle between percentage and fixed amount */}
                         <div className="flex items-center justify-between bg-gray-100 rounded-lg p-1 mb-4">
@@ -569,13 +550,13 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                             >
                                 Fixed Amount
                             </button>
-                            <button
+            <button
                                 className={`flex-1 py-2 rounded-md text-center ${percentMode ? 'bg-white shadow-sm font-medium' : ''}`}
                                 onClick={() => setPercentMode(true)}
                             >
                                 Percentage (%)
-                                </button>
-                            </div>
+                            </button>
+                        </div>
 
                         {/* Input field */}
                         <div className="mb-5">
@@ -586,8 +567,8 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                                 <span className="px-3 py-2 bg-gray-100 text-gray-500">
                                     {percentMode ? '%' : '₹'}
                                 </span>
-                            <input
-                                type="number"
+                                <input
+                                    type="number"
                                     value={discountInput}
                                     onChange={(e) => setDiscountInput(e.target.value)}
                                     placeholder="0"
@@ -619,25 +600,25 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                             </div>
                             <div className="flex justify-between font-medium text-lg pt-2 border-t">
                                 <span>Final Total:</span>
-                                <span>
+                <span>
                                     ₹{
                                         percentMode
                                             ? (cartSubTotal - ((parseFloat(discountInput) || 0) * cartSubTotal / 100)).toFixed(2)
                                             : (cartSubTotal - Math.min(parseFloat(discountInput) || 0, cartSubTotal)).toFixed(2)
-                                    }
-                                </span>
+                    }
+                </span>
                             </div>
                         </div>
 
                         {/* Action buttons */}
                         <div className="flex gap-3">
-                            <button
+                                <button
                                 onClick={() => setShowDiscountModal(false)}
                                 className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-lg"
-                            >
+                                >
                                 Cancel
-                            </button>
-                            <button
+                                </button>
+                                <button
                                 onClick={applyDiscount}
                                 className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg"
                             >
@@ -665,8 +646,8 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                                 className="p-2 hover:bg-gray-100 rounded-full"
                             >
                                 <i className="ph ph-x text-gray-600"></i>
-                            </button>
-                        </div>
+                                </button>
+                            </div>
 
                         <div className="mb-5">
                             <textarea

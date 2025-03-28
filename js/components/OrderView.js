@@ -192,7 +192,7 @@ function OrderView({ order, tableId, variant, onClose }) {
                                 >
                                     <i className="ph ph-plus text-lg" />
                                     </button>
-                            </div>
+                                </div>
                             </div>
                         </div>
                     ))}

@@ -165,6 +165,10 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
     // Order source (price variant or table) - using the same logic as Flutter
     const orderSource = getOrderSource(order);
 
+    // Determine if this is a new order that can be accepted/rejected
+    const isNewOrder = order.currentStatus?.label === "PLACED";
+    const isCompletedOrder = order.currentStatus?.label === "COMPLETED" || order.paid === true;
+
     const handleOrderClick = () => {
         // Create a modal that displays the order details using the OrderDetailsModal component
         const modalContainer = document.createElement('div');
@@ -255,26 +259,30 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
 
                     {/* Desktop Quick Actions - Only visible on md screens and up */}
                     <div className="hidden md:flex justify-end mt-2 gap-2">
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onAccept && onAccept();
-                            }}
-                            className="px-2 py-1 bg-gradient-to-r from-green-600 to-green-500 text-white rounded-lg text-xs font-medium"
-                        >
-                            <i className="ph ph-check mr-1"></i>
-                            Accept
-                        </button>
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onReject && onReject();
-                            }}
-                            className="px-2 py-1 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg text-xs font-medium"
-                        >
-                            <i className="ph ph-x mr-1"></i>
-                            Reject
-                        </button>
+                        {isNewOrder && (
+                            <>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onAccept && onAccept();
+                                    }}
+                                    className="px-2 py-1 bg-gradient-to-r from-green-600 to-green-500 text-white rounded-lg text-xs font-medium"
+                                >
+                                    <i className="ph ph-check mr-1"></i>
+                                    Accept
+                                </button>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onReject && onReject();
+                                    }}
+                                    className="px-2 py-1 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg text-xs font-medium"
+                                >
+                                    <i className="ph ph-x mr-1"></i>
+                                    Reject
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>
@@ -289,8 +297,10 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
     const taxAmount = totalAmount * 0.18; // Assuming 18% tax
     const finalAmount = totalAmount + taxAmount;
 
-    // Determine if this is a new order that can be accepted/rejected
+    // Determine order status for showing appropriate actions
     const isNewOrder = order.currentStatus?.label === "PLACED";
+    const isCompletedOrder = order.currentStatus?.label === "COMPLETED" || order.paid === true;
+    const isProcessingOrder = order.currentStatus?.label === "PROCESSING" || order.currentStatus?.label === "KITCHEN";
 
     // Handle selecting a customer
     const handleSelectCustomer = async (customer) => {
@@ -434,70 +444,91 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
                         </div>
                     </div>
 
+                    {/* Order Status */}
+                    <div className="bg-gradient-to-br from-warm-bg to-white rounded-xl p-4 border border-gray-200 shadow-sm">
+                        <h3 className="text-sm font-semibold mb-3 text-gray-700 flex items-center">
+                            <i className="ph ph-flag text-red-500 mr-1.5"></i>
+                            Order Status
+                        </h3>
+                        <div className="flex items-center">
+                            <div className={`px-3 py-1.5 rounded-full text-sm font-medium ${isNewOrder ? 'bg-blue-100 text-blue-600' :
+                                isProcessingOrder ? 'bg-orange-100 text-orange-600' :
+                                    isCompletedOrder ? 'bg-green-100 text-green-600' :
+                                        'bg-gray-100 text-gray-600'
+                                }`}>
+                                <i className={`ph ${isNewOrder ? 'ph-hourglass text-blue-600' :
+                                    isProcessingOrder ? 'ph-cooking-pot text-orange-600' :
+                                        isCompletedOrder ? 'ph-check-circle text-green-600' :
+                                            'ph-question text-gray-600'
+                                    } mr-1.5`}></i>
+                                {order.currentStatus?.label?.toUpperCase() || "PLACED"}
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Action Buttons */}
-                    {isNewOrder ? (
-                        <div className="space-y-2 pt-2">
-                            <div className="flex gap-2">
+                    <div className="pt-2">
+                        {isNewOrder && (
+                            <div className="space-y-2">
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onAccept && onAccept();
+                                            onClose();
+                                        }}
+                                        className="flex-1 py-2.5 bg-gradient-to-r from-green-600 to-green-500 text-white rounded-lg flex items-center justify-center gap-1.5 hover:from-green-700 hover:to-green-600 transition-colors text-sm font-medium shadow-sm"
+                                    >
+                                        <i className="ph ph-check"></i>
+                                        <span>Accept Order</span>
+                                    </button>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onReject && onReject();
+                                            onClose();
+                                        }}
+                                        className="flex-1 py-2.5 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg flex items-center justify-center gap-1.5 hover:from-red-700 hover:to-red-600 transition-colors text-sm font-medium shadow-sm"
+                                    >
+                                        <i className="ph ph-x"></i>
+                                        <span>Reject Order</span>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {isProcessingOrder && (
+                            <div>
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        onAccept && onAccept();
+                                        onPrintBill && onPrintBill();
                                         onClose();
                                     }}
-                                    className="flex-1 py-2.5 bg-gradient-to-r from-green-600 to-green-500 text-white rounded-lg flex items-center justify-center gap-1.5 hover:from-green-700 hover:to-green-600 transition-colors text-sm font-medium shadow-sm"
+                                    className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg flex items-center justify-center gap-1.5 hover:from-blue-700 hover:to-blue-600 transition-colors text-sm font-medium shadow-sm"
                                 >
-                                    <i className="ph ph-check"></i>
-                                    <span>Accept Order</span>
-                                </button>
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onReject && onReject();
-                                        onClose();
-                                    }}
-                                    className="flex-1 py-2.5 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg flex items-center justify-center gap-1.5 hover:from-red-700 hover:to-red-600 transition-colors text-sm font-medium shadow-sm"
-                                >
-                                    <i className="ph ph-x"></i>
-                                    <span>Reject Order</span>
+                                    <i className="ph ph-printer"></i>
+                                    <span>Print Kitchen Order</span>
                                 </button>
                             </div>
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onDelete && onDelete();
-                                    onClose();
-                                }}
-                                className="w-full py-2.5 bg-gradient-to-r from-gray-100 to-gray-50 text-gray-700 rounded-lg flex items-center justify-center gap-1.5 hover:from-gray-200 hover:to-gray-100 transition-colors text-sm font-medium shadow-sm border border-gray-200"
-                            >
-                                <i className="ph ph-trash"></i>
-                                <span>Delete Order</span>
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="flex gap-2 pt-2">
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onPrintBill && onPrintBill();
-                                    onClose();
-                                }}
-                                className="flex-1 py-2.5 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg flex items-center justify-center gap-1.5 hover:from-red-700 hover:to-red-600 transition-colors text-sm font-medium shadow-sm"
-                            >
-                                <i className="ph ph-printer"></i>
-                                <span>Print Bill</span>
-                            </button>
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onDelete && onDelete();
-                                    onClose();
-                                }}
-                                className="w-10 h-10 bg-gradient-to-r from-gray-100 to-gray-50 text-red-600 rounded-lg flex items-center justify-center hover:from-gray-200 hover:to-gray-100 transition-colors shadow-sm border border-gray-200"
-                            >
-                                <i className="ph ph-trash"></i>
-                            </button>
-                        </div>
-                    )}
+                        )}
+
+                        {isCompletedOrder && (
+                            <div>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onPrintBill && onPrintBill();
+                                        onClose();
+                                    }}
+                                    className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg flex items-center justify-center gap-1.5 hover:from-blue-700 hover:to-blue-600 transition-colors text-sm font-medium shadow-sm"
+                                >
+                                    <i className="ph ph-printer"></i>
+                                    <span>Print Bill</span>
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
