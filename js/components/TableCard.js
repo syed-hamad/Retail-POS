@@ -197,38 +197,41 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
 
     // Get status color
     const getStatusColor = (status) => {
-        if (!status) return 'bg-gradient-to-r from-gray-100 to-gray-50 text-gray-600';
+        if (!status) return 'bg-gray-50 text-gray-600 border-gray-200';
 
         const label = status.label?.toUpperCase();
 
-        if (label === 'PLACED') return 'bg-gradient-to-r from-blue-100 to-blue-50 text-blue-600';
-        if (label === 'PROCESSING' || label === 'KITCHEN') return 'bg-gradient-to-r from-orange-100 to-orange-50 text-orange-600';
-        if (label === 'COMPLETED') return 'bg-gradient-to-r from-green-100 to-green-50 text-green-600';
-        if (label === 'CANCELLED') return 'bg-gradient-to-r from-red-100 to-red-50 text-red-600';
+        if (label === 'PLACED') return 'bg-blue-50 text-blue-600 border-blue-100';
+        if (label === 'PROCESSING' || label === 'KITCHEN') return 'bg-orange-50 text-orange-600 border-orange-100';
+        if (label === 'COMPLETED') return 'bg-green-50 text-green-600 border-green-100';
+        if (label === 'CANCELLED') return 'bg-red-50 text-red-600 border-red-100';
 
-        return 'bg-gradient-to-r from-gray-100 to-gray-50 text-gray-600';
+        return 'bg-gray-50 text-gray-600 border-gray-200';
     };
 
     // Get status badge color
     const statusColor = getStatusColor(order.currentStatus);
 
     return (
-        <div className="my-1.5">
+        <div className="my-2">
             <div
-                className="bg-gradient-to-br from-warm-bg to-white rounded-xl shadow-sm overflow-hidden cursor-pointer hover:shadow-md transition-all border border-gray-200"
-                onClick={handleOrderClick}
+                className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-all border border-gray-200"
             >
-                <div className="p-2.5 md:p-3">
-                    <div className="flex items-center justify-between mb-1.5 md:mb-2">
-                        <div className="flex items-center gap-1.5 md:gap-3">
-                            <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-red-50 to-white rounded-lg flex items-center justify-center shadow-sm flex-shrink-0">
-                                <i className="ph ph-shopping-bag text-red-500 text-base md:text-lg"></i>
+                {/* Order card content - clickable area */}
+                <div
+                    className="p-3 md:p-4 cursor-pointer"
+                    onClick={handleOrderClick}
+                >
+                    <div className="flex items-center justify-between mb-2.5">
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 bg-red-50 rounded-lg flex items-center justify-center shadow-sm flex-shrink-0">
+                                <i className="ph ph-shopping-bag text-red-500 text-base"></i>
                             </div>
                             <div>
                                 <h3 className="font-medium text-gray-900 line-clamp-1 max-w-[120px] md:max-w-[200px] text-sm md:text-base">
                                     {order.customer?.name || "Guest Customer"}
                                 </h3>
-                                <p className="text-xs md:text-sm text-gray-500">
+                                <p className="text-xs text-gray-500">
                                     {timeAgo}
                                 </p>
                             </div>
@@ -238,16 +241,20 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
                             <div className="text-xs text-gray-500">#{order.id?.slice(-6)}</div>
                         </div>
                     </div>
-                    <div className="flex flex-wrap items-center justify-between gap-1 mt-1.5 md:mt-2">
-                        <div className="flex items-center gap-1 md:gap-2 flex-wrap">
-                            <span className={`px-1.5 py-0.5 md:px-2 md:py-1 rounded-full text-xs md:text-sm font-medium ${statusColor}`}>
+
+                    <div className="flex flex-wrap items-center justify-between gap-1.5 mt-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex items-center border ${statusColor}`}>
+                                {order.currentStatus?.label === "PLACED" && <i className="ph ph-hourglass text-blue-600 mr-1"></i>}
+                                {order.currentStatus?.label === "KITCHEN" && <i className="ph ph-cooking-pot text-orange-600 mr-1"></i>}
+                                {order.currentStatus?.label === "COMPLETED" && <i className="ph ph-check-circle text-green-600 mr-1"></i>}
                                 {order.currentStatus?.label?.toUpperCase() || "PLACED"}
                             </span>
-                            <span className="px-1.5 py-0.5 md:px-2 md:py-1 bg-gradient-to-r from-red-100 to-red-50 text-red-600 text-xs md:text-sm font-medium rounded-full inline-flex items-center">
-                                <i className="ph ph-shopping-cart-simple text-xs mr-0.5 md:mr-1"></i>
+                            <span className="px-2 py-0.5 bg-red-50 text-red-600 text-xs font-medium rounded-full inline-flex items-center border border-red-100">
+                                <i className="ph ph-shopping-cart-simple text-xs mr-1"></i>
                                 {totalItems} {totalItems === 1 ? 'item' : 'items'}
                             </span>
-                            <span className="hidden md:inline-flex px-2 py-1 bg-gradient-to-r from-gray-100 to-gray-50 text-gray-600 text-sm font-medium rounded-full items-center">
+                            <span className="hidden md:inline-flex px-2 py-0.5 bg-gray-50 text-gray-600 text-xs font-medium rounded-full items-center border border-gray-200">
                                 <i className="ph ph-map-pin text-gray-500 mr-1"></i>
                                 {order.address?.area || "In-store"}
                             </span>
@@ -256,35 +263,62 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
                             {orderSource}
                         </span>
                     </div>
+                </div>
 
-                    {/* Desktop Quick Actions - Only visible on md screens and up */}
-                    <div className="hidden md:flex justify-end mt-2 gap-2">
-                        {isNewOrder && (
-                            <>
+                {/* Action buttons - separate from clickable area */}
+                {isNewOrder && (
+                    <div className="border-t border-gray-100">
+                        {/* Mobile buttons stacked for small screens */}
+                        <div className="grid grid-cols-2 md:hidden">
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onAccept && onAccept();
+                                }}
+                                className="py-1.5 bg-white text-green-600 flex items-center justify-center gap-1 hover:bg-green-50 transition-colors text-xs font-medium cursor-default border-r border-gray-100"
+                            >
+                                <i className="ph ph-check text-sm"></i>
+                                <span>Accept</span>
+                            </button>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onReject && onReject();
+                                }}
+                                className="py-1.5 bg-white text-red-600 flex items-center justify-center gap-1 hover:bg-red-50 transition-colors text-xs font-medium cursor-default"
+                            >
+                                <i className="ph ph-x text-sm"></i>
+                                <span>Reject</span>
+                            </button>
+                        </div>
+
+                        {/* Desktop buttons - compact right-aligned */}
+                        <div className="hidden md:flex justify-end p-2">
+                            <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden shadow-sm">
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         onAccept && onAccept();
                                     }}
-                                    className="px-2 py-1 bg-gradient-to-r from-green-600 to-green-500 text-white rounded-lg text-xs font-medium"
+                                    className="px-3 py-1.5 bg-white text-green-600 flex items-center justify-center gap-1.5 hover:bg-green-50 transition-colors text-xs font-medium cursor-default border-r border-gray-200"
                                 >
-                                    <i className="ph ph-check mr-1"></i>
-                                    Accept
+                                    <i className="ph ph-check"></i>
+                                    <span>Accept</span>
                                 </button>
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         onReject && onReject();
                                     }}
-                                    className="px-2 py-1 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg text-xs font-medium"
+                                    className="px-3 py-1.5 bg-white text-red-600 flex items-center justify-center gap-1.5 hover:bg-red-50 transition-colors text-xs font-medium cursor-default"
                                 >
-                                    <i className="ph ph-x mr-1"></i>
-                                    Reject
+                                    <i className="ph ph-x"></i>
+                                    <span>Reject</span>
                                 </button>
-                            </>
-                        )}
+                            </div>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
         </div>
     );

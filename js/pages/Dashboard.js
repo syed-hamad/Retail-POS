@@ -232,26 +232,6 @@ function Dashboard() {
         // Update dependencies: Now depends on 'seller' and the locally fetched 'kitchenOrders'
     }, [seller, kitchenOrders]);
 
-    // Load completed orders when showCompletedOrders is enabled
-    React.useEffect(() => {
-        if (showCompletedOrders) {
-            // Use only our local implementation for completed orders
-            fetchCompletedOrders();
-
-            // Optionally try to call the context method but don't depend on it
-            if (typeof loadCompletedOrders === 'function') {
-                try {
-                    // Wrap in try-catch to prevent unhandled promise rejection
-                    loadCompletedOrders(true).catch(error => {
-                        console.error("Error in loadCompletedOrders:", error);
-                    });
-                } catch (error) {
-                    console.error("Exception trying to call loadCompletedOrders:", error);
-                }
-            }
-        }
-    }, [showCompletedOrders, dateFilter, customDateRange]);
-
     // Fetch orders based on current filter
     React.useEffect(() => {
         if (showCompletedOrders) {
@@ -928,29 +908,11 @@ function Dashboard() {
             const startDate = calculateStartDate(dateFilter, customDateRange.startDate);
             const endDate = calculateEndDate(dateFilter, customDateRange.endDate);
 
-            // Create firestore timestamp from date if needed
-            const startTimestamp = startDate instanceof Date ?
-                window.firebase.firestore.Timestamp.fromDate(startDate) : startDate;
-            const endTimestamp = endDate instanceof Date ?
-                window.firebase.firestore.Timestamp.fromDate(endDate) : endDate;
-
             // Query specifically for COMPLETED orders only
             let ordersQuery = window.sdk.collection("Orders")
                 .where("currentStatus.label", "==", "COMPLETED")
                 .orderBy("date", "desc")
                 .limit(100);
-
-            // Try to add date filtering to query (may require index)
-            try {
-                ordersQuery = window.sdk.collection("Orders")
-                    .where("currentStatus.label", "==", "COMPLETED")
-                    .where("date", ">=", startTimestamp)
-                    .where("date", "<=", endTimestamp)
-                    .orderBy("date", "desc")
-                    .limit(100);
-            } catch (err) {
-                console.warn('Date filtering query requires index, using client-side filtering instead:', err);
-            }
 
             // Set up real-time listener
             const unsubscribe = ordersQuery.onSnapshot(
@@ -971,7 +933,7 @@ function Dashboard() {
                         };
                     });
 
-                    // Client-side filtering if the query doesn't include date range
+                    // Client-side filtering for date range
                     const filteredOrders = fetchedOrders.filter(order => {
                         // Get order date
                         const orderDate = order.date;
