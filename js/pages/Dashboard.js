@@ -79,21 +79,38 @@ function Dashboard() {
             const channelOrdersMap = {};
 
             relevantOrders.forEach(order => {
-                const tableId = order.tableId;
-                // Assign to Default variant if no tableId and no specific priceVariant
-                const variant = order.priceVariant || (!tableId ? 'Default' : null);
+                // Filter out orders without items
+                if (!order.items || order.items.length === 0) return;
 
+                const tableId = order.tableId;
+                const priceVariant = order.priceVariant; // Might be null, undefined, or ""
+
+                // Log order details for debugging grouping
+                // console.log(`[Dashboard Grouping] Order ID: ${order.id}, TableID: ${tableId}, Variant: '${priceVariant}' (Type: ${typeof priceVariant})`);
+
+                // 1. Handle table assignments first
                 if (tableId) {
                     if (!tableOrdersMap[tableId]) {
                         tableOrdersMap[tableId] = [];
                     }
                     tableOrdersMap[tableId].push(order);
-                } else if (variant) {
-                    // Group by variant, including 'Default'
-                    if (!channelOrdersMap[variant]) {
-                        channelOrdersMap[variant] = [];
+                    // console.log(`[Dashboard Grouping]   Assigned to Table: ${tableId}`);
+                }
+                // 2. Handle specific price variant channels (if no tableId and variant is meaningful)
+                else if (priceVariant && priceVariant !== '') {
+                    if (!channelOrdersMap[priceVariant]) {
+                        channelOrdersMap[priceVariant] = [];
                     }
-                    channelOrdersMap[variant].push(order);
+                    channelOrdersMap[priceVariant].push(order);
+                    // console.log(`[Dashboard Grouping]   Assigned to Channel: ${priceVariant}`);
+                }
+                // 3. Handle Default channel (if no tableId and no meaningful priceVariant)
+                else {
+                    if (!channelOrdersMap['Default']) {
+                        channelOrdersMap['Default'] = [];
+                    }
+                    channelOrdersMap['Default'].push(order);
+                    // console.log(`[Dashboard Grouping]   Assigned to Channel: Default`);
                 }
             });
             // --- End Manual Grouping Logic ---
@@ -555,6 +572,15 @@ function Dashboard() {
                         }))
                         .filter(order => order.items && order.items.length > 0);
 
+                    // Log for debugging: count orders with no tableId and no priceVariant (Default channel)
+                    const defaultChannelOrders = kitchenOrdersData.filter(order =>
+                        !order.tableId && (!order.priceVariant || order.priceVariant === 'Default')
+                    );
+
+                    if (defaultChannelOrders.length > 0) {
+                        console.log(`[Dashboard] Found ${defaultChannelOrders.length} orders for Default channel`);
+                    }
+
                     // Update state with the real-time KITCHEN orders data
                     setKitchenOrders(kitchenOrdersData);
 
@@ -699,17 +725,11 @@ function Dashboard() {
                 date: new Date()
             };
 
-            // Prepare the update object
+            // Prepare the update object - don't modify priceVariant, let the grouping logic handle default channel assignment
             const updateObj = {
                 currentStatus: statusEntry,
                 status: [...(order.status || []), statusEntry]
             };
-
-            // If the order doesn't have a tableId, assign it to the default channel
-            if (!order.tableId && !order.priceVariant) {
-                updateObj.priceVariant = 'Default';
-                console.log(`Order ${orderId} assigned to Default channel`);
-            }
 
             // Update the order status
             await orderRef.update(updateObj);
@@ -718,7 +738,8 @@ function Dashboard() {
             showToast("Order accepted successfully");
             console.log("Order moved to KITCHEN status and will appear in tables/channels");
 
-            // Refresh orders data
+            // No need to manually refresh as the real-time listener will catch this update
+            // However, refresh QR orders list since they're not on real-time listener
             await fetchPlacedOrders();
 
         } catch (err) {

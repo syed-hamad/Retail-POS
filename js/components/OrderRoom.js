@@ -15,6 +15,8 @@ function OrderRoom({ tableId, variant, orderStatus = "KITCHEN", onClose }) {
     }, []);
 
     // Set up real-time listener for orders
+    // Note: Any order status changes will be automatically reflected in the UI
+    // since we're using a real-time listener that monitors the currentStatus.label field
     React.useEffect(() => {
         let unsubscribe = () => { };
 
@@ -25,9 +27,26 @@ function OrderRoom({ tableId, variant, orderStatus = "KITCHEN", onClose }) {
             let query = window.sdk.collection("Orders")
                 .where("currentStatus.label", "==", orderStatus);
 
+            // Different query approach based on source
             if (tableId) {
+                // Table query - simple equality check on tableId
                 query = query.where("tableId", "==", tableId);
+            } else if (variant === 'Default') {
+                // Default channel - needs to show orders with no tableId and no priceVariant
+                // This requires a compound query to ensure we only get unassigned orders
+                try {
+                    query = window.sdk.collection("Orders")
+                        .where("currentStatus.label", "==", orderStatus)
+                        .where("tableId", "==", null) // Orders without a table assignment
+                        .where("priceVariant", "in", [null, "Default"]); // Orders with no variant or Default variant
+                } catch (err) {
+                    // If this fails, try a simpler query and filter client-side
+                    console.warn("Using simpler query for Default channel and filtering client-side:", err);
+                    query = window.sdk.collection("Orders")
+                        .where("currentStatus.label", "==", orderStatus);
+                }
             } else if (variant) {
+                // Specific channel query - match on priceVariant
                 query = query.where("priceVariant", "==", variant);
             }
 
@@ -37,10 +56,17 @@ function OrderRoom({ tableId, variant, orderStatus = "KITCHEN", onClose }) {
             // Set up real-time listener
             unsubscribe = query.onSnapshot(
                 (snapshot) => {
-                    const ordersList = snapshot.docs.map(doc => ({
+                    let ordersList = snapshot.docs.map(doc => ({
                         id: doc.id,
                         ...doc.data()
                     })).filter(order => order.items && order.items.length > 0);
+
+                    // If we had to use a simpler query for the Default channel, filter client-side
+                    if (variant === 'Default' && !query._query.filters.some(f => f.field && f.field.segments && f.field.segments.includes('priceVariant'))) {
+                        ordersList = ordersList.filter(order =>
+                            !order.tableId && (!order.priceVariant || order.priceVariant === 'Default')
+                        );
+                    }
 
                     setOrders(ordersList);
                     setLoading(false);
