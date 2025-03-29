@@ -65,10 +65,15 @@ function Dashboard() {
     const [kitchenOrdersUnsubscribe, setKitchenOrdersUnsubscribe] = React.useState(null);
     const [completedOrdersUnsubscribe, setCompletedOrdersUnsubscribe] = React.useState(null);
 
+    // Add state for the unsubscribe function
+    const [placedOrdersUnsubscribe, setPlacedOrdersUnsubscribe] = React.useState(null);
+
     // Get the OrderContext data to update tables and channels
     React.useEffect(() => {
         // Depend on locally fetched 'kitchenOrders' state instead of 'orders'
         if (!seller || !kitchenOrders) return;
+
+        console.log(`[Kitchen useEffect] Processing ${kitchenOrders.length} KITCHEN orders...`);
 
         try {
             // No need to filter - kitchenOrders already contains only KITCHEN status orders
@@ -85,8 +90,8 @@ function Dashboard() {
                 const tableId = order.tableId;
                 const priceVariant = order.priceVariant; // Might be null, undefined, or ""
 
-                // Log order details for debugging grouping
-                // console.log(`[Dashboard Grouping] Order ID: ${order.id}, TableID: ${tableId}, Variant: '${priceVariant}' (Type: ${typeof priceVariant})`);
+                // Log every order in processing for debugging
+                console.log(`[Dashboard Grouping] Order ID: ${order.id}, TableID: ${tableId || 'null/undefined'}, Variant: '${priceVariant || ''}' (Type: ${typeof priceVariant})`);
 
                 // 1. Handle table assignments first
                 if (tableId) {
@@ -94,7 +99,7 @@ function Dashboard() {
                         tableOrdersMap[tableId] = [];
                     }
                     tableOrdersMap[tableId].push(order);
-                    // console.log(`[Dashboard Grouping]   Assigned to Table: ${tableId}`);
+                    console.log(`[Dashboard Grouping]   Assigned to Table: ${tableId}`);
                 }
                 // 2. Handle specific price variant channels (if no tableId and variant is meaningful)
                 else if (priceVariant && priceVariant !== '') {
@@ -102,7 +107,7 @@ function Dashboard() {
                         channelOrdersMap[priceVariant] = [];
                     }
                     channelOrdersMap[priceVariant].push(order);
-                    // console.log(`[Dashboard Grouping]   Assigned to Channel: ${priceVariant}`);
+                    console.log(`[Dashboard Grouping]   Assigned to Channel: ${priceVariant}`);
                 }
                 // 3. Handle Default channel (if no tableId and no meaningful priceVariant)
                 else {
@@ -110,10 +115,21 @@ function Dashboard() {
                         channelOrdersMap['Default'] = [];
                     }
                     channelOrdersMap['Default'].push(order);
-                    // console.log(`[Dashboard Grouping]   Assigned to Channel: Default`);
+                    console.log(`[Dashboard Grouping]   Assigned to Channel: Default`);
                 }
             });
             // --- End Manual Grouping Logic ---
+
+            // Summarize the final assignment counts
+            console.log(`[Dashboard Grouping Summary] Final assignments:`);
+            console.log(`  - Total orders processed: ${relevantOrders.length}`);
+            console.log(`  - Tables: ${Object.keys(tableOrdersMap).length} tables with orders`);
+            console.log(`  - Channels: ${Object.keys(channelOrdersMap).length} channels with orders`);
+            if (channelOrdersMap['Default']) {
+                console.log(`  - Default channel: ${channelOrdersMap['Default'].length} orders`);
+            } else {
+                console.log(`  - Default channel: Not created (no orders)`);
+            }
 
             // Get price variants from seller profile
             const priceVariants = (seller?.priceVariants || [])
@@ -522,24 +538,22 @@ function Dashboard() {
     // Fetch QR orders and set up real-time listeners
     React.useEffect(() => {
         // Initial fetch for PLACED orders (QR tab)
-        fetchPlacedOrders();
+        setupPlacedOrdersListener();
 
         // Set up real-time listener for KITCHEN orders
         setupKitchenOrdersListener();
 
-        // Set up interval to refresh PLACED orders every 30 seconds
-        const interval = setInterval(fetchPlacedOrders, 30000);
-
-        // Cleanup interval and listeners on component unmount
+        // Cleanup listeners on component unmount
         return () => {
-            clearInterval(interval);
-
             // Clean up Firestore listeners
             if (kitchenOrdersUnsubscribe) {
                 kitchenOrdersUnsubscribe();
             }
             if (completedOrdersUnsubscribe) {
                 completedOrdersUnsubscribe();
+            }
+            if (placedOrdersUnsubscribe) {
+                placedOrdersUnsubscribe();
             }
         };
     }, []); // Empty dependency array means this runs once on mount
@@ -554,11 +568,13 @@ function Dashboard() {
                 return;
             }
 
+            console.log("[Kitchen Listener] Setting up real-time listener for KITCHEN orders");
+
             // Query for KITCHEN orders - mirrors the Flutter implementation
             const kitchenQuery = window.sdk.collection("Orders")
                 .where("currentStatus.label", "==", "KITCHEN")
                 .orderBy("date", "desc")
-                .limit(100);
+                .limit(100); // Increased limit for better pagination
 
             // Set up real-time listener
             const unsubscribe = kitchenQuery.onSnapshot(
@@ -574,11 +590,15 @@ function Dashboard() {
 
                     // Log for debugging: count orders with no tableId and no priceVariant (Default channel)
                     const defaultChannelOrders = kitchenOrdersData.filter(order =>
-                        !order.tableId && (!order.priceVariant || order.priceVariant === 'Default')
+                        !order.tableId && (!order.priceVariant || order.priceVariant === '')
                     );
 
                     if (defaultChannelOrders.length > 0) {
                         console.log(`[Dashboard] Found ${defaultChannelOrders.length} orders for Default channel`);
+                        // Log first 3 default channel orders for debugging
+                        defaultChannelOrders.slice(0, 3).forEach(order => {
+                            console.log(`  Default channel order: ${order.id}, TableID: ${order.tableId || 'null/undefined'}, PriceVariant: '${order.priceVariant || ''}' (${typeof order.priceVariant})`);
+                        });
                     }
 
                     // Update state with the real-time KITCHEN orders data
@@ -587,7 +607,7 @@ function Dashboard() {
                     // Also fetch recent COMPLETED orders for metrics
                     fetchRecentCompletedOrders(kitchenOrdersData);
 
-                    console.log(`[Realtime update] ${kitchenOrdersData.length} KITCHEN orders`);
+                    console.log(`[Realtime update] ${kitchenOrdersData.length} KITCHEN orders (real-time listener active)`);
                 },
                 (error) => {
                     console.error('Error in KITCHEN orders listener:', error);
@@ -635,8 +655,8 @@ function Dashboard() {
         }
     };
 
-    // Fetch only PLACED orders for the QR tab
-    const fetchPlacedOrders = async () => {
+    // Set up real-time listener for PLACED orders
+    const setupPlacedOrdersListener = () => {
         try {
             setLoadingQrOrders(true);
             setErrorQrOrders(null);
@@ -646,61 +666,51 @@ function Dashboard() {
                 console.error("SDK is not available or not properly initialized");
                 setErrorQrOrders("SDK is not available. Please try again later.");
                 setLoadingQrOrders(false);
-                return [];
+                return;
             }
 
-            // Fetch PLACED orders for the QR tab
+            console.log("[PLACED Listener] Setting up real-time listener for PLACED orders");
+
+            // Query for PLACED orders - similar to the KITCHEN orders listener
             const placedQuery = window.sdk.collection("Orders")
                 .where("currentStatus.label", "==", "PLACED")
                 .orderBy("date", "desc")
-                .limit(100);
+                .limit(100); // Increased limit for better pagination
 
-            const placedSnapshot = await placedQuery.get();
+            // Set up real-time listener
+            const unsubscribe = placedQuery.onSnapshot(
+                (snapshot) => {
+                    // Process the snapshot data
+                    const placedOrdersData = snapshot.docs
+                        .map(doc => ({
+                            id: doc.id,
+                            ...doc.data(),
+                            date: parseDate(doc.data().date)
+                        }));
 
-            const placedOrders = placedSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                date: parseDate(doc.data().date)
-            }));
+                    // Update state with the real-time PLACED orders data
+                    setQrOrders(placedOrdersData);
+                    setLoadingQrOrders(false);
 
-            // Update the dedicated QR orders state for the QR tab
-            setQrOrders(placedOrders);
-            setLoadingQrOrders(false);
+                    console.log(`[Realtime update] ${placedOrdersData.length} PLACED orders (real-time listener active)`);
+                },
+                (error) => {
+                    console.error('Error in PLACED orders listener:', error);
+                    setErrorQrOrders(`Failed to listen to QR orders updates: ${error.message}`);
+                    setLoadingQrOrders(false);
+                }
+            );
 
-            console.log(`Fetched ${placedOrders.length} PLACED orders for QR tab`);
-            return placedOrders;
+            // Save the unsubscribe function
+            setPlacedOrdersUnsubscribe(() => unsubscribe);
         } catch (err) {
-            console.error('Error fetching QR orders:', err);
-            setErrorQrOrders(`Failed to fetch QR orders: ${err.message}`);
+            console.error('Error setting up PLACED orders listener:', err);
+            setErrorQrOrders(`Failed to set up PLACED orders listener: ${err.message}`);
             setLoadingQrOrders(false);
-            return [];
         }
     };
 
-    // Add a refresh function that only refreshes QR/PLACED orders
-    const refreshOrders = () => {
-        fetchPlacedOrders();
-    };
-
-    // Handle scroll to load more items
-    const handleScroll = (e) => {
-        const { scrollTop, scrollHeight, clientHeight } = e.target;
-
-        // Check if scrolled to bottom and not already loading
-        if (scrollHeight - scrollTop <= clientHeight * 1.2 && !isLoadingMore && qrOrders.length >= loadedItemCount) {
-            setIsLoadingMore(true);
-
-            // Increase the limit and fetch more orders
-            setLoadedItemCount(prev => prev + 50);
-
-            // Reset loading state after a delay
-            setTimeout(() => {
-                setIsLoadingMore(false);
-            }, 2000);
-        }
-    };
-
-    // Add order handling functions
+    // Keep the handleAcceptOrder function for accepting orders
     const handleAcceptOrder = async (orderId) => {
         try {
             setLoadingQrOrders(true);
@@ -719,6 +729,9 @@ function Dashboard() {
 
             const order = orderDoc.data();
 
+            // Log order details BEFORE update
+            console.log(`[Accept Order] BEFORE - OrderID: ${orderId}, TableID: ${order.tableId || 'null/undefined'}, PriceVariant: '${order.priceVariant || ''}' (${typeof order.priceVariant})`);
+
             // Create status entry for kitchen processing - use KITCHEN status to be consistent with OrderRoom
             const statusEntry = {
                 label: 'KITCHEN',
@@ -734,13 +747,19 @@ function Dashboard() {
             // Update the order status
             await orderRef.update(updateObj);
 
+            // Fetch the updated order to verify changes
+            const updatedOrderDoc = await orderRef.get();
+            const updatedOrder = updatedOrderDoc.data();
+
+            // Log order details AFTER update
+            console.log(`[Accept Order] AFTER - OrderID: ${orderId}, TableID: ${updatedOrder.tableId || 'null/undefined'}, PriceVariant: '${updatedOrder.priceVariant || ''}' (${typeof updatedOrder.priceVariant})`);
+            console.log(`[Accept Order] Current status is now: ${updatedOrder.currentStatus?.label}`);
+
             // Show success message
             showToast("Order accepted successfully");
             console.log("Order moved to KITCHEN status and will appear in tables/channels");
 
-            // No need to manually refresh as the real-time listener will catch this update
-            // However, refresh QR orders list since they're not on real-time listener
-            await fetchPlacedOrders();
+            // No need to manually refresh as the real-time listeners will catch this update
 
         } catch (err) {
             console.error('Error accepting order:', err);
@@ -783,8 +802,7 @@ function Dashboard() {
             // Show success message
             showToast("Order rejected successfully");
 
-            // Refresh orders data
-            await fetchPlacedOrders();
+            // No need to manually refresh as the real-time listeners will catch this update
 
         } catch (err) {
             console.error('Error rejecting order:', err);
@@ -813,8 +831,7 @@ function Dashboard() {
             // Show success message
             showToast("Order deleted successfully");
 
-            // Refresh orders data
-            await fetchPlacedOrders();
+            // No need to manually refresh as the real-time listeners will catch this update
 
         } catch (err) {
             console.error('Error deleting order:', err);
@@ -905,6 +922,8 @@ function Dashboard() {
                 return;
             }
 
+            console.log("[COMPLETED Listener] Setting up real-time listener for COMPLETED orders");
+
             // Calculate date range based on selected filter
             const startDate = calculateStartDate(dateFilter, customDateRange.startDate);
             const endDate = calculateEndDate(dateFilter, customDateRange.endDate);
@@ -966,7 +985,7 @@ function Dashboard() {
                     setOrders(filteredOrders);
                     setLoadingCompletedOrders(false);
 
-                    console.log(`[Realtime update] Fetched ${fetchedOrders.length} COMPLETED orders, ${filteredOrders.length} matched the selected date range`);
+                    console.log(`[Realtime update] Fetched ${fetchedOrders.length} COMPLETED orders, ${filteredOrders.length} matched the selected date range (real-time listener active)`);
                 },
                 (error) => {
                     console.error('Error in COMPLETED orders listener:', error);
@@ -988,6 +1007,24 @@ function Dashboard() {
     const handleDateRangeSelect = (startDate, endDate) => {
         setCustomDateRange({ startDate, endDate });
         setDateFilter('custom');
+    };
+
+    // Handle scroll to load more items (restore this function)
+    const handleScroll = (e) => {
+        const { scrollTop, scrollHeight, clientHeight } = e.target;
+
+        // Check if scrolled to bottom and not already loading
+        if (scrollHeight - scrollTop <= clientHeight * 1.2 && !isLoadingMore && qrOrders.length >= loadedItemCount) {
+            setIsLoadingMore(true);
+
+            // Increase the limit and fetch more orders
+            setLoadedItemCount(prev => prev + 50);
+
+            // Reset loading state after a delay
+            setTimeout(() => {
+                setIsLoadingMore(false);
+            }, 2000);
+        }
     };
 
     // Render the dashboard
@@ -1159,20 +1196,9 @@ function Dashboard() {
 
             {/* Orders Section */}
             <div className="mb-6 bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
-                <div className="px-3 py-3 border-b border-gray-200 flex items-center justify-between">
-                    <div className="flex items-center">
-                        <i className="ph ph-qr-code text-red-500 text-xl mr-2"></i>
-                        <h2 className="text-lg font-semibold text-gray-800">Orders</h2>
-                    </div>
-                    <div className="flex">
-                        <button
-                            className="px-2 py-1.5 text-red-500 border border-gray-200 bg-gradient-to-r from-white to-gray-50 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1.5 text-sm"
-                            onClick={refreshOrders}
-                        >
-                            <i className="ph ph-arrows-clockwise"></i>
-                            <span>Refresh</span>
-                        </button>
-                    </div>
+                <div className="px-3 py-3 border-b border-gray-200 flex items-center">
+                    <i className="ph ph-qr-code text-red-500 text-xl mr-2"></i>
+                    <h2 className="text-lg font-semibold text-gray-800">Orders</h2>
                 </div>
 
                 {/* Order Tabs */}
