@@ -533,6 +533,23 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
     // Get orders directly from context without maintaining separate state
     const orders = getOrdersForSource(tableId, variant, orderStatus);
 
+    // Debug logging
+    React.useEffect(() => {
+        console.log(`[OrderRoom] Component mounted/updated for ${tableId ? `Table ${tableId}` : variant || 'Default'}`);
+        console.log(`[OrderRoom] Received ${orders.length} orders with status "${orderStatus}"`);
+
+        if (orders.length > 0) {
+            console.log(`[OrderRoom] First few orders:`, orders.slice(0, 3).map(o => ({
+                id: o.id,
+                tableId: o.tableId || null,
+                priceVariant: o.priceVariant || null,
+                status: o.currentStatus?.label
+            })));
+        } else {
+            console.log(`[OrderRoom] No orders found. This might indicate a problem with filtering or data.`);
+        }
+    }, [orders, tableId, variant, orderStatus]);
+
     // Calculate totals for progress bar
     const totalItems = React.useMemo(() => {
         return orders.reduce((sum, order) => {
@@ -720,13 +737,22 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
 
     // Render the no orders widget (equivalent to noOrderWidget in Flutter)
     const renderNoOrdersWidget = () => {
+        console.log(`[OrderRoom] No orders for ${tableId ? `Table ${tableId}` : variant || 'Default'}`);
+        console.log(`[OrderRoom] Current orderStatus filter: "${orderStatus}"`);
+
         return (
             <div className="flex flex-col items-center justify-center h-full py-10 text-center">
                 <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-50 rounded-full flex items-center justify-center mb-4">
                     <i className="ph ph-shopping-bag-open text-2xl text-red-500"></i>
                 </div>
                 <h3 className="text-lg font-medium text-gray-700 mb-1">No Orders Yet</h3>
-                <p className="text-gray-500 max-w-sm mb-6">Add new orders using the button below</p>
+                <p className="text-gray-500 max-w-sm mb-2">Add new orders using the button below</p>
+
+                <div className="text-xs text-gray-400 mb-6">
+                    <p>Looking for: {tableId ? `Table ${tableId}` : variant || 'Default'}</p>
+                    <p>Status filter: {orderStatus}</p>
+                </div>
+
                 <button
                     onClick={handleAddNewOrder}
                     className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg hover:from-red-700 hover:to-red-600 transition-colors flex items-center gap-2"

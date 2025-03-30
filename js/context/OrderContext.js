@@ -197,6 +197,8 @@ function OrderProvider({ children }) {
             order.items && order.items.length > 0
         );
 
+        console.log(`[OrderContext] getOrdersForSource - Found ${statusFilteredOrders.length} orders with status ${orderStatus}`);
+
         // Group into tables and channels
         const tableOrders = {};
         const channelOrders = {};
@@ -205,33 +207,47 @@ function OrderProvider({ children }) {
             const tableId = order.tableId;
             const priceVariant = order.priceVariant; // Might be null, undefined, or ""
 
+            // Check if this order has Default variant
+            const isDefaultVariant = priceVariant === 'Default' || priceVariant === '⚡Default';
+
+            // Log each order for debugging
+            console.log(`[OrderContext] Processing order ${order.id}: TableID='${tableId || ''}', PriceVariant='${priceVariant || ''}', isDefaultVariant=${isDefaultVariant}`);
+
             // 1. Table ID takes precedence
-            if (tableId) {
+            if (tableId && tableId !== '') {
                 if (!tableOrders[tableId]) {
                     tableOrders[tableId] = [];
                 }
                 tableOrders[tableId].push(order);
+                console.log(`[OrderContext] Assigned to table: ${tableId}`);
             }
-            // 2. If no tableId, check for meaningful priceVariant
-            else if (priceVariant && priceVariant !== '') {
+            // 2. If no tableId, check for meaningful non-Default priceVariant
+            else if (priceVariant && priceVariant !== '' && !isDefaultVariant) {
                 if (!channelOrders[priceVariant]) {
                     channelOrders[priceVariant] = [];
                 }
                 channelOrders[priceVariant].push(order);
+                console.log(`[OrderContext] Assigned to channel: ${priceVariant}`);
             }
-            // 3. If no tableId and no meaningful priceVariant, it belongs to Default
+            // 3. If no tableId and no meaningful priceVariant, or explicitly marked as Default, it belongs to Default
             else {
                 if (!channelOrders['Default']) {
                     channelOrders['Default'] = [];
                 }
                 channelOrders['Default'].push(order);
+
+                if (isDefaultVariant) {
+                    console.log(`[OrderContext] Assigned to Default channel (explicitly marked as Default)`);
+                } else {
+                    console.log(`[OrderContext] Assigned to Default channel (no tableId or valid priceVariant)`);
+                }
             }
         });
 
         // Log the grouping results for debugging
-        if (variant === 'Default' || tableId === 'Default') {
-            console.log(`[OrderContext] getOrdersForSource - Default channel orders: ${channelOrders['Default']?.length || 0}`);
-        }
+        console.log(`[OrderContext] getOrdersForSource - Results for ${tableId ? 'Table ' + tableId : variant || 'Default'}`);
+        console.log(`  → Tables: ${Object.keys(tableOrders).length}, Channels: ${Object.keys(channelOrders).length}`);
+        console.log(`  → Default channel orders: ${channelOrders['Default']?.length || 0}`);
 
         if (tableId) {
             return tableOrders[tableId] || [];

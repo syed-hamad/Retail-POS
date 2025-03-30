@@ -7,14 +7,16 @@ function Dashboard() {
         isLoading,
         error: orderError,
         getOrdersByTableAndChannel,
-        loadCompletedOrders
+        loadCompletedOrders,
+        getOrdersForSource
     } = window.useOrders ? window.useOrders() : {
         activeOrders: [],
         completedOrders: [],
         isLoading: true,
         error: null,
         getOrdersByTableAndChannel: () => ({ tableOrders: {}, channelOrders: {} }),
-        loadCompletedOrders: () => { }
+        loadCompletedOrders: () => { },
+        getOrdersForSource: () => []
     };
 
     const [error, setError] = React.useState(null);
@@ -93,16 +95,12 @@ function Dashboard() {
                 const priceVariant = order.priceVariant || null;
 
                 const hasValidTableId = tableId !== null && tableId !== undefined && tableId !== '';
-                const hasValidPriceVariant = priceVariant !== null && priceVariant !== undefined && priceVariant !== '';
+                // Consider "Default" as a valid priceVariant that should go to Default channel
+                const isDefaultVariant = priceVariant === 'Default' || priceVariant === '⚡Default';
+                const hasValidPriceVariant = priceVariant !== null && priceVariant !== undefined && priceVariant !== '' && !isDefaultVariant;
 
-                // Get defined price variants from seller profile
-                const sellerVariants = (seller?.priceVariants || []).map(v => v.title).filter(Boolean);
-
-                // Check if the priceVariant is defined in seller profile
-                const isDefinedVariant = hasValidPriceVariant && sellerVariants.includes(priceVariant);
-
-                // Log every order in processing for debugging
-                console.log(`[Dashboard Grouping] Order ID: ${order.id}, HasTableID: ${hasValidTableId}, HasPriceVariant: ${hasValidPriceVariant}, IsDefinedVariant: ${isDefinedVariant}`);
+                // Log every order processing for debugging
+                console.log(`[Dashboard Grouping] Order ID: ${order.id}, HasTableID: ${hasValidTableId}, HasPriceVariant: ${hasValidPriceVariant}, IsDefaultVariant: ${isDefaultVariant}`);
                 console.log(`  TableID: '${tableId || ''}' (${typeof tableId}), PriceVariant: '${priceVariant || ''}' (${typeof priceVariant})`);
 
                 // 1. Handle table assignments first - if there's a valid tableId
@@ -113,25 +111,27 @@ function Dashboard() {
                     tableOrdersMap[tableId].push(order);
                     console.log(`[Dashboard Grouping]   Assigned to Table: ${tableId}`);
                 }
-                // 2. Handle specific price variant channels (if no tableId and variant is defined in seller profile)
-                else if (isDefinedVariant) {
+                // 2. Handle specific non-Default price variant channels (if no tableId and variant is meaningful)
+                else if (hasValidPriceVariant) {
                     if (!channelOrdersMap[priceVariant]) {
                         channelOrdersMap[priceVariant] = [];
                     }
                     channelOrdersMap[priceVariant].push(order);
                     console.log(`[Dashboard Grouping]   Assigned to Channel: ${priceVariant}`);
                 }
-                // 3. Handle Default channel (if no tableId or priceVariant not in seller profile)
+                // 3. Handle Default channel for both cases:
+                //    - orders explicitly marked with Default variant
+                //    - orders without any tableId or meaningful priceVariant
                 else {
                     if (!channelOrdersMap['Default']) {
                         channelOrdersMap['Default'] = [];
                     }
                     channelOrdersMap['Default'].push(order);
 
-                    if (hasValidPriceVariant) {
-                        console.log(`[Dashboard Grouping]   Assigned to Default channel (priceVariant '${priceVariant}' not in seller profile)`);
+                    if (isDefaultVariant) {
+                        console.log(`[Dashboard Grouping]   Assigned to Channel: Default (Explicitly marked as Default)`);
                     } else {
-                        console.log(`[Dashboard Grouping]   Assigned to Default channel (no priceVariant)`);
+                        console.log(`[Dashboard Grouping]   Assigned to Channel: Default (No tableId or priceVariant)`);
                     }
                 }
             });
@@ -153,16 +153,32 @@ function Dashboard() {
                 .map(v => v.title)
                 .filter(Boolean);
 
+            // Also collect unique price variants from orders
+            const orderPriceVariants = new Set();
+            relevantOrders.forEach(order => {
+                if (order.priceVariant && order.priceVariant !== '') {
+                    orderPriceVariants.add(order.priceVariant);
+                }
+            });
+
+            // Combine both sources
+            const allPriceVariants = [...new Set([...priceVariants, ...orderPriceVariants])];
+
             // Always ensure we have a Default variant for channel creation
-            if (!priceVariants.includes('Default')) {
-                priceVariants.unshift('Default');
+            if (!allPriceVariants.includes('Default')) {
+                allPriceVariants.unshift('Default');
             }
 
-            // Create channel definitions based on defined price variants
+            // Log all variants
+            console.log(`[Dashboard] Price variants from profile: ${priceVariants.join(', ')}`);
+            console.log(`[Dashboard] Price variants from orders: ${[...orderPriceVariants].join(', ')}`);
+            console.log(`[Dashboard] Combined price variants: ${allPriceVariants.join(', ')}`);
+
+            // Create channel definitions based on all defined price variants
             const normalizedNames = new Set();
             const orderChannels = [];
 
-            priceVariants.forEach(variant => {
+            allPriceVariants.forEach(variant => {
                 const normalizedName = variant.toLowerCase();
                 if (!normalizedNames.has(normalizedName)) {
                     normalizedNames.add(normalizedName);
@@ -185,8 +201,34 @@ function Dashboard() {
                 isTable: true
             }));
 
+            // Also collect unique tableIds from orders that are not in the seller profile
+            const profileTableIds = new Set(formattedTables.map(table => table.id));
+            const orderTableIds = new Set();
+
+            relevantOrders.forEach(order => {
+                if (order.tableId && !profileTableIds.has(order.tableId)) {
+                    orderTableIds.add(order.tableId);
+                }
+            });
+
+            // Add dynamic tables from orders
+            const dynamicTables = [...orderTableIds].map(tableId => ({
+                id: tableId,
+                title: tableId,
+                type: 'dine_in',
+                section: 'dynamic', // Mark these as dynamic
+                isTable: true
+            }));
+
+            // Combine profile tables with dynamic tables from orders
+            const allTables = [...formattedTables, ...dynamicTables];
+
+            console.log(`[Dashboard] Tables from profile: ${formattedTables.length}`);
+            console.log(`[Dashboard] Dynamic tables from orders: ${dynamicTables.length}`);
+            console.log(`[Dashboard] Combined tables: ${allTables.length}`);
+
             // Assign orders to tables using the map
-            const tablesWithOrders = formattedTables.map(table => {
+            const tablesWithOrders = allTables.map(table => {
                 const tableOrdersList = tableOrdersMap[table.id] || []; // Use table.id for lookup
                 let oldestOrderDate = null;
                 if (tableOrdersList.length > 0) {
@@ -352,8 +394,36 @@ function Dashboard() {
         setSelectedRoomVariant(variant);
         setIsOrderRoomOpen(true);
 
-        // Log analytics event
-        console.log(`Opening OrderRoom for ${tableId ? `Table ${tableId}` : variant} showing KITCHEN status orders`);
+        // Enhanced debugging for OrderRoom
+        console.log(`[Dashboard] Opening OrderRoom for ${tableId ? `Table ${tableId}` : variant || 'Default'} showing KITCHEN status orders`);
+
+        // Check what data we're sending to OrderRoom
+        if (getOrdersForSource) {
+            const previewOrders = getOrdersForSource(tableId, variant, "KITCHEN");
+            console.log(`[Dashboard] Preview: OrderRoom will receive ${previewOrders.length} orders for ${tableId ? `Table ${tableId}` : variant || 'Default'}`);
+
+            if (previewOrders.length === 0 && variant === 'Swiggy') {
+                // Special case for Swiggy which shows in tile but not in OrderRoom
+                console.log(`[Dashboard] WARNING: Swiggy channel shows 0 orders in preview. This may indicate a data inconsistency!`);
+                console.log(`[Dashboard] Checking all KITCHEN orders for Swiggy data...`);
+
+                const allKitchenOrders = kitchenOrders.filter(o =>
+                    (o.priceVariant === 'Swiggy' || o.tableId === 'Swiggy') &&
+                    o.currentStatus?.label === 'KITCHEN'
+                );
+
+                console.log(`[Dashboard] Found ${allKitchenOrders.length} raw KITCHEN status orders with Swiggy data`);
+                if (allKitchenOrders.length > 0) {
+                    console.log(`[Dashboard] First Swiggy order:`, {
+                        id: allKitchenOrders[0].id,
+                        tableId: allKitchenOrders[0].tableId || null,
+                        priceVariant: allKitchenOrders[0].priceVariant || null,
+                        status: allKitchenOrders[0].currentStatus?.label,
+                        items: allKitchenOrders[0].items?.length || 0
+                    });
+                }
+            }
+        }
     };
 
     // Calculate dashboard metrics from orders data
@@ -601,19 +671,14 @@ function Dashboard() {
                         const priceVariant = order.priceVariant || null;
 
                         const hasValidTableId = tableId !== null && tableId !== undefined && tableId !== '';
-                        const hasValidPriceVariant = priceVariant !== null && priceVariant !== undefined && priceVariant !== '';
+                        const isDefaultVariant = priceVariant === 'Default' || priceVariant === '⚡Default';
+                        const hasValidPriceVariant = priceVariant !== null && priceVariant !== undefined && priceVariant !== '' && !isDefaultVariant;
 
-                        // Get defined price variants from seller profile
-                        const sellerVariants = (seller?.priceVariants || []).map(v => v.title).filter(Boolean);
-
-                        // Check if the priceVariant is defined in seller profile
-                        const isDefinedVariant = hasValidPriceVariant && sellerVariants.includes(priceVariant);
-
-                        // This should match the logic in the useEffect grouping:
-                        // 1. If it has a valid tableId, it's not a Default channel order
-                        // 2. If it has a valid priceVariant defined in seller profile, it's not a Default channel order
-                        // 3. All other orders belong to Default channel
-                        return !hasValidTableId && !isDefinedVariant;
+                        // This should match the logic in the useEffect grouping
+                        // Orders go to Default channel if:
+                        // 1. They have no valid tableId AND no valid priceVariant, OR
+                        // 2. They are explicitly marked with Default variant
+                        return (!hasValidTableId && !hasValidPriceVariant) || isDefaultVariant;
                     });
 
                     console.log(`[Default Channel Debug] Found ${defaultChannelOrders.length} orders for Default channel`);
