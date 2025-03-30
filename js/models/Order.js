@@ -346,7 +346,7 @@ class MOrder {
         if (newStatuses.length > 0) {
             await this.ref.update({
                 currentStatus: newStatuses[newStatuses.length - 1],
-                status: window.sdk.FieldValue.arrayUnion(...newStatuses)
+                status: window.sdk.fieldValue.arrayUnion(...newStatuses)
             });
 
             await this.reload();

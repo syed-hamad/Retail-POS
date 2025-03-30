@@ -151,7 +151,7 @@ function OrderThumb({ order }) {
 }
 
 // Order Group Tile Component
-function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
+function OrderGroupTile({ order, onAccept, onReject, onPrintBill }) {
     const [isExpanded, setIsExpanded] = React.useState(false);
 
     // Calculate time ago
@@ -185,7 +185,6 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
                     },
                     onAccept,
                     onReject,
-                    onDelete,
                     onPrintBill
                 }),
                 modalContainer
@@ -202,7 +201,7 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
         const label = status.label?.toUpperCase();
 
         if (label === 'PLACED') return 'bg-blue-50 text-blue-600 border-blue-100';
-        if (label === 'PROCESSING' || label === 'KITCHEN') return 'bg-orange-50 text-orange-600 border-orange-100';
+        if (label === 'KITCHEN') return 'bg-orange-50 text-orange-600 border-orange-100';
         if (label === 'COMPLETED') return 'bg-green-50 text-green-600 border-green-100';
         if (label === 'CANCELLED') return 'bg-red-50 text-red-600 border-red-100';
 
@@ -325,7 +324,7 @@ function OrderGroupTile({ order, onAccept, onReject, onDelete, onPrintBill }) {
 }
 
 // Order Details Modal Component
-function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPrintBill }) {
+function OrderDetailsModal({ order, onClose, onAccept, onReject, onPrintBill }) {
     const [isCustomerSearchOpen, setIsCustomerSearchOpen] = React.useState(false);
     const totalAmount = order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || item.qnt || 1)), 0) || 0;
     const taxAmount = totalAmount * 0.18; // Assuming 18% tax
@@ -334,7 +333,7 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onDelete, onPri
     // Determine order status for showing appropriate actions
     const isNewOrder = order.currentStatus?.label === "PLACED";
     const isCompletedOrder = order.currentStatus?.label === "COMPLETED" || order.paid === true;
-    const isProcessingOrder = order.currentStatus?.label === "PROCESSING" || order.currentStatus?.label === "KITCHEN";
+    const isProcessingOrder = order.currentStatus?.label === "KITCHEN";
 
     // Handle selecting a customer
     const handleSelectCustomer = async (customer) => {

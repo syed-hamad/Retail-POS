@@ -74,6 +74,7 @@ function Dashboard() {
         if (!seller || !kitchenOrders) return;
 
         console.log(`[Kitchen useEffect] Processing ${kitchenOrders.length} KITCHEN orders...`);
+        console.log(`[Kitchen useEffect] Kitchen orders:`, kitchenOrders);
 
         try {
             // No need to filter - kitchenOrders already contains only KITCHEN status orders
@@ -87,35 +88,51 @@ function Dashboard() {
                 // Filter out orders without items
                 if (!order.items || order.items.length === 0) return;
 
-                const tableId = order.tableId;
-                const priceVariant = order.priceVariant; // Might be null, undefined, or ""
+                // Extract values and check if they are valid (not null, undefined, or empty string)
+                const tableId = order.tableId || null;
+                const priceVariant = order.priceVariant || null;
+
+                const hasValidTableId = tableId !== null && tableId !== undefined && tableId !== '';
+                const hasValidPriceVariant = priceVariant !== null && priceVariant !== undefined && priceVariant !== '';
+
+                // Get defined price variants from seller profile
+                const sellerVariants = (seller?.priceVariants || []).map(v => v.title).filter(Boolean);
+
+                // Check if the priceVariant is defined in seller profile
+                const isDefinedVariant = hasValidPriceVariant && sellerVariants.includes(priceVariant);
 
                 // Log every order in processing for debugging
-                console.log(`[Dashboard Grouping] Order ID: ${order.id}, TableID: ${tableId || 'null/undefined'}, Variant: '${priceVariant || ''}' (Type: ${typeof priceVariant})`);
+                console.log(`[Dashboard Grouping] Order ID: ${order.id}, HasTableID: ${hasValidTableId}, HasPriceVariant: ${hasValidPriceVariant}, IsDefinedVariant: ${isDefinedVariant}`);
+                console.log(`  TableID: '${tableId || ''}' (${typeof tableId}), PriceVariant: '${priceVariant || ''}' (${typeof priceVariant})`);
 
-                // 1. Handle table assignments first
-                if (tableId) {
+                // 1. Handle table assignments first - if there's a valid tableId
+                if (hasValidTableId) {
                     if (!tableOrdersMap[tableId]) {
                         tableOrdersMap[tableId] = [];
                     }
                     tableOrdersMap[tableId].push(order);
                     console.log(`[Dashboard Grouping]   Assigned to Table: ${tableId}`);
                 }
-                // 2. Handle specific price variant channels (if no tableId and variant is meaningful)
-                else if (priceVariant && priceVariant !== '') {
+                // 2. Handle specific price variant channels (if no tableId and variant is defined in seller profile)
+                else if (isDefinedVariant) {
                     if (!channelOrdersMap[priceVariant]) {
                         channelOrdersMap[priceVariant] = [];
                     }
                     channelOrdersMap[priceVariant].push(order);
                     console.log(`[Dashboard Grouping]   Assigned to Channel: ${priceVariant}`);
                 }
-                // 3. Handle Default channel (if no tableId and no meaningful priceVariant)
+                // 3. Handle Default channel (if no tableId or priceVariant not in seller profile)
                 else {
                     if (!channelOrdersMap['Default']) {
                         channelOrdersMap['Default'] = [];
                     }
                     channelOrdersMap['Default'].push(order);
-                    console.log(`[Dashboard Grouping]   Assigned to Channel: Default`);
+
+                    if (hasValidPriceVariant) {
+                        console.log(`[Dashboard Grouping]   Assigned to Default channel (priceVariant '${priceVariant}' not in seller profile)`);
+                    } else {
+                        console.log(`[Dashboard Grouping]   Assigned to Default channel (no priceVariant)`);
+                    }
                 }
             });
             // --- End Manual Grouping Logic ---
@@ -568,17 +585,54 @@ function Dashboard() {
                         }))
                         .filter(order => order.items && order.items.length > 0);
 
+                    console.log(`[Kitchen Listener] Received ${kitchenOrdersData.length} KITCHEN orders`);
+
+                    // Enhanced debugging - log all kitchen orders with their key properties
+                    kitchenOrdersData.forEach(order => {
+                        const tableId = order.tableId;
+                        const priceVariant = order.priceVariant;
+
+                        console.log(`[Kitchen Order Debug] ID: ${order.id}, TableID: '${tableId || ''}' (${typeof tableId}), PriceVariant: '${priceVariant || ''}' (${typeof priceVariant})`);
+                    });
+
                     // Log for debugging: count orders with no tableId and no priceVariant (Default channel)
-                    const defaultChannelOrders = kitchenOrdersData.filter(order =>
-                        !order.tableId && (!order.priceVariant || order.priceVariant === '')
-                    );
+                    const defaultChannelOrders = kitchenOrdersData.filter(order => {
+                        const tableId = order.tableId || null;
+                        const priceVariant = order.priceVariant || null;
+
+                        const hasValidTableId = tableId !== null && tableId !== undefined && tableId !== '';
+                        const hasValidPriceVariant = priceVariant !== null && priceVariant !== undefined && priceVariant !== '';
+
+                        // Get defined price variants from seller profile
+                        const sellerVariants = (seller?.priceVariants || []).map(v => v.title).filter(Boolean);
+
+                        // Check if the priceVariant is defined in seller profile
+                        const isDefinedVariant = hasValidPriceVariant && sellerVariants.includes(priceVariant);
+
+                        // This should match the logic in the useEffect grouping:
+                        // 1. If it has a valid tableId, it's not a Default channel order
+                        // 2. If it has a valid priceVariant defined in seller profile, it's not a Default channel order
+                        // 3. All other orders belong to Default channel
+                        return !hasValidTableId && !isDefinedVariant;
+                    });
+
+                    console.log(`[Default Channel Debug] Found ${defaultChannelOrders.length} orders for Default channel`);
 
                     if (defaultChannelOrders.length > 0) {
-                        console.log(`[Dashboard] Found ${defaultChannelOrders.length} orders for Default channel`);
-                        // Log first 3 default channel orders for debugging
-                        defaultChannelOrders.slice(0, 3).forEach(order => {
-                            console.log(`  Default channel order: ${order.id}, TableID: ${order.tableId || 'null/undefined'}, PriceVariant: '${order.priceVariant || ''}' (${typeof order.priceVariant})`);
+                        console.log(`[Default Channel Details]:`);
+                        // Log ALL default channel orders for debugging
+                        defaultChannelOrders.forEach(order => {
+                            console.log(`  Order ID: ${order.id}`);
+                            console.log(`    TableID: '${order.tableId || ''}' (${typeof order.tableId})`);
+                            console.log(`    PriceVariant: '${order.priceVariant || ''}' (${typeof order.priceVariant})`);
+                            console.log(`    Status: ${order.currentStatus?.label}`);
+                            console.log(`    Date: ${order.currentStatus?.date}`);
                         });
+                    } else {
+                        console.log(`[Default Channel Debug] No orders qualify for Default channel. Check conditions:`);
+                        console.log(`  1. Orders with tableId: ${kitchenOrdersData.filter(o => o.tableId).length}`);
+                        console.log(`  2. Orders with priceVariant set: ${kitchenOrdersData.filter(o => o.priceVariant && o.priceVariant !== '').length}`);
+                        console.log(`  3. Orders that should be Default: ${kitchenOrdersData.filter(o => !o.tableId && (!o.priceVariant || o.priceVariant === '')).length}`);
                     }
 
                     // Update state with the real-time KITCHEN orders data
@@ -700,17 +754,21 @@ function Dashboard() {
                 throw new Error('SDK is not available or not properly initialized');
             }
 
+            // Fetch the order first to log its current state
             const orderRef = window.sdk.collection("Orders").doc(orderId);
             const orderDoc = await orderRef.get();
 
             if (!orderDoc.exists) {
-                throw new Error('Order not found');
+                throw new Error(`Order ${orderId} not found`);
             }
 
-            const order = orderDoc.data();
-
-            // Log order details BEFORE update
-            console.log(`[Accept Order] BEFORE - OrderID: ${orderId}, TableID: ${order.tableId || 'null/undefined'}, PriceVariant: '${order.priceVariant || ''}' (${typeof order.priceVariant})`);
+            const orderData = orderDoc.data();
+            console.log(`[handleAcceptOrder] Before update - Order ${orderId}:`, {
+                tableId: orderData.tableId || 'null/undefined',
+                priceVariant: orderData.priceVariant || 'null/undefined',
+                currentStatus: orderData.currentStatus,
+                statusCount: orderData.status?.length || 0
+            });
 
             // Create status entry for kitchen processing - use KITCHEN status to be consistent with OrderRoom
             const statusEntry = {
@@ -718,29 +776,34 @@ function Dashboard() {
                 date: new Date()
             };
 
-            // Prepare the update object - don't modify priceVariant, let the grouping logic handle default channel assignment
-            const updateObj = {
-                currentStatus: statusEntry,
-                status: [...(order.status || []), statusEntry]
-            };
-
             // Update the order status
-            await orderRef.update(updateObj);
+            await orderRef.update({
+                currentStatus: statusEntry,
+                // Use SDK's fieldValue.arrayUnion instead of firebase.firestore
+                status: window.sdk.fieldValue.arrayUnion(statusEntry)
+            });
 
-            // Fetch the updated order to verify changes
+            // Fetch the updated order to confirm changes
             const updatedOrderDoc = await orderRef.get();
-            const updatedOrder = updatedOrderDoc.data();
+            const updatedOrderData = updatedOrderDoc.data();
 
-            // Log order details AFTER update
-            console.log(`[Accept Order] AFTER - OrderID: ${orderId}, TableID: ${updatedOrder.tableId || 'null/undefined'}, PriceVariant: '${updatedOrder.priceVariant || ''}' (${typeof updatedOrder.priceVariant})`);
-            console.log(`[Accept Order] Current status is now: ${updatedOrder.currentStatus?.label}`);
+            console.log(`[handleAcceptOrder] After update - Order ${orderId}:`, {
+                tableId: updatedOrderData.tableId || 'null/undefined',
+                priceVariant: updatedOrderData.priceVariant || 'null/undefined',
+                currentStatus: updatedOrderData.currentStatus,
+                statusCount: updatedOrderData.status?.length || 0
+            });
 
             // Show success message
             showToast("Order accepted successfully");
-            console.log("Order moved to KITCHEN status and will appear in tables/channels");
+            console.log(`Order ${orderId} moved to KITCHEN status and will appear in tables/channels`);
 
-            // No need to manually refresh as the real-time listeners will catch this update
-
+            // Extra check - force refresh of kitchen orders listener by calling setupKitchenOrdersListener
+            console.log("Refreshing kitchen orders listener to ensure the updated order appears...");
+            if (kitchenOrdersUnsubscribe) {
+                kitchenOrdersUnsubscribe();
+            }
+            setupKitchenOrdersListener();
         } catch (err) {
             console.error('Error accepting order:', err);
             showToast(`Failed to accept order: ${err.message}`, "error");
@@ -758,64 +821,27 @@ function Dashboard() {
                 throw new Error('SDK is not available or not properly initialized');
             }
 
-            const orderRef = window.sdk.collection("Orders").doc(orderId);
-            const orderDoc = await orderRef.get();
-
-            if (!orderDoc.exists) {
-                throw new Error('Order not found');
-            }
-
-            const order = orderDoc.data();
-
             // Create status entry for rejected
             const statusEntry = {
                 label: 'CANCELLED',
                 date: new Date()
             };
 
-            // Update the order status
+            // Update the order status directly without checking if it exists
+            const orderRef = window.sdk.collection("Orders").doc(orderId);
+
+            // Update with array union for atomicity
             await orderRef.update({
                 currentStatus: statusEntry,
-                status: [...(order.status || []), statusEntry]
+                // Use a server-side array union to append the status without needing to read first
+                status: window.sdk.fieldValue.arrayUnion(statusEntry)
             });
 
             // Show success message
             showToast("Order rejected successfully");
-
-            // No need to manually refresh as the real-time listeners will catch this update
-
         } catch (err) {
             console.error('Error rejecting order:', err);
             showToast(`Failed to reject order: ${err.message}`, "error");
-        } finally {
-            setLoadingQrOrders(false);
-        }
-    };
-
-    const handleDeleteOrder = async (orderId) => {
-        try {
-            if (!confirm('Are you sure you want to delete this order?')) {
-                return;
-            }
-
-            setLoadingQrOrders(true);
-
-            // Check if SDK is available
-            if (!window.sdk || !window.sdk.collection) {
-                throw new Error('SDK is not available or not properly initialized');
-            }
-
-            // Delete the order from Firestore
-            await window.sdk.collection("Orders").doc(orderId).delete();
-
-            // Show success message
-            showToast("Order deleted successfully");
-
-            // No need to manually refresh as the real-time listeners will catch this update
-
-        } catch (err) {
-            console.error('Error deleting order:', err);
-            showToast(`Failed to delete order: ${err.message}`, "error");
         } finally {
             setLoadingQrOrders(false);
         }
@@ -828,24 +854,21 @@ function Dashboard() {
                 throw new Error('SDK is not available or not properly initialized');
             }
 
-            const orderRef = window.sdk.collection("Orders").doc(orderId);
-            const orderDoc = await orderRef.get();
+            console.log(`[Dashboard] Attempting to print bill for order: ${orderId}`);
 
-            if (!orderDoc.exists) {
-                throw new Error('Order not found');
-            }
-
-            // Check if bill printing is available in SDK
+            // Check if bill printing is available in SDK and print directly without checking if order exists
             if (window.sdk.bill && typeof window.sdk.bill.print === 'function') {
+                console.log(`[Dashboard] Using SDK bill.print function`);
                 await window.sdk.bill.print(orderId);
                 showToast("Bill printed successfully");
             } else if (window.sdk.kot && typeof window.sdk.kot.print === 'function') {
                 // Fallback to KOT printing if bill printing is not available
+                console.log(`[Dashboard] Bill print not available, falling back to KOT print`);
                 await window.sdk.kot.print(orderId);
                 showToast("KOT printed successfully");
             } else {
                 // Fallback for development/testing
-                console.log('Print bill for order:', orderId);
+                console.log('[Dashboard] Print simulation for order:', orderId);
                 showToast("Print simulation: Bill printed successfully");
             }
         } catch (err) {
@@ -1059,7 +1082,7 @@ function Dashboard() {
                     {isLoading ? (
                         <div className="text-center py-10">
                             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
-                            <p className="mt-3 text-gray-600">Loading online orders...</p>
+                            <p className="mt-3 text-gray-600">Loading orders...</p>
                         </div>
                     ) : error ? (
                         <div className="text-center py-10">
@@ -1199,25 +1222,25 @@ function Dashboard() {
                                     <i className="ph ph-check-circle text-green-500 text-lg"></i>
                                 </div>
                                 <div>
-                                    <div className="text-xs text-gray-500">Accepted Today</div>
+                                    <div className="text-xs text-gray-500">Kitchen Orders Today</div>
                                     <div className="text-lg font-bold text-gray-800">
                                         {(() => {
                                             // Filter orders accepted today
                                             const today = new Date();
                                             today.setHours(0, 0, 0, 0);
                                             const acceptedToday = orders.filter(order => {
-                                                // Check if order has 'PROCESSING' status
+                                                // Check if order has 'KITCHEN' status
                                                 if (!order.status || !Array.isArray(order.status)) return false;
 
-                                                // Find the processing status entry
-                                                const processingStatus = order.status.find(
-                                                    s => s.label && s.label.toUpperCase() === 'PROCESSING'
+                                                // Find the kitchen status entry
+                                                const kitchenStatus = order.status.find(
+                                                    s => s.label && s.label.toUpperCase() === 'KITCHEN'
                                                 );
 
-                                                if (!processingStatus || !processingStatus.date) return false;
+                                                if (!kitchenStatus || !kitchenStatus.date) return false;
 
                                                 // Check if it was accepted today
-                                                const statusDate = parseDate(processingStatus.date);
+                                                const statusDate = parseDate(kitchenStatus.date);
                                                 return statusDate && statusDate >= today;
                                             });
 
@@ -1244,27 +1267,27 @@ function Dashboard() {
                                             orders.forEach(order => {
                                                 if (!order.status || !Array.isArray(order.status)) return;
 
-                                                // Find the placed and processing status entries
+                                                // Find the placed and kitchen status entries
                                                 const placedStatus = order.status.find(
                                                     s => s.label && s.label.toUpperCase() === 'PLACED'
                                                 );
 
-                                                const processingStatus = order.status.find(
-                                                    s => s.label && s.label.toUpperCase() === 'PROCESSING'
+                                                const kitchenStatus = order.status.find(
+                                                    s => s.label && s.label.toUpperCase() === 'KITCHEN'
                                                 );
 
-                                                if (!placedStatus || !processingStatus) return;
+                                                if (!placedStatus || !kitchenStatus) return;
 
                                                 const placedDate = parseDate(placedStatus.date);
-                                                const processingDate = parseDate(processingStatus.date);
+                                                const kitchenDate = parseDate(kitchenStatus.date);
 
-                                                if (!placedDate || !processingDate) return;
+                                                if (!placedDate || !kitchenDate) return;
 
                                                 // Only consider orders accepted today
-                                                if (processingDate < today) return;
+                                                if (kitchenDate < today) return;
 
                                                 // Calculate time difference in minutes
-                                                const acceptTimeMinutes = (processingDate - placedDate) / (1000 * 60);
+                                                const acceptTimeMinutes = (kitchenDate - placedDate) / (1000 * 60);
 
                                                 // Only consider valid times (greater than 0 and less than 1 day)
                                                 if (acceptTimeMinutes > 0 && acceptTimeMinutes < 1440) {
@@ -1362,7 +1385,6 @@ function Dashboard() {
                                                     order={order}
                                                     onAccept={() => handleAcceptOrder(order.id)}
                                                     onReject={() => handleRejectOrder(order.id)}
-                                                    onDelete={() => handleDeleteOrder(order.id)}
                                                     onPrintBill={() => handlePrintBill(order.id)}
                                                 />
                                             ))}
