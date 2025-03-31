@@ -10,6 +10,8 @@ function Passbook() {
     const [dateFilter, setDateFilter] = React.useState('last7');
     const [customDateRange, setCustomDateRange] = React.useState({ start: null, end: null });
     const [activeFilters, setActiveFilters] = React.useState(['Cash', 'UPI/Card', 'Credit', 'Wallet', 'Sales']);
+    const [showTrends, setShowTrends] = React.useState(false);
+    const [isExporting, setIsExporting] = React.useState(false);
 
     const getDateRange = (filter) => {
         const now = new Date();
@@ -229,6 +231,74 @@ function Passbook() {
         return { total, credit, debit, cash, upi, wallet };
     }, [filteredTransactions]);
 
+    // Function to export transactions to CSV
+    const exportToCSV = () => {
+        setIsExporting(true);
+
+        try {
+            // Get currently filtered transactions
+            const dataToExport = filteredTransactions.map(transaction => {
+                const customer = customers.find(c => c.id === transaction.customerId);
+                const itemsSummary = transaction.items?.map(item => `${item.qnt}x ${item.title}`).join(", ") || "";
+
+                return {
+                    date: formatDate(transaction.date, 'full'),
+                    orderId: transaction.orderId || 'N/A',
+                    customerName: customer?.name || 'Unknown',
+                    customerPhone: customer?.phone || 'N/A',
+                    amount: Math.abs(transaction.amount).toFixed(2),
+                    paymentMethod: transaction.paymentMethod === 'cash' ? 'Cash' :
+                        transaction.paymentMethod === 'upi' ? 'UPI/Card' :
+                            transaction.paymentMethod === 'wallet' ? 'Wallet' : 'Credit',
+                    transactionType: transaction.type === 'credit' ? 'Sale' : 'Wallet Payment',
+                    items: itemsSummary
+                };
+            });
+
+            // Create CSV header and rows
+            const headers = ["Date & Time", "Order ID", "Customer", "Phone", "Amount", "Payment Method", "Type", "Items"];
+            const csvContent = [
+                headers.join(","),
+                ...dataToExport.map(row => [
+                    `"${row.date}"`,
+                    `"${row.orderId}"`,
+                    `"${row.customerName}"`,
+                    `"${row.customerPhone}"`,
+                    row.amount,
+                    `"${row.paymentMethod}"`,
+                    `"${row.transactionType}"`,
+                    `"${row.items}"`
+                ].join(","))
+            ].join("\n");
+
+            // Create a download link
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            const dateStr = new Date().toLocaleDateString().replace(/\//g, '-');
+
+            link.setAttribute('href', url);
+            link.setAttribute('download', `passbook-transactions-${dateStr}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Show success notification (assuming you have a toast notification system)
+            // If you don't have one, you can omit this
+            if (window.showToast) {
+                window.showToast(`Exported ${dataToExport.length} transactions successfully`, 'success');
+            }
+        } catch (err) {
+            console.error('Export failed:', err);
+            // Show error notification
+            if (window.showToast) {
+                window.showToast('Failed to export transactions', 'error');
+            }
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
     const SummaryCards = () => {
         const dateRangeOptions = [
             { value: 'today', label: 'Today' },
@@ -240,14 +310,24 @@ function Passbook() {
         ];
 
         return (
-            <div>
-                {/* Reports Header with Date Filter */}
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-medium">Reports</h3>
+            <div className="bg-white p-5 rounded-lg shadow-sm">
+                {/* Reports Header with Date Filter and Export Button */}
+                <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center">
+                        <h3 className="text-lg font-medium text-gray-800">Reports</h3>
+                        <button
+                            onClick={exportToCSV}
+                            disabled={isExporting || filteredTransactions.length === 0}
+                            className="ml-4 px-3 py-1.5 text-sm bg-primary bg-opacity-10 text-primary hover:bg-opacity-20 rounded-lg flex items-center transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <i className={`ph ${isExporting ? 'ph-spinner ph-spin' : 'ph-download-simple'} mr-1.5`}></i>
+                            {isExporting ? 'Exporting...' : 'Export CSV'}
+                        </button>
+                    </div>
                     <select
                         value={dateFilter}
                         onChange={(e) => setDateFilter(e.target.value)}
-                        className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     >
                         {dateRangeOptions.map(option => (
                             <option key={option.value} value={option.value}>{option.label}</option>
@@ -257,7 +337,7 @@ function Passbook() {
 
                 {/* Custom Date Range Picker */}
                 {dateFilter === 'custom' && (
-                    <div className="flex items-center gap-4 mb-4">
+                    <div className="flex items-center gap-4 mb-5">
                         <input
                             type="date"
                             value={customDateRange.start?.toISOString().split('T')[0] || ''}
@@ -267,7 +347,7 @@ function Passbook() {
                             }))}
                             className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm"
                         />
-                        <span>to</span>
+                        <span className="text-gray-500">to</span>
                         <input
                             type="date"
                             value={customDateRange.end?.toISOString().split('T')[0] || ''}
@@ -281,76 +361,87 @@ function Passbook() {
                 )}
 
                 {/* First Row - Main Stats (2 columns) */}
-                <div className="grid grid-cols-2 gap-3 mb-3">
+                <div className="grid grid-cols-2 gap-4 mb-4">
                     {/* Sales Card */}
                     <div
-                        className={`card p-4 border-2 ${activeFilters.includes('Sales') ? 'border-primary border-opacity-30' : 'border-transparent'}`}
+                        className={`card p-4 border-2 rounded-lg ${activeFilters.includes('Sales') ? 'border-primary border-opacity-30' : 'border-transparent'} bg-white transition-all hover:shadow-sm`}
                         onClick={() => toggleFilter('Sales')}
                     >
                         <div className="flex justify-between items-center">
                             <p className="text-sm text-gray-600">Sales</p>
-                            <span className="text-xs px-2 py-0.5 bg-green-100 text-green-800 rounded-full flex items-center">
+                            <span className="text-xs px-2 py-0.5 bg-green-50 text-green-700 rounded-full flex items-center">
                                 <i className="ph ph-trending-up mr-1"></i>
                                 100%
                             </span>
                         </div>
-                        <h3 className="text-2xl font-bold mt-1">
+                        <h3 className="text-2xl font-semibold text-gray-800 mt-1.5">
                             ₹{summary.credit.toFixed(0)}
                         </h3>
                     </div>
 
                     {/* Wallet Balance Card */}
                     <div
-                        className={`card p-4 border-2 ${activeFilters.includes('Wallet') ? 'border-primary border-opacity-30' : 'border-transparent'}`}
+                        className={`card p-4 border-2 rounded-lg ${activeFilters.includes('Wallet') ? 'border-primary border-opacity-30' : 'border-transparent'} bg-white transition-all hover:shadow-sm`}
                         onClick={() => toggleFilter('Wallet')}
                     >
                         <div className="flex justify-between items-center">
                             <p className="text-sm text-gray-600">Wallet</p>
-                            <span className="text-xs px-2 py-0.5 bg-green-100 text-green-800 rounded-full flex items-center">
+                            <span className="text-xs px-2 py-0.5 bg-green-50 text-green-700 rounded-full flex items-center">
                                 <i className="ph ph-trending-up mr-1"></i>
                                 100%
                             </span>
                         </div>
-                        <h3 className="text-2xl font-bold mt-1">
+                        <h3 className="text-2xl font-semibold text-gray-800 mt-1.5">
                             ₹{summary.wallet.toFixed(0)}
                         </h3>
                     </div>
                 </div>
 
                 {/* Second Row - Payment Methods (3 columns) */}
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-4">
                     {/* Cash Card */}
                     <div
-                        className={`card p-4 border-2 ${activeFilters.includes('Cash') ? 'border-primary border-opacity-30' : 'border-transparent'}`}
+                        className={`card p-4 border-2 rounded-lg ${activeFilters.includes('Cash') ? 'border-primary border-opacity-30' : 'border-transparent'} bg-white transition-all hover:shadow-sm`}
                         onClick={() => toggleFilter('Cash')}
                     >
                         <p className="text-sm text-gray-600">Cash</p>
-                        <h3 className="text-2xl font-bold mt-1">
+                        <h3 className="text-xl font-semibold text-gray-800 mt-1.5">
                             ₹{summary.cash.toFixed(0)}
                         </h3>
                     </div>
 
                     {/* UPI/Card Card */}
                     <div
-                        className={`card p-4 border-2 ${activeFilters.includes('UPI/Card') ? 'border-primary border-opacity-30' : 'border-transparent'}`}
+                        className={`card p-4 border-2 rounded-lg ${activeFilters.includes('UPI/Card') ? 'border-primary border-opacity-30' : 'border-transparent'} bg-white transition-all hover:shadow-sm`}
                         onClick={() => toggleFilter('UPI/Card')}
                     >
                         <p className="text-sm text-gray-600">UPI/Card</p>
-                        <h3 className="text-2xl font-bold mt-1">
+                        <h3 className="text-xl font-semibold text-gray-800 mt-1.5">
                             ₹{summary.upi.toFixed(0)}
                         </h3>
                     </div>
 
                     {/* Credit Card */}
                     <div
-                        className={`card p-4 border-2 ${activeFilters.includes('Credit') ? 'border-primary border-opacity-30' : 'border-transparent'}`}
+                        className={`card p-4 border-2 rounded-lg ${activeFilters.includes('Credit') ? 'border-primary border-opacity-30' : 'border-transparent'} bg-white transition-all hover:shadow-sm`}
                         onClick={() => toggleFilter('Credit')}
                     >
                         <p className="text-sm text-gray-600">Credit</p>
-                        <h3 className="text-2xl font-bold mt-1">
+                        <h3 className="text-xl font-semibold text-gray-800 mt-1.5">
                             ₹{summary.debit.toFixed(0)}
                         </h3>
                     </div>
+                </div>
+
+                {/* Toggle Button for Trends (Desktop Only) */}
+                <div className="mt-5 hidden md:flex justify-end">
+                    <button
+                        onClick={() => setShowTrends(prev => !prev)}
+                        className="text-sm text-primary flex items-center gap-1 hover:underline py-1"
+                    >
+                        <i className={`ph ph-${showTrends ? 'chart-line-down' : 'chart-line-up'}`}></i>
+                        {showTrends ? 'Hide Trends' : 'Show Trends'}
+                    </button>
                 </div>
             </div>
         );
@@ -380,6 +471,15 @@ function Passbook() {
             } else {
                 return `${d.toLocaleDateString()}, ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}`;
             }
+        } else if (format === 'full') {
+            return d.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
         }
 
         return d.toLocaleString();
@@ -388,6 +488,7 @@ function Passbook() {
     const TransactionCard = ({ transaction }) => {
         const customer = customers.find(c => c.id === transaction.customerId);
         const firstItem = transaction.items?.[0];
+        const [expanded, setExpanded] = React.useState(false);
 
         // Determine the appropriate icon based on the item title
         const getItemIcon = (item) => {
@@ -414,51 +515,300 @@ function Passbook() {
             }
         };
 
+        // Get a summary of items (e.g. "2× Pizza, 3× Burger")
+        const getItemsSummary = () => {
+            if (!transaction.items || transaction.items.length === 0) return "";
+
+            // Group items by title and count quantities
+            const itemCounts = {};
+            transaction.items.forEach(item => {
+                const title = item.title || "Unknown";
+                const qnt = Number(item.qnt) || 1;
+
+                if (itemCounts[title]) {
+                    itemCounts[title] += qnt;
+                } else {
+                    itemCounts[title] = qnt;
+                }
+            });
+
+            // Format as "2× Pizza, 3× Burger"
+            return Object.entries(itemCounts)
+                .map(([title, count]) => `${count}× ${title}`)
+                .slice(0, 2) // Show only first 2 types
+                .join(", ") + (Object.keys(itemCounts).length > 2 ? "..." : "");
+        };
+
         const paymentInfo = getPaymentMethodInfo(transaction.paymentMethod);
         const hasImage = firstItem && (firstItem.thumb || firstItem.imageUrl);
+        const totalItems = transaction.items?.reduce((sum, item) => sum + (Number(item.qnt) || 1), 0) || 0;
+
+        const toggleExpand = () => {
+            setExpanded(!expanded);
+        };
 
         return (
-            <div className="hover:bg-gray-50 border-b border-gray-100 p-4">
-                <div className="flex items-center gap-3">
-                    {/* Transaction Icon or First Item Image */}
-                    <div className="relative w-11 h-11 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                        {hasImage ? (
-                            <img
-                                src={firstItem.thumb || firstItem.imageUrl}
-                                alt={firstItem.title}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                    e.target.onerror = null;
-                                    e.target.parentNode.innerHTML = `<i class="${getItemIcon(firstItem)} text-amber-800 text-xl"></i>`;
-                                }}
-                            />
-                        ) : (
-                            <i className={`${getItemIcon(firstItem)} text-amber-800 text-xl`}></i>
-                        )}
-                        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 rounded-lg">
-                            <span className="text-white text-xs font-semibold">
-                                {transaction.items?.length || 1}
-                            </span>
+            <div className={`border-b border-gray-100 transition-all ${expanded ? 'bg-gray-50' : 'hover:bg-gray-50'}`}>
+                <div
+                    className="p-4 cursor-pointer"
+                    onClick={toggleExpand}
+                >
+                    <div className="flex items-center gap-3">
+                        {/* Transaction Icon or First Item Image */}
+                        <div className="relative w-12 h-12 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0 overflow-hidden shadow-sm">
+                            {hasImage ? (
+                                <img
+                                    src={firstItem.thumb || firstItem.imageUrl}
+                                    alt={firstItem.title}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                        e.target.onerror = null;
+                                        e.target.parentNode.innerHTML = `<i class="${getItemIcon(firstItem)} text-amber-700 text-xl"></i>`;
+                                    }}
+                                />
+                            ) : (
+                                <i className={`${getItemIcon(firstItem)} text-amber-700 text-xl`}></i>
+                            )}
+                            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded-lg">
+                                <span className="text-white text-xs font-medium">
+                                    {totalItems}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Transaction Details */}
+                        <div className="flex-1">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h4 className="font-medium text-gray-800 flex items-center">
+                                        {firstItem?.title || transaction.description}
+                                        <i className={`ph ph-caret-${expanded ? 'up' : 'down'} ml-2 text-gray-400 text-xs`}></i>
+                                    </h4>
+                                    <div className="flex flex-wrap items-center gap-x-3 text-xs text-gray-500 mt-0.5">
+                                        <span>{formatDate(transaction.date, 'long')}</span>
+                                        {customer && (
+                                            <span className="flex items-center">
+                                                <i className="ph ph-user text-gray-400 mr-1"></i>
+                                                {customer.name}
+                                            </span>
+                                        )}
+                                    </div>
+                                    {!expanded && transaction.items && transaction.items.length > 0 && (
+                                        <p className="text-xs text-gray-500 mt-1.5 line-clamp-1">
+                                            {getItemsSummary()}
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-lg font-medium text-gray-800">₹{Math.abs(transaction.amount).toFixed(2)}</p>
+                                    <p className="text-xs text-gray-500 flex items-center justify-end mt-0.5">
+                                        <i className={`${paymentInfo.icon} mr-1`}></i>
+                                        {paymentInfo.text}
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </div>
+                </div>
 
-                    {/* Transaction Details */}
-                    <div className="flex-1">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <h4 className="font-medium text-gray-800">
-                                    {firstItem?.title || transaction.description}
-                                </h4>
-                                <p className="text-xs text-gray-500">
-                                    {formatDate(transaction.date, 'long')}
-                                </p>
+                {/* Expanded Details */}
+                {expanded && (
+                    <div className="p-4 pt-0 bg-gray-50 border-t border-gray-100">
+                        <div className="grid gap-4">
+                            {/* Order Items Table */}
+                            <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+                                <h5 className="text-sm font-medium mb-3 flex items-center text-gray-700">
+                                    <i className="ph ph-shopping-cart mr-2 text-primary"></i>
+                                    Order Items
+                                </h5>
+                                {transaction.items && transaction.items.length > 0 ? (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                            <thead>
+                                                <tr className="border-b border-gray-100">
+                                                    <th className="text-left py-2 font-medium text-xs text-gray-500">Item</th>
+                                                    <th className="text-center py-2 font-medium text-xs text-gray-500">Qty</th>
+                                                    <th className="text-right py-2 font-medium text-xs text-gray-500">Price</th>
+                                                    <th className="text-right py-2 font-medium text-xs text-gray-500">Total</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {transaction.items.map((item, index) => (
+                                                    <tr key={index} className="border-b border-gray-50">
+                                                        <td className="py-2.5 flex items-center gap-2">
+                                                            <div className="w-6 h-6 rounded-md bg-amber-50 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                                                                {item.thumb || item.imageUrl ? (
+                                                                    <img
+                                                                        src={item.thumb || item.imageUrl}
+                                                                        alt={item.title}
+                                                                        className="w-full h-full object-cover"
+                                                                        onError={(e) => {
+                                                                            e.target.onerror = null;
+                                                                            e.target.parentNode.innerHTML = `<i class="${getItemIcon(item)} text-amber-700 text-xs"></i>`;
+                                                                        }}
+                                                                    />
+                                                                ) : (
+                                                                    <i className={`${getItemIcon(item)} text-amber-700 text-xs`}></i>
+                                                                )}
+                                                            </div>
+                                                            <span className="font-medium text-gray-700">{item.title}</span>
+                                                        </td>
+                                                        <td className="py-2.5 text-center text-gray-600">{item.qnt}</td>
+                                                        <td className="py-2.5 text-right text-gray-600">₹{Number(item.price).toFixed(2)}</td>
+                                                        <td className="py-2.5 text-right font-medium text-gray-700">
+                                                            ₹{(Number(item.price) * Number(item.qnt)).toFixed(2)}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            <tfoot>
+                                                <tr className="border-t border-gray-200">
+                                                    <td colSpan="3" className="py-3 text-right font-medium text-gray-600">Total</td>
+                                                    <td className="py-3 text-right font-semibold text-gray-800">₹{Math.abs(transaction.amount).toFixed(2)}</td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-gray-500 text-center py-2">No items to display</p>
+                                )}
                             </div>
-                            <div className="text-right">
-                                <p className="text-lg font-semibold">₹{Math.abs(transaction.amount).toFixed(2)}</p>
-                                <p className="text-xs text-gray-500 flex items-center justify-end">
-                                    <i className={`${paymentInfo.icon} mr-1`}></i>
-                                    {paymentInfo.text}
-                                </p>
+
+                            {/* Transaction Details Card */}
+                            <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+                                <h5 className="text-sm font-medium mb-3 flex items-center text-gray-700">
+                                    <i className="ph ph-info mr-2 text-blue-600"></i>
+                                    Transaction Details
+                                </h5>
+                                <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+                                    {/* Left Column */}
+                                    <div>
+                                        <div className="mb-3">
+                                            <div className="text-xs text-gray-500">Order ID</div>
+                                            <div className="font-medium text-gray-700">{transaction.orderId || 'N/A'}</div>
+                                        </div>
+                                        <div className="mb-3">
+                                            <div className="text-xs text-gray-500">Date & Time</div>
+                                            <div className="font-medium text-gray-700">{formatDate(transaction.date, 'full')}</div>
+                                        </div>
+                                        <div className="mb-3">
+                                            <div className="text-xs text-gray-500">Type</div>
+                                            <div className="font-medium text-gray-700">{transaction.type === 'credit' ? 'Sale' : 'Wallet Payment'}</div>
+                                        </div>
+                                    </div>
+                                    {/* Right Column */}
+                                    <div>
+                                        <div className="mb-3">
+                                            <div className="text-xs text-gray-500">Payment Method</div>
+                                            <div className="font-medium text-gray-700 flex items-center">
+                                                <i className={`${paymentInfo.icon} mr-2 text-gray-600`}></i>
+                                                {paymentInfo.text}
+                                            </div>
+                                        </div>
+                                        {customer && (
+                                            <div className="mb-3">
+                                                <div className="text-xs text-gray-500">Customer</div>
+                                                <div className="font-medium text-gray-700 flex items-center">
+                                                    <i className="ph ph-user mr-2 text-gray-600"></i>
+                                                    {customer.name || 'Unknown Customer'}
+                                                </div>
+                                            </div>
+                                        )}
+                                        <div className="mb-3">
+                                            <div className="text-xs text-gray-500">Total Amount</div>
+                                            <div className="font-medium text-lg text-primary">
+                                                ₹{Math.abs(transaction.amount).toFixed(2)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // New component for transaction analysis (only shown on desktop)
+    const TransactionTrends = () => {
+        if (!showTrends) return null;
+
+        // Calculate top products
+        const productCounts = {};
+        filteredTransactions.forEach(transaction => {
+            transaction.items?.forEach(item => {
+                if (item.title) {
+                    productCounts[item.title] = (productCounts[item.title] || 0) + 1;
+                }
+            });
+        });
+
+        const topProducts = Object.keys(productCounts)
+            .map(title => ({ title, count: productCounts[title] }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5);
+
+        return (
+            <div className="bg-white p-4 rounded-lg shadow-sm mt-4 hidden md:block">
+                <h3 className="text-lg font-medium mb-4">Transaction Analysis</h3>
+
+                <div className="grid grid-cols-2 gap-4">
+                    {/* Top Products */}
+                    <div className="border rounded-lg p-4">
+                        <h4 className="text-base font-medium mb-3 flex items-center">
+                            <i className="ph ph-fire mr-2 text-amber-500"></i>
+                            Popular Products
+                        </h4>
+                        {topProducts.length > 0 ? (
+                            <div className="space-y-2">
+                                {topProducts.map((product, index) => (
+                                    <div key={index} className="flex justify-between items-center">
+                                        <span className="text-sm">{product.title}</span>
+                                        <span className="text-xs px-2 py-1 bg-gray-100 rounded-full">
+                                            {product.count} orders
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-gray-500">No product data available</p>
+                        )}
+                    </div>
+
+                    {/* Payment Method Distribution */}
+                    <div className="border rounded-lg p-4">
+                        <h4 className="text-base font-medium mb-3 flex items-center">
+                            <i className="ph ph-credit-card mr-2 text-blue-500"></i>
+                            Payment Methods
+                        </h4>
+                        <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm flex items-center">
+                                    <i className="ph ph-money mr-1 text-green-600"></i>
+                                    Cash
+                                </span>
+                                <span className="text-xs px-2 py-1 bg-gray-100 rounded-full">
+                                    ₹{summary.cash.toFixed(0)}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm flex items-center">
+                                    <i className="ph ph-qr-code mr-1 text-blue-600"></i>
+                                    UPI/Card
+                                </span>
+                                <span className="text-xs px-2 py-1 bg-gray-100 rounded-full">
+                                    ₹{summary.upi.toFixed(0)}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm flex items-center">
+                                    <i className="ph ph-credit-card mr-1 text-red-600"></i>
+                                    Credit
+                                </span>
+                                <span className="text-xs px-2 py-1 bg-gray-100 rounded-full">
+                                    ₹{summary.debit.toFixed(0)}
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -485,11 +835,11 @@ function Passbook() {
 
     if (filteredTransactions.length === 0) {
         return (
-            <div className="p-4">
+            <div className="p-4 max-w-5xl mx-auto">
                 <SummaryCards />
-                <div className="mt-8 text-center">
+                <div className="mt-8 text-center bg-white p-8 rounded-lg shadow-sm">
                     <i className="ph ph-credit-card text-4xl text-gray-400"></i>
-                    <h3 className="mt-2 text-lg font-semibold">No Transactions</h3>
+                    <h3 className="mt-2 text-lg font-semibold text-gray-700">No Transactions</h3>
                     <p className="text-sm text-gray-500">
                         {activeFilters.length === 0
                             ? "No transactions found for the selected filters"
@@ -501,9 +851,14 @@ function Passbook() {
     }
 
     return (
-        <div className="p-4">
+        <div className="p-4 max-w-5xl mx-auto">
             <SummaryCards />
-            <div className="mt-4 bg-white rounded-lg overflow-hidden shadow-sm">
+            <TransactionTrends />
+            <div className="mt-5 bg-white rounded-lg overflow-hidden shadow-sm">
+                <div className="py-3 px-4 bg-gray-50 border-b flex justify-between items-center">
+                    <h3 className="font-medium text-gray-700">Recent Transactions</h3>
+                    <span className="text-xs text-gray-500">{filteredTransactions.length} transactions</span>
+                </div>
                 {filteredTransactions.map(transaction => (
                     <TransactionCard
                         key={transaction.id}
