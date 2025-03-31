@@ -4,39 +4,40 @@ function Customers() {
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState(null);
     const [searchQuery, setSearchQuery] = React.useState('');
-    const [filterType, setFilterType] = React.useState('all'); // 'all', 'regular', 'creditors'
-    const [sortBy, setSortBy] = React.useState('recent'); // 'recent', 'spent'
-    const [showAddCustomerForm, setShowAddCustomerForm] = React.useState(false);
-    const [showDepositForm, setShowDepositForm] = React.useState(false);
-    const [selectedCustomer, setSelectedCustomer] = React.useState(null);
+    const [filterType, setFilterType] = React.useState('all'); // 'all', 'creditors'
+    const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = React.useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = React.useState(false);
+
+    // Expose refreshCustomers function globally so it can be called from components
+    window.refreshCustomers = fetchCustomers;
 
     React.useEffect(() => {
-        async function fetchCustomers() {
-            try {
-                // Fetch customers from SDK
-                const customersSnapshot = await sdk.collection("Customers")
-                    .orderBy("lastOrderDate", "desc")
-                    .limit(100)
-                    .get();
-
-                const customersList = customersSnapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
-
-                setCustomers(customersList);
-                setLoading(false);
-            } catch (err) {
-                console.error('Error fetching customers:', err);
-                setError('Failed to load customers');
-                setLoading(false);
-            }
-        }
-
         fetchCustomers();
     }, []);
 
-    // Filter and sort customers
+    // Fetch customers from SDK
+    const fetchCustomers = async () => {
+        try {
+            setLoading(true);
+            // Use the SDK to fetch customers as in the Flutter code
+            const customersSnapshot = await sdk.collection("Customers")
+                .get();
+
+            const customersList = customersSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+
+            setCustomers(customersList);
+            setLoading(false);
+        } catch (err) {
+            console.error('Error fetching customers:', err);
+            setError('Failed to load customers');
+            setLoading(false);
+        }
+    };
+
+    // Filter customers based on search query and filter type
     const filteredCustomers = React.useMemo(() => {
         return customers
             .filter(customer => {
@@ -46,413 +47,384 @@ function Customers() {
 
                 // Type filter
                 const matchesType = filterType === 'all' ||
-                    (filterType === 'creditors' && (customer?.walletBalance || 0) < 0);
+                    (filterType === 'creditors' && (customer?.balance || 0) < 0);
 
                 return matchesSearch && matchesType;
-            })
-            .sort((a, b) => {
-                switch (sortBy) {
-                    case 'spent':
-                        return (b?.totalSpent || 0) - (a?.totalSpent || 0);
-                    default: // 'recent'
-                        return new Date(b?.lastOrderDate || 0) - new Date(a?.lastOrderDate || 0);
-                }
             });
-    }, [customers, searchQuery, filterType, sortBy]);
+    }, [customers, searchQuery, filterType]);
 
-    const handleAddCustomer = async (customerData) => {
+    // Function to show the "Add Customer" modal
+    const addCustomer = () => {
+        setIsAddCustomerModalOpen(true);
+    };
+
+    // Function to handle importing customers
+    const importCustomers = () => {
+        setIsImportModalOpen(true);
+    };
+
+    // Function to export customers to CSV
+    const exportAll = async () => {
         try {
-            const customerId = `${customerData.phone.replaceAll(" ", "")}_${sdk.getCurrentUser().id}`;
+            // Prepare data for export - similar to Flutter code
+            const data = customers.map(c => ({
+                name: c.name || "",
+                phone: c.phone || "",
+                balance: c.balance || 0,
+                date: c.date ? new Date(c.date).toISOString() : ""
+            }));
 
-            await sdk.collection("Customers").doc(customerId).set({
-                name: customerData.name,
-                phone: customerData.phone,
-                date: new Date(),
-                walletBalance: 0,
-                totalSpent: 0
-            });
+            // Create CSV content
+            const headers = Object.keys(data[0]).join(',');
+            const rows = data.map(obj => Object.values(obj).map(val => typeof val === 'string' ? `"${val}"` : val).join(','));
+            const csvContent = [headers, ...rows].join('\n');
 
-            // Refresh customer list
-            const updatedCustomers = [...customers, {
-                id: customerId,
-                name: customerData.name,
-                phone: customerData.phone,
-                date: new Date(),
-                walletBalance: 0,
-                totalSpent: 0
-            }];
+            // Create download
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `customers_${new Date().toISOString().slice(0, 10)}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
 
-            setCustomers(updatedCustomers);
-            setShowAddCustomerForm(false);
-            showToast("Customer added successfully");
+            showToast("Customers exported to CSV");
         } catch (error) {
-            console.error("Error adding customer:", error);
-            showToast("Failed to add customer", "error");
+            console.error("Error exporting customers:", error);
+            showToast("Failed to export customers", "error");
         }
     };
 
-    // Header with back button and menu
-    const Header = () => {
-        return (
-            <div className="flex items-center justify-between px-4 py-3 border-b">
-                <div className="flex items-center gap-2">
-                    <button
-                        className="p-1 rounded-full hover:bg-gray-100"
-                        onClick={() => window.history.back()}
-                    >
-                        <i className="ph ph-arrow-left text-lg"></i>
-                    </button>
-                    <h1 className="text-xl font-semibold">Customers</h1>
-                </div>
-                <div className="relative">
-                    <button
-                        className="p-1 rounded-full hover:bg-gray-100"
-                        onClick={() => document.getElementById('customerMenu').classList.toggle('hidden')}
-                    >
-                        <i className="ph ph-dots-three-vertical text-lg"></i>
-                    </button>
-                    <div id="customerMenu" className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 hidden">
-                        <ul className="py-1">
-                            <li>
-                                <button
-                                    className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center gap-2"
-                                    onClick={() => setShowAddCustomerForm(true)}
-                                >
-                                    <i className="ph ph-user-plus"></i>
-                                    <span>New customer</span>
-                                </button>
-                            </li>
-                            <li>
-                                <button
-                                    className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center gap-2"
-                                    onClick={() => {/* Handle import */ }}
-                                >
-                                    <i className="ph ph-upload"></i>
-                                    <span>Import customers</span>
-                                </button>
-                            </li>
-                            <li>
-                                <button
-                                    className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center gap-2"
-                                    onClick={() => {/* Handle export */ }}
-                                >
-                                    <i className="ph ph-file-csv"></i>
-                                    <span>Export CSV</span>
-                                </button>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        );
-    };
-
-    // Search Bar Component - updated to match the UI in the screenshot
+    // Search Bar Component
     const SearchBar = () => {
         return (
-            <div className="p-4 bg-gray-50">
-                <div className="relative">
-                    <i className="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <div className="flex items-center mb-4 bg-white rounded-full shadow-sm overflow-hidden">
+                <div className="flex-1 relative">
+                    <i className="ph ph-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
                         type="text"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="Search customers"
-                        className="w-full pl-10 pr-20 py-3 rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full pl-12 pr-4 py-3 border-none focus:outline-none"
                     />
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
-                        <select
-                            value={filterType}
-                            onChange={(e) => setFilterType(e.target.value)}
-                            className="border-none bg-transparent focus:outline-none text-sm mr-1"
-                        >
-                            <option value="all">All</option>
-                            <option value="creditors">Creditors</option>
-                        </select>
-                        {searchQuery && (
-                            <button
-                                className="p-1 text-gray-500"
-                                onClick={() => setSearchQuery('')}
-                            >
-                                <i className="ph ph-x text-lg"></i>
-                            </button>
-                        )}
-                    </div>
                 </div>
+                <div className="px-4 flex items-center">
+                    <select
+                        value={filterType}
+                        onChange={(e) => setFilterType(e.target.value)}
+                        className="border-none bg-transparent outline-none text-gray-700 py-2 pr-8"
+                    >
+                        <option value="all">All</option>
+                        <option value="creditors">Creditors</option>
+                    </select>
+                </div>
+                {searchQuery && (
+                    <button
+                        className="pr-4"
+                        onClick={() => setSearchQuery('')}
+                    >
+                        <i className="ph ph-x text-gray-500" />
+                    </button>
+                )}
             </div>
         );
     };
 
-    // Customer List Item Component
-    const CustomerListItem = ({ customer }) => {
-        const customerName = customer?.name || 'Unknown';
-        const customerPhone = customer?.phone || '';
-        const lastOrderDate = customer?.lastOrderDate ?
-            new Date(customer.lastOrderDate).toLocaleDateString() : 'N/A';
-        const totalSpent = customer?.totalSpent || 0;
-        const walletBalance = customer?.walletBalance || 0;
-
-        // Format the "time ago" text
-        const getTimeAgo = (date) => {
-            if (!date) return 'N/A';
-
-            const now = new Date();
-            const orderDate = new Date(date);
-            const diffInDays = Math.floor((now - orderDate) / (1000 * 60 * 60 * 24));
-
-            if (diffInDays === 0) return 'Today';
-            if (diffInDays === 1) return 'Yesterday';
-            if (diffInDays < 30) return `${diffInDays} days ago`;
-            if (diffInDays < 365) return `${Math.floor(diffInDays / 30)} months ago`;
-            return `${Math.floor(diffInDays / 365)} years ago`;
-        };
-
-        const handleCustomerSelect = () => {
-            setSelectedCustomer(customer);
-            // In the future, navigate to customer details page
-        };
-
-        return (
-            <div className="bg-white p-4 border-b" onClick={handleCustomerSelect}>
-                <div className="flex">
-                    <div className="w-16 flex flex-col items-center mr-4">
-                        <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center mb-2">
-                            <i className="ph ph-user text-gray-500 text-2xl"></i>
-                        </div>
-                        <div className="flex items-center text-sm">
-                            <i className="ph ph-wallet text-xs mr-1"></i>
-                            <span className={walletBalance < 0 ? 'text-red-500' : 'text-green-500'}>
-                                ₹{walletBalance}
-                            </span>
-                        </div>
-                    </div>
-
-                    <div className="flex-1">
-                        <div className="font-medium text-lg text-blue-900">{customerName}</div>
-                        <div className="text-gray-500 text-sm">{customerPhone}</div>
-
-                        <div className="mt-3 flex items-center">
-                            <div className="flex items-center text-gray-500 text-xs mr-4">
-                                <i className="ph ph-clock text-xs mr-1"></i>
-                                <span>{getTimeAgo(customer?.lastOrderDate)}</span>
-                            </div>
-
-                            <div className="flex items-center justify-between flex-1">
-                                <span className="text-xs text-gray-500">Spent:</span>
-                                <span className="text-xs font-medium">₹{totalSpent}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+    // "No Customers" empty state component
+    const NoCustomers = () => (
+        <div className="text-center py-10">
+            <div className="mb-4">
+                <i className="ph ph-users text-5xl text-gray-300" />
             </div>
-        );
-    };
-
-    // Add Customer Form
-    const AddCustomerForm = () => {
-        const [name, setName] = React.useState('');
-        const [phone, setPhone] = React.useState('');
-        const [isSubmitting, setIsSubmitting] = React.useState(false);
-
-        const handleSubmit = async (e) => {
-            e.preventDefault();
-
-            if (!name.trim() || !phone.trim()) {
-                showToast("Please fill all fields", "error");
-                return;
-            }
-
-            setIsSubmitting(true);
-
-            try {
-                await handleAddCustomer({ name, phone });
-            } finally {
-                setIsSubmitting(false);
-            }
-        };
-
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50">
-                <div className="bg-white rounded-t-xl w-full max-w-md p-4">
-                    <h2 className="text-xl font-semibold mb-4">Add New Customer</h2>
-
-                    <form onSubmit={handleSubmit}>
-                        <div className="mb-4">
-                            <label className="block text-gray-700 mb-2">Name</label>
-                            <input
-                                type="text"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                className="w-full p-2 border rounded-lg"
-                                placeholder="Customer name"
-                            />
-                        </div>
-
-                        <div className="mb-6">
-                            <label className="block text-gray-700 mb-2">Phone</label>
-                            <div className="flex">
-                                <span className="bg-gray-100 py-2 px-3 rounded-l-lg border-y border-l">+</span>
-                                <input
-                                    type="tel"
-                                    value={phone}
-                                    onChange={(e) => setPhone(e.target.value)}
-                                    className="w-full p-2 border rounded-r-lg"
-                                    placeholder="Phone number"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="flex gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setShowAddCustomerForm(false)}
-                                className="flex-1 p-3 border rounded-lg"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                disabled={isSubmitting}
-                                className="flex-1 p-3 bg-blue-600 text-white rounded-lg"
-                            >
-                                {isSubmitting ? 'Adding...' : 'Add Customer'}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        );
-    };
-
-    // Deposit Balance Form
-    const DepositBalanceForm = () => {
-        const [amount, setAmount] = React.useState('');
-        const [paymentMode, setPaymentMode] = React.useState('CASH'); // 'CASH' or 'DIGITAL'
-        const [isSubmitting, setIsSubmitting] = React.useState(false);
-
-        const handleSubmit = async (e) => {
-            e.preventDefault();
-
-            if (!amount || parseInt(amount) <= 0) {
-                showToast("Please enter a valid amount", "error");
-                return;
-            }
-
-            setIsSubmitting(true);
-
-            try {
-                // Add to wallet collection
-                await sdk.collection("Wallet").add({
-                    amount: parseInt(amount),
-                    mode: paymentMode,
-                    customerId: selectedCustomer.id,
-                    sellerId: sdk.getCurrentUser().id,
-                    date: new Date()
-                });
-
-                // Update the customer balance in the UI
-                const updatedCustomers = customers.map(c => {
-                    if (c.id === selectedCustomer.id) {
-                        return {
-                            ...c,
-                            walletBalance: (c.walletBalance || 0) + parseInt(amount)
-                        };
-                    }
-                    return c;
-                });
-
-                setCustomers(updatedCustomers);
-                setShowDepositForm(false);
-                setSelectedCustomer(null);
-                showToast("Balance added successfully");
-            } catch (error) {
-                console.error("Error adding balance:", error);
-                showToast("Failed to add balance", "error");
-            } finally {
-                setIsSubmitting(false);
-            }
-        };
-
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg w-full max-w-md p-4 m-4">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-semibold">Add Balance</h2>
-                        <button
-                            onClick={() => setShowDepositForm(false)}
-                            className="p-1 rounded-full hover:bg-gray-100"
-                        >
-                            <i className="ph ph-x text-lg"></i>
-                        </button>
-                    </div>
-
-                    <form onSubmit={handleSubmit}>
-                        <div className="mb-4">
-                            <label className="block text-gray-700 mb-2">Amount</label>
-                            <input
-                                type="number"
-                                value={amount}
-                                onChange={(e) => setAmount(e.target.value)}
-                                className="w-full p-3 border rounded-lg"
-                                placeholder="Enter amount"
-                                autoFocus
-                            />
-                        </div>
-
-                        <div className="mb-6">
-                            <label className="block text-gray-700 mb-2">Payment Mode</label>
-                            <div className="flex border rounded-lg overflow-hidden">
-                                <button
-                                    type="button"
-                                    className={`flex-1 py-3 ${paymentMode === 'CASH' ? 'bg-blue-500 text-white' : 'bg-gray-100'}`}
-                                    onClick={() => setPaymentMode('CASH')}
-                                >
-                                    Cash
-                                </button>
-                                <button
-                                    type="button"
-                                    className={`flex-1 py-3 ${paymentMode === 'DIGITAL' ? 'bg-blue-500 text-white' : 'bg-gray-100'}`}
-                                    onClick={() => setPaymentMode('DIGITAL')}
-                                >
-                                    UPI
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="flex gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setShowDepositForm(false)}
-                                className="flex-1 p-3 border rounded-lg"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                disabled={isSubmitting}
-                                className="flex-1 p-3 bg-blue-600 text-white rounded-lg"
-                            >
-                                {isSubmitting ? 'Processing...' : 'Confirm'}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        );
-    };
-
-    // No Customers Found
-    const EmptyState = () => (
-        <div className="flex flex-col items-center justify-center p-8">
-            <i className="ph ph-users text-5xl text-gray-300 mb-4"></i>
-            <p className="text-xl text-gray-500 text-center">No Customers yet.</p>
+            <h3 className="text-xl font-medium text-gray-500">No Customers yet.</h3>
         </div>
     );
 
+    // Context menu for customer actions
+    const ContextMenu = () => (
+        <div className="relative">
+            <button
+                className="p-2 rounded-full"
+                onClick={() => document.getElementById('customer-actions-menu').classList.toggle('hidden')}
+            >
+                <i className="ph ph-dots-three-vertical text-gray-700" />
+            </button>
+            <div id="customer-actions-menu" className="absolute right-0 mt-2 z-10 hidden bg-white rounded-lg shadow-lg overflow-hidden w-40">
+                <ul className="py-1">
+                    <li>
+                        <button
+                            onClick={() => {
+                                document.getElementById('customer-actions-menu').classList.add('hidden');
+                                addCustomer();
+                            }}
+                            className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center"
+                        >
+                            <i className="ph ph-user-plus mr-2 text-gray-500" />
+                            <span>New customer</span>
+                        </button>
+                    </li>
+                    <li>
+                        <button
+                            onClick={() => {
+                                document.getElementById('customer-actions-menu').classList.add('hidden');
+                                importCustomers();
+                            }}
+                            className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center"
+                        >
+                            <i className="ph ph-upload-simple mr-2 text-gray-500" />
+                            <span>Import customers</span>
+                        </button>
+                    </li>
+                    <li>
+                        <button
+                            onClick={() => {
+                                document.getElementById('customer-actions-menu').classList.add('hidden');
+                                exportAll();
+                            }}
+                            className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center"
+                        >
+                            <i className="ph ph-download-simple mr-2 text-gray-500" />
+                            <span>Export CSV</span>
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    );
+
+    // Add Customer Modal component
+    const AddCustomerModal = () => {
+        const [formData, setFormData] = React.useState({ name: '', phone: '' });
+        const [submitting, setSubmitting] = React.useState(false);
+
+        const handleSubmit = async (e) => {
+            e.preventDefault();
+            if (!formData.name || !formData.phone) return;
+
+            try {
+                setSubmitting(true);
+
+                // Generate an ID using phone and timestamp
+                const id = `${formData.phone.replace(/\s/g, '')}_${Date.now()}`;
+
+                await sdk.collection("Customers").doc(id).set({
+                    name: formData.name,
+                    phone: formData.phone,
+                    date: new Date(),
+                    balance: 0,
+                    totalSpent: 0
+                });
+
+                setSubmitting(false);
+                setIsAddCustomerModalOpen(false);
+                showToast("Customer added successfully");
+                fetchCustomers(); // Refresh the list
+            } catch (error) {
+                console.error("Error adding customer:", error);
+                showToast("Failed to add customer", "error");
+                setSubmitting(false);
+            }
+        };
+
+        return (
+            <div className={`fixed inset-0 z-50 flex items-end justify-center ${isAddCustomerModalOpen ? 'visible' : 'invisible'}`}>
+                <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setIsAddCustomerModalOpen(false)}></div>
+                <div className="bg-white w-full max-w-md rounded-t-xl shadow-lg overflow-hidden relative z-10">
+                    <div className="p-4">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-medium">Add New Customer</h3>
+                            <button onClick={() => setIsAddCustomerModalOpen(false)} className="text-gray-500">
+                                <i className="ph ph-x text-xl" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSubmit}>
+                            <div className="mb-4">
+                                <label className="block text-gray-700 mb-1">Name</label>
+                                <input
+                                    type="text"
+                                    value={formData.name}
+                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                                    placeholder="Customer name"
+                                    required
+                                />
+                            </div>
+
+                            <div className="mb-6">
+                                <label className="block text-gray-700 mb-1">Phone</label>
+                                <div className="flex">
+                                    <div className="bg-gray-100 border border-gray-300 border-r-0 rounded-l-md px-3 flex items-center">
+                                        <span className="text-gray-500">+</span>
+                                    </div>
+                                    <input
+                                        type="tel"
+                                        value={formData.phone}
+                                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                        className="flex-1 p-2 border border-gray-300 rounded-r-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                                        placeholder="Phone number"
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={submitting}
+                                className="w-full bg-red-500 hover:bg-red-600 text-white font-medium py-3 rounded-md transition-colors disabled:opacity-70"
+                            >
+                                {submitting ? (
+                                    <div className="flex justify-center items-center">
+                                        <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                                        Adding...
+                                    </div>
+                                ) : 'Add Customer'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    // Import Customers Modal component
+    const ImportCustomersModal = () => {
+        const [uploading, setUploading] = React.useState(false);
+
+        const handleFileUpload = async (e) => {
+            const files = e.target.files;
+            if (!files || files.length === 0) {
+                showToast("No files selected", "error");
+                return;
+            }
+
+            try {
+                setUploading(true);
+
+                // In real implementation, you would upload these files to your server
+                // for processing. For now, we'll simulate a successful upload.
+
+                setTimeout(() => {
+                    setUploading(false);
+                    setIsImportModalOpen(false);
+
+                    // Show success dialog
+                    showImportSuccessDialog(files.length);
+                }, 2000);
+            } catch (error) {
+                console.error("Error uploading files:", error);
+                showToast("Failed to upload files", "error");
+                setUploading(false);
+            }
+        };
+
+        return (
+            <div className={`fixed inset-0 z-50 flex items-center justify-center ${isImportModalOpen ? 'visible' : 'invisible'}`}>
+                <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setIsImportModalOpen(false)}></div>
+                <div className="bg-white w-full max-w-md rounded-xl shadow-lg overflow-hidden relative z-10 p-6">
+                    <div className="text-center">
+                        <h3 className="text-xl font-medium mb-2">Import Customers</h3>
+                        <div className="border-b mb-4"></div>
+
+                        <div className="mb-4 flex justify-center">
+                            <i className="ph ph-cloud-arrow-up text-6xl text-red-200" />
+                        </div>
+
+                        <div className="text-left text-gray-600 mb-6">
+                            <p className="mb-2">1. Upload your customers pdf/image file here.</p>
+                            <p className="mb-2">2. After all customers are added we will inform you in app notification.</p>
+                            <p className="mb-2">3. Under 5 minutes your new customers will be added to your CRM.</p>
+                        </div>
+
+                        <label className={`block w-full py-4 px-6 bg-red-500 text-white rounded-lg cursor-pointer transition-colors ${uploading ? 'opacity-70' : 'hover:bg-red-600'}`}>
+                            {uploading ? (
+                                <div className="flex justify-center items-center">
+                                    <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                                    Uploading...
+                                </div>
+                            ) : (
+                                <>
+                                    <i className="ph ph-upload-simple mr-2"></i>
+                                    Choose Files
+                                </>
+                            )}
+                            <input
+                                type="file"
+                                className="hidden"
+                                accept=".jpg,.jpeg,.png,.pdf"
+                                multiple
+                                onChange={handleFileUpload}
+                                disabled={uploading}
+                            />
+                        </label>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    // Show success dialog after import
+    const showImportSuccessDialog = (fileCount) => {
+        // Create the modal container if it doesn't exist
+        let modalContainer = document.getElementById('import-success-modal');
+        if (!modalContainer) {
+            modalContainer = document.createElement('div');
+            modalContainer.id = 'import-success-modal';
+            document.body.appendChild(modalContainer);
+        }
+
+        // Create a simple modal using vanilla JS
+        modalContainer.innerHTML = `
+            <div class="fixed inset-0 z-50 flex items-center justify-center">
+                <div class="fixed inset-0 bg-black bg-opacity-50"></div>
+                <div class="bg-white w-full max-w-sm rounded-xl shadow-lg overflow-hidden relative z-10 p-6">
+                    <h3 class="text-xl font-medium mb-2">${fileCount} File(s) Uploaded</h3>
+                    <p class="text-gray-600 mb-4">We will inform you in app notification after your customers are added.</p>
+                    <button class="w-full py-3 bg-red-500 text-white rounded-lg" onclick="document.getElementById('import-success-modal').remove()">
+                        OK
+                    </button>
+                </div>
+            </div>
+        `;
+    };
+
+    // Handle showing toast notifications
+    const showToast = (message, type = "success") => {
+        // Create toast container if it doesn't exist
+        let toastContainer = document.getElementById('toast-container');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toast-container';
+            toastContainer.className = 'fixed bottom-4 right-4 z-50';
+            document.body.appendChild(toastContainer);
+        }
+
+        // Create toast element
+        const toast = document.createElement('div');
+        toast.className = `p-3 rounded-lg shadow-lg mb-2 flex items-center ${type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+        toast.innerHTML = `
+            <i class="ph ${type === 'success' ? 'ph-check-circle' : 'ph-x-circle'} mr-2"></i>
+            <span>${message}</span>
+        `;
+
+        // Add to container and set timeout to remove
+        toastContainer.appendChild(toast);
+        setTimeout(() => {
+            toast.remove();
+            if (toastContainer.children.length === 0) {
+                toastContainer.remove();
+            }
+        }, 3000);
+    };
+
+    // Main render
     if (loading) {
         return (
-            <div className="p-4 h-screen flex items-center justify-center">
-                <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+            <div className="p-4 text-center">
+                <div className="animate-spin inline-block w-8 h-8 border-4 border-red-500 border-t-transparent rounded-full" />
             </div>
         );
     }
@@ -464,25 +436,35 @@ function Customers() {
     }
 
     return (
-        <div className="h-screen flex flex-col bg-gray-50">
-            <Header />
-            <SearchBar />
+        <div className="bg-gray-50 min-h-screen">
+            {/* Header */}
+            <div className="flex justify-between items-center p-4 bg-white border-b">
+                <button className="w-8 h-8 flex items-center justify-center" onClick={() => window.history.back()}>
+                    <i className="ph ph-arrow-left text-xl" />
+                </button>
+                <h1 className="text-xl font-medium">Customers</h1>
+                <ContextMenu />
+            </div>
 
-            <div className="flex-1 overflow-auto">
-                {filteredCustomers.length === 0 ? (
-                    <EmptyState />
+            {/* Content */}
+            <div className="p-4">
+                <SearchBar />
+
+                {/* Customer List */}
+                {customers.length === 0 ? (
+                    <NoCustomers />
                 ) : (
-                    filteredCustomers.map(customer => (
-                        <CustomerListItem
-                            key={customer.id}
-                            customer={customer}
-                        />
-                    ))
+                    <div className="mt-2">
+                        {filteredCustomers.map(customer => (
+                            <CustomerCard key={customer.id} customer={customer} />
+                        ))}
+                    </div>
                 )}
             </div>
 
-            {showAddCustomerForm && <AddCustomerForm />}
-            {showDepositForm && <DepositBalanceForm />}
+            {/* Modals */}
+            <AddCustomerModal />
+            <ImportCustomersModal />
         </div>
     );
 } 
