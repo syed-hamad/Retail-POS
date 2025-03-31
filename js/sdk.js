@@ -1,6 +1,19 @@
 // Initialize SDK
 const sdk = new window.ShoptoSDK("AtBtXdOK6p1KwswKhEA6");
 
+// Add a getCurrentUser method to get the current logged-in user
+sdk.getCurrentUser = function () {
+    // This would normally fetch from session/local storage
+    // For now, return a mock user object
+    return {
+        id: "seller123",
+        name: "Demo Seller",
+        businessName: "Demo Store",
+        phone: "9876543210",
+        email: "seller@example.com"
+    };
+};
+
 // Helper function to show toast messages
 function showToast(message, type = 'success') {
     // Create toast element

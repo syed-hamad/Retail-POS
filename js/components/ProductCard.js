@@ -78,16 +78,16 @@ function ProductCard({ product }) {
     };
 
     return (
-        <div 
+        <div
             className={`bg-gradient-to-br from-warm-bg to-white rounded-lg overflow-hidden border border-gray-200 shadow-sm hover:shadow-md transition-all flex flex-col h-full ${!product.active ? 'opacity-70' : ''} cursor-pointer`}
             onClick={handleEdit}
         >
             {/* Product Image with Badges */}
             <div className="relative w-full pb-[75%] bg-gradient-to-br from-gray-50 to-white overflow-hidden">
                 {product.imgs && product.imgs.length > 0 ? (
-                    <img 
-                        src={product.imgs[0]} 
-                        className="absolute top-0 left-0 w-full h-full object-cover" 
+                    <img
+                        src={product.imgs[0]}
+                        className="absolute top-0 left-0 w-full h-full object-cover"
                         alt={product.title}
                         onError={(e) => {
                             e.target.onerror = null;
@@ -109,7 +109,7 @@ function ProductCard({ product }) {
                             <div className={`h-full w-full rounded-full ${product.veg ? 'bg-green-500' : 'bg-red-500'}`}></div>
                         </div>
                     </div>
-                    
+
                     {/* Right badges */}
                     <div className="flex flex-col items-end gap-1">
                         {/* Discount Badge */}
@@ -118,22 +118,21 @@ function ProductCard({ product }) {
                                 {product.discountPercent}% OFF
                             </div>
                         )}
-                        
+
                         {/* Stock Badge - moved from bottom */}
                         {product.stock !== undefined && product.stock <= 10 && (
-                            <div className={`text-2xs px-1.5 py-0.5 rounded-full font-medium shadow-sm ${
-                                product.stock <= 0 
-                                    ? 'bg-red-100 text-red-600' 
-                                    : product.stock <= 5 
-                                    ? 'bg-orange-100 text-orange-600' 
-                                    : 'bg-green-100 text-green-600'
-                            }`}>
-                                {product.stock <= 0 
-                                    ? 'Out of stock' 
+                            <div className={`text-2xs px-1.5 py-0.5 rounded-full font-medium shadow-sm ${product.stock <= 0
+                                    ? 'bg-red-100 text-red-600'
+                                    : product.stock <= 5
+                                        ? 'bg-orange-100 text-orange-600'
+                                        : 'bg-green-100 text-green-600'
+                                }`}>
+                                {product.stock <= 0
+                                    ? 'Out of stock'
                                     : `${product.stock} left`}
                             </div>
                         )}
-                        
+
                         {/* Status Badge */}
                         {!product.active && (
                             <div className="text-2xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded-full shadow-sm">
@@ -161,7 +160,7 @@ function ProductCard({ product }) {
                             <div className="text-2xs line-through text-gray-400">₹{product.mrp}</div>
                         )}
                     </div>
-                    
+
                     {/* Stock number - compact format for high stock */}
                     {product.stock !== undefined && product.stock > 10 && (
                         <div className="text-2xs font-medium text-green-600">
@@ -180,78 +179,85 @@ function CustomerCard({ customer }) {
     const name = customer?.name || 'Unknown';
     const phone = customer?.phone || 'No phone';
     const totalSpent = customer?.totalSpent || 0;
-    const lastOrderDate = customer?.lastOrderDate ? new Date(customer.lastOrderDate).toLocaleDateString() : 'Never';
+    const lastOrderDate = customer?.lastOrderDate ? new Date(customer.lastOrderDate) : null;
     const walletBalance = customer?.walletBalance || 0;
 
+    // Format the "time ago" text
+    const getTimeAgo = (date) => {
+        if (!date) return 'N/A';
+
+        const now = new Date();
+        const diffInDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+
+        if (diffInDays === 0) return 'Today';
+        if (diffInDays === 1) return 'Yesterday';
+        if (diffInDays < 30) return `${diffInDays} days ago`;
+        if (diffInDays < 365) return `${Math.floor(diffInDays / 30)} months ago`;
+        return `${Math.floor(diffInDays / 365)} years ago`;
+    };
+
+    const handleCall = () => {
+        window.open(`tel:${phone}`);
+    };
+
+    const handleWhatsApp = () => {
+        let msg = "";
+        if (walletBalance < 0) {
+            msg = `Hi ${name}, you have a pending credit of ₹${Math.abs(walletBalance)}. Please pay it at your earliest convenience. Thank you.`;
+        } else {
+            msg = `Hi ${name}, thank you for your recent order. We hope you enjoyed our service. Please let us know if you have any feedback or suggestions. Thank you.`;
+        }
+
+        window.open(`https://wa.me/${phone.replace('+', '')}?text=${encodeURIComponent(msg)}`);
+    };
+
+    const handleAddBalance = () => {
+        // Implementation would go here
+        console.log("Add balance for", name);
+    };
+
     return (
-        <div className="bg-gradient-to-br from-warm-bg to-white rounded-xl p-4 border border-gray-200 shadow-section hover:shadow-md transition-all">
-            <div className="flex items-start gap-4">
-                {/* Customer Avatar/Initial */}
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-red-100 to-red-50 flex-shrink-0 flex items-center justify-center text-red-600 font-semibold text-lg">
-                    {name.charAt(0).toUpperCase()}
+        <div className="bg-white rounded-lg shadow-sm p-4 mb-3">
+            {/* Customer Info */}
+            <div className="flex items-center">
+                <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                    <i className="ph ph-user text-gray-500 text-xl"></i>
                 </div>
-
-                {/* Customer Details */}
-                <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h3 className="font-medium text-lg">{name}</h3>
-                            <p className="text-gray-500 text-sm">{phone}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            {/* Wallet Balance Badge */}
-                            <span className={`px-3 py-1.5 rounded-full text-sm font-medium ${walletBalance >= 0
-                                ? 'bg-gradient-to-r from-green-100 to-green-50 text-green-800'
-                                : 'bg-gradient-to-r from-red-100 to-red-50 text-red-800'
-                                }`}>
-                                ₹{walletBalance.toLocaleString()}
-                            </span>
-                            {/* Customer Type Badge */}
-                            <span className={`px-2 py-1 rounded-full text-xs ${walletBalance < 0
-                                ? 'bg-gradient-to-r from-purple-100 to-purple-50 text-purple-800'
-                                : 'bg-gradient-to-r from-red-100 to-red-50 text-red-600'
-                                }`}>
-                                {walletBalance < 0 ? 'Creditor' : 'Regular'}
-                            </span>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 mt-3">
-                        <div className="text-sm">
-                            <span className="text-gray-500 block">Total Spent</span>
-                            <span className="font-medium">₹{totalSpent.toLocaleString()}</span>
-                        </div>
-                        <div className="text-sm">
-                            <span className="text-gray-500 block">Last Order</span>
-                            <span className="font-medium">{lastOrderDate}</span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex flex-col gap-2">
-                    <button
-                        className="p-2 hover:bg-gradient-to-br from-red-50 to-white rounded-full transition-colors"
-                        onClick={() => { }} // View details handler
-                    >
-                        <i className="ph ph-eye text-red-500" />
-                    </button>
-                    <button
-                        className="p-2 hover:bg-gradient-to-br from-red-50 to-white rounded-full transition-colors"
-                        onClick={() => { }} // Edit handler
-                    >
-                        <i className="ph ph-pencil text-red-500" />
-                    </button>
+                <div className="ml-4 flex-1">
+                    <h3 className="font-medium text-lg">{name}</h3>
+                    <p className="text-gray-500 text-sm">{phone}</p>
                 </div>
             </div>
-            <div className="flex items-center justify-end gap-2 mt-3">
-                <button className="px-2 py-1.5 text-sm bg-gradient-to-r hover:from-red-50 hover:to-white text-red-500 border border-gray-200 rounded-lg flex items-center gap-1.5">
-                    <i className="ph ph-pencil-simple-line"></i>
-                    <span>Edit</span>
-                </button>
-                <button className="px-2 py-1.5 text-sm bg-gradient-to-r hover:from-red-50 hover:to-white text-red-500 border border-gray-200 rounded-lg flex items-center gap-1.5">
-                    <i className="ph ph-shopping-bag"></i>
-                    <span>Orders</span>
-                </button>
+
+            <div className="mt-3 border-t border-gray-100 pt-3">
+                <div className="flex justify-between items-center">
+                    <div className="flex space-x-2">
+                        {/* Call Button */}
+                        <button
+                            onClick={handleCall}
+                            className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                        >
+                            <i className="ph ph-phone text-blue-600"></i>
+                        </button>
+
+                        {/* WhatsApp Button */}
+                        <button
+                            onClick={handleWhatsApp}
+                            className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                        >
+                            <i className="ph ph-whatsapp-logo text-green-600"></i>
+                        </button>
+                    </div>
+
+                    {/* Deposit Balance Button */}
+                    <button
+                        onClick={handleAddBalance}
+                        className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg"
+                    >
+                        <i className="ph ph-plus-circle"></i>
+                        <span className="text-sm">Deposit Balance</span>
+                    </button>
+                </div>
             </div>
         </div>
     );
