@@ -457,7 +457,7 @@ function CustomerDetails() {
             title: 'Add Balance',
             content: depositContent,
             actions: depositActions,
-            zIndex: 60,
+            zIndex: 1060,
             closeOnBackdropClick: true,
             onShown: (modalControl) => {
                 document.getElementById('submit-deposit').addEventListener('click', async function () {
@@ -534,7 +534,7 @@ function CustomerDetails() {
             title: 'Edit Name',
             content: editNameContent,
             actions: editNameActions,
-            zIndex: 60,
+            zIndex: 1060,
             closeOnBackdropClick: true,
             onShown: (modalControl) => {
                 document.getElementById('cancel-edit').addEventListener('click', () => {

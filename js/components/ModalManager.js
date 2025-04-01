@@ -35,7 +35,7 @@
 
             // Build the modal HTML
             container.innerHTML = `
-            <div class="fixed inset-0 z-${zIndex} overflow-hidden bg-gray-900 bg-opacity-50">
+            <div class="fixed inset-0 overflow-hidden" style="z-index: ${zIndex}; background-color: rgba(17, 24, 39, 0.5);">
                 <!-- Mobile: Full Screen, Desktop: Right Side Drawer -->
                 <div class="fixed inset-y-0 right-0 flex max-w-full">
                     <div class="w-screen max-w-full sm:max-w-[${width}] transform transition-all ease-in-out duration-300 
@@ -169,27 +169,29 @@
 
             // Build the modal HTML
             container.innerHTML = `
-            <div class="fixed inset-0 z-${zIndex} overflow-auto bg-gray-900 bg-opacity-50 flex items-center justify-center p-4">
-                <div class="bg-white w-full ${widthClass} rounded-lg shadow-xl ${customClass} flex flex-col max-h-[90vh]">
-                    <!-- Header -->
-                    <div class="sticky top-0 z-10 flex items-center justify-between p-4 border-b bg-white rounded-t-lg">
-                        <h1 class="text-xl font-medium">${title}</h1>
-                        <button id="${id}-close-btn" class="p-2 rounded-full text-gray-500 hover:bg-gray-100">
-                            <i class="ph ph-x"></i>
-                        </button>
+            <div class="fixed inset-0 overflow-hidden" style="z-index: ${zIndex}; background-color: rgba(17, 24, 39, 0.5);">
+                <div class="fixed inset-0 overflow-auto bg-gray-900 bg-opacity-50 flex items-center justify-center p-4">
+                    <div class="bg-white w-full ${widthClass} rounded-lg shadow-xl ${customClass} flex flex-col max-h-[90vh]">
+                        <!-- Header -->
+                        <div class="sticky top-0 z-10 flex items-center justify-between p-4 border-b bg-white rounded-t-lg">
+                            <h1 class="text-xl font-medium">${title}</h1>
+                            <button id="${id}-close-btn" class="p-2 rounded-full text-gray-500 hover:bg-gray-100">
+                                <i class="ph ph-x"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- Content -->
+                        <div class="flex-1 overflow-auto p-4">
+                            ${content}
+                        </div>
+                        
+                        ${actions ? `
+                        <!-- Footer -->
+                        <div class="p-4 border-t border-gray-200 rounded-b-lg">
+                            ${actions}
+                        </div>
+                        ` : ''}
                     </div>
-                    
-                    <!-- Content -->
-                    <div class="flex-1 overflow-auto p-4">
-                        ${content}
-                    </div>
-                    
-                    ${actions ? `
-                    <!-- Footer -->
-                    <div class="p-4 border-t border-gray-200 rounded-b-lg">
-                        ${actions}
-                    </div>
-                    ` : ''}
                 </div>
             </div>
         `;

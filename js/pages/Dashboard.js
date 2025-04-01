@@ -676,6 +676,24 @@ function Dashboard() {
     // Calculate dashboard metrics from orders data
     const calculateDashboardMetrics = (allOrders) => {
         try {
+            if (!allOrders || !Array.isArray(allOrders)) {
+                console.error('[Dashboard Metrics] Invalid orders data:', allOrders);
+                return {
+                    todayOrders: 0,
+                    todayRevenue: 0,
+                    newCustomers: 0,
+                    avgOrderValue: 0,
+                    avgServiceTime: 0,
+                    todayOrdersTrend: 0,
+                    todayRevenueTrend: 0,
+                    newCustomersTrend: 0,
+                    avgOrderValueTrend: 0,
+                    avgServiceTimeTrend: 0
+                };
+            }
+
+            console.log(`[Dashboard Metrics] Calculating metrics from ${allOrders.length} orders`);
+
             // Create date objects for today and yesterday
             const now = new Date();
             const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -683,41 +701,45 @@ function Dashboard() {
 
             // Filter orders for today and yesterday
             const todayOrders = allOrders.filter(order => {
-                const orderDate = parseDate(order.date);
+                const orderDate = order.date;
                 return orderDate && orderDate >= startOfToday;
             });
 
             const yesterdayOrders = allOrders.filter(order => {
-                const orderDate = parseDate(order.date);
+                const orderDate = order.date;
                 return orderDate && orderDate >= startOfYesterday && orderDate < startOfToday;
             });
+
+            console.log(`[Dashboard Metrics] Found ${todayOrders.length} orders for today and ${yesterdayOrders.length} for yesterday`);
 
             // Calculate today's metrics
             const todayOrdersCount = todayOrders.length;
 
-            // Calculate revenue (only from paid orders)
-            const todayRevenue = todayOrders
-                .filter(order => order.paid === true)
-                .reduce((sum, order) => {
-                    // Calculate total from items
-                    const itemsTotal = order.items?.reduce((total, item) => {
-                        return total + ((item.price || 0) * (item.quantity || item.qnt || 1));
-                    }, 0) || 0;
+            // Calculate revenue (include all orders for now, not just paid)
+            const todayRevenue = todayOrders.reduce((sum, order) => {
+                // Calculate total from items
+                const itemsTotal = order.items?.reduce((total, item) => {
+                    const price = Number(item.price) || 0;
+                    const quantity = Number(item.quantity || item.qnt || 1);
+                    return total + (price * quantity);
+                }, 0) || 0;
 
-                    return sum + itemsTotal;
-                }, 0);
+                return sum + itemsTotal;
+            }, 0);
+
+            console.log(`[Dashboard Metrics] Today's revenue: ${todayRevenue}`);
 
             // Calculate yesterday's metrics for trend comparison
             const yesterdayOrdersCount = yesterdayOrders.length;
-            const yesterdayRevenue = yesterdayOrders
-                .filter(order => order.paid === true)
-                .reduce((sum, order) => {
-                    const itemsTotal = order.items?.reduce((total, item) => {
-                        return total + ((item.price || 0) * (item.quantity || item.qnt || 1));
-                    }, 0) || 0;
+            const yesterdayRevenue = yesterdayOrders.reduce((sum, order) => {
+                const itemsTotal = order.items?.reduce((total, item) => {
+                    const price = Number(item.price) || 0;
+                    const quantity = Number(item.quantity || item.qnt || 1);
+                    return total + (price * quantity);
+                }, 0) || 0;
 
-                    return sum + itemsTotal;
-                }, 0);
+                return sum + itemsTotal;
+            }, 0);
 
             // Get unique customer count for today
             const todayCustomerIds = new Set(todayOrders
@@ -731,16 +753,14 @@ function Dashboard() {
                 .map(order => order.customer.id));
             const yesterdayNewCustomersCount = yesterdayCustomerIds.size;
 
-            // Calculate average order value for today's paid orders
-            const paidTodayOrders = todayOrders.filter(order => order.paid === true);
-            const avgOrderValue = paidTodayOrders.length > 0
-                ? todayRevenue / paidTodayOrders.length
+            // Calculate average order value for today's orders
+            const avgOrderValue = todayOrdersCount > 0
+                ? todayRevenue / todayOrdersCount
                 : 0;
 
             // Calculate avg order value for yesterday
-            const paidYesterdayOrders = yesterdayOrders.filter(order => order.paid === true);
-            const yesterdayAvgOrderValue = paidYesterdayOrders.length > 0
-                ? yesterdayRevenue / paidYesterdayOrders.length
+            const yesterdayAvgOrderValue = yesterdayOrdersCount > 0
+                ? yesterdayRevenue / yesterdayOrdersCount
                 : 1; // Avoid division by zero in trend calculation
 
             // Calculate service time (from PLACED to COMPLETED)
@@ -752,14 +772,16 @@ function Dashboard() {
                     const placedStatus = order.status.find(s => s.label === "PLACED");
                     const completedStatus = order.status.find(s => s.label === "COMPLETED");
 
-                    if (placedStatus && completedStatus) {
-                        const placedDate = parseDate(placedStatus.date);
-                        const completedDate = parseDate(completedStatus.date);
+                    if (placedStatus && completedStatus && placedStatus.date && completedStatus.date) {
+                        const placedDate = placedStatus.date;
+                        const completedDate = completedStatus.date;
 
                         if (placedDate && completedDate) {
                             const serviceTimeMinutes = (completedDate - placedDate) / (1000 * 60);
-                            totalServiceTimeMinutes += serviceTimeMinutes;
-                            serviceTimeOrderCount++;
+                            if (serviceTimeMinutes > 0 && serviceTimeMinutes < 1440) { // Less than a day
+                                totalServiceTimeMinutes += serviceTimeMinutes;
+                                serviceTimeOrderCount++;
+                            }
                         }
                     }
                 }
@@ -792,14 +814,16 @@ function Dashboard() {
                     const placedStatus = order.status.find(s => s.label === "PLACED");
                     const completedStatus = order.status.find(s => s.label === "COMPLETED");
 
-                    if (placedStatus && completedStatus) {
-                        const placedDate = parseDate(placedStatus.date);
-                        const completedDate = parseDate(completedStatus.date);
+                    if (placedStatus && completedStatus && placedStatus.date && completedStatus.date) {
+                        const placedDate = placedStatus.date;
+                        const completedDate = completedStatus.date;
 
                         if (placedDate && completedDate) {
                             const serviceTimeMinutes = (completedDate - placedDate) / (1000 * 60);
-                            yesterdayTotalServiceTimeMinutes += serviceTimeMinutes;
-                            yesterdayServiceTimeOrderCount++;
+                            if (serviceTimeMinutes > 0 && serviceTimeMinutes < 1440) { // Less than a day
+                                yesterdayTotalServiceTimeMinutes += serviceTimeMinutes;
+                                yesterdayServiceTimeOrderCount++;
+                            }
                         }
                     }
                 }
@@ -812,7 +836,7 @@ function Dashboard() {
             // For service time, a negative trend is actually good (faster service)
             avgServiceTimeTrend = calculateTrend(avgServiceTime, yesterdayAvgServiceTime) * -1;
 
-            return {
+            const result = {
                 todayOrders: todayOrdersCount,
                 todayRevenue: todayRevenue,
                 newCustomers: newCustomersCount,
@@ -824,6 +848,9 @@ function Dashboard() {
                 avgOrderValueTrend: avgOrderValueTrend,
                 avgServiceTimeTrend: avgServiceTimeTrend
             };
+
+            console.log('[Dashboard Metrics] Calculated metrics:', result);
+            return result;
         } catch (err) {
             console.error('Error calculating dashboard metrics:', err);
             return {
@@ -898,54 +925,18 @@ function Dashboard() {
                         .map(doc => ({
                             id: doc.id,
                             ...doc.data(),
-                            date: parseDate(doc.data().date)
+                            date: parseDate(doc.data().date),
+                            // Parse status dates properly
+                            status: Array.isArray(doc.data().status)
+                                ? doc.data().status.map(s => ({
+                                    ...s,
+                                    date: parseDate(s.date)
+                                }))
+                                : []
                         }))
                         .filter(order => order.items && order.items.length > 0);
 
                     console.log(`[Kitchen Listener] Received ${kitchenOrdersData.length} KITCHEN orders`);
-
-                    // Enhanced debugging - log all kitchen orders with their key properties
-                    kitchenOrdersData.forEach(order => {
-                        const tableId = order.tableId;
-                        const priceVariant = order.priceVariant;
-
-                        console.log(`[Kitchen Order Debug] ID: ${order.id}, TableID: '${tableId || ''}' (${typeof tableId}), PriceVariant: '${priceVariant || ''}' (${typeof priceVariant})`);
-                    });
-
-                    // Log for debugging: count orders with no tableId and no priceVariant (Default channel)
-                    const defaultChannelOrders = kitchenOrdersData.filter(order => {
-                        const tableId = order.tableId || null;
-                        const priceVariant = order.priceVariant || null;
-
-                        const hasValidTableId = tableId !== null && tableId !== undefined && tableId !== '';
-                        const isDefaultVariant = priceVariant === 'Default' || priceVariant === '⚡Default';
-                        const hasValidPriceVariant = priceVariant !== null && priceVariant !== undefined && priceVariant !== '' && !isDefaultVariant;
-
-                        // This should match the logic in the useEffect grouping
-                        // Orders go to Default channel if:
-                        // 1. They have no valid tableId AND no valid priceVariant, OR
-                        // 2. They are explicitly marked with Default variant
-                        return (!hasValidTableId && !hasValidPriceVariant) || isDefaultVariant;
-                    });
-
-                    console.log(`[Default Channel Debug] Found ${defaultChannelOrders.length} orders for Default channel`);
-
-                    if (defaultChannelOrders.length > 0) {
-                        console.log(`[Default Channel Details]:`);
-                        // Log ALL default channel orders for debugging
-                        defaultChannelOrders.forEach(order => {
-                            console.log(`  Order ID: ${order.id}`);
-                            console.log(`    TableID: '${order.tableId || ''}' (${typeof order.tableId})`);
-                            console.log(`    PriceVariant: '${order.priceVariant || ''}' (${typeof order.priceVariant})`);
-                            console.log(`    Status: ${order.currentStatus?.label}`);
-                            console.log(`    Date: ${order.currentStatus?.date}`);
-                        });
-                    } else {
-                        console.log(`[Default Channel Debug] No orders qualify for Default channel. Check conditions:`);
-                        console.log(`  1. Orders with tableId: ${kitchenOrdersData.filter(o => o.tableId).length}`);
-                        console.log(`  2. Orders with priceVariant set: ${kitchenOrdersData.filter(o => o.priceVariant && o.priceVariant !== '').length}`);
-                        console.log(`  3. Orders that should be Default: ${kitchenOrdersData.filter(o => !o.tableId && (!o.priceVariant || o.priceVariant === '')).length}`);
-                    }
 
                     // Update state with the real-time KITCHEN orders data
                     setKitchenOrders(kitchenOrdersData);
@@ -978,26 +969,61 @@ function Dashboard() {
                 return;
             }
 
-            // Fetch recent COMPLETED orders for metrics only
+            // Get start of today for metrics calculation
+            const now = new Date();
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+
+            // Fetch ALL recent orders for metrics (both COMPLETED and other statuses for today/yesterday)
             const recentCompletedQuery = window.sdk.collection("Orders")
-                .where("currentStatus.label", "==", "COMPLETED")
                 .orderBy("date", "desc")
-                .limit(100);
+                .where("date", ">=", startOfYesterday) // Get at least yesterday's orders
+                .limit(300); // Increased limit to ensure we get all relevant orders
 
             const completedSnapshot = await recentCompletedQuery.get();
 
-            const completedOrdersData = completedSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                date: parseDate(doc.data().date)
-            }));
+            const completedOrdersData = completedSnapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    // Ensure date is properly parsed from Firestore timestamps
+                    date: parseDate(data.date),
+                    // Parse status dates properly
+                    status: Array.isArray(data.status)
+                        ? data.status.map(s => ({
+                            ...s,
+                            date: parseDate(s.date)
+                        }))
+                        : []
+                };
+            });
 
-            // Combine KITCHEN and recent COMPLETED for the metrics state
-            setOrders([...kitchenOrdersData, ...completedOrdersData]);
+            console.log(`[Dashboard Metrics] Fetched ${completedOrdersData.length} orders for metrics calculation`);
 
-            console.log(`Fetched ${completedOrdersData.length} COMPLETED orders for metrics`);
+            // Log date ranges for debugging
+            console.log(`[Dashboard Metrics] Today starts at: ${startOfToday.toISOString()}`);
+            console.log(`[Dashboard Metrics] Yesterday starts at: ${startOfYesterday.toISOString()}`);
+
+            // Count how many orders are from today for debugging
+            const todayOrdersCount = completedOrdersData.filter(order => {
+                const orderDate = order.date;
+                return orderDate && orderDate >= startOfToday;
+            }).length;
+
+            console.log(`[Dashboard Metrics] Orders from today: ${todayOrdersCount}`);
+
+            // Combine KITCHEN and recent orders for the metrics state
+            const allMetricsOrders = [...kitchenOrdersData, ...completedOrdersData];
+            setOrders(allMetricsOrders);
+
+            // Calculate metrics immediately instead of waiting for state update
+            const metrics = calculateDashboardMetrics(allMetricsOrders);
+            setDashboardMetrics(metrics);
+
+            console.log(`[Dashboard Metrics] Updated metrics:`, metrics);
         } catch (err) {
-            console.error('Error fetching completed orders for metrics:', err);
+            console.error('Error fetching orders for metrics:', err);
         }
     };
 
@@ -1337,7 +1363,7 @@ function Dashboard() {
                 </div>
 
                 <div className="overflow-x-auto overflow-visible pb-2 -mx-4 px-4">
-                    <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1.5 md:gap-4 min-w-[300px]">
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 min-w-[300px]">
                         <DashboardCard
                             icon="ph-chart-line-up"
                             title="Today's Orders"
