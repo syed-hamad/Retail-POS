@@ -243,8 +243,15 @@ function Customers() {
             const modal = window.ModalManager.createCenterModal({
                 id: 'import-success-modal',
                 title: `${fileCount} File(s) Uploaded`,
-                content: `<p class="text-gray-600 mb-4">We will inform you in app notification after your customers are added.</p>`,
-                actions: `<button class="w-full py-3 bg-red-500 text-white rounded-lg" id="import-success-ok">OK</button>`,
+                content: `
+                    <div class="text-center py-2">
+                        <div class="flex justify-center mb-4">
+                            <i class="ph ph-check-circle text-5xl text-green-500"></i>
+                        </div>
+                        <p class="text-gray-600 mb-4">We will inform you in app notification after your customers are added.</p>
+                    </div>
+                `,
+                actions: `<button class="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium rounded-lg transition-colors" id="import-success-ok">Done</button>`,
                 size: 'sm',
                 onShown: (modalControl) => {
                     document.getElementById('import-success-ok').addEventListener('click', () => {
@@ -267,11 +274,16 @@ function Customers() {
                 <div class="fixed inset-0 z-50 flex items-center justify-center">
                     <div class="fixed inset-0 bg-black bg-opacity-50"></div>
                     <div class="bg-white w-full max-w-sm rounded-xl shadow-lg overflow-hidden relative z-10 p-6">
-                        <h3 class="text-xl font-medium mb-2">${fileCount} File(s) Uploaded</h3>
-                        <p class="text-gray-600 mb-4">We will inform you in app notification after your customers are added.</p>
-                        <button class="w-full py-3 bg-red-500 text-white rounded-lg" onclick="document.getElementById('import-success-modal').remove()">
-                            OK
-                        </button>
+                        <div class="text-center">
+                            <div class="flex justify-center mb-4">
+                                <i class="ph ph-check-circle text-5xl text-green-500"></i>
+                            </div>
+                            <h3 class="text-xl font-medium mb-2">${fileCount} File(s) Uploaded</h3>
+                            <p class="text-gray-600 mb-4">We will inform you in app notification after your customers are added.</p>
+                            <button class="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium rounded-lg transition-colors" onclick="document.getElementById('import-success-modal').remove()">
+                                Done
+                            </button>
+                        </div>
                     </div>
                 </div>
             `;
@@ -291,7 +303,7 @@ function Customers() {
 
         // Create toast element
         const toast = document.createElement('div');
-        toast.className = `p-3 rounded-lg shadow-lg mb-2 flex items-center ${type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+        toast.className = `p-3 rounded-lg shadow-lg mb-2 flex items-center ${type === 'success' ? 'bg-green-50 text-green-800 border border-green-100' : 'bg-red-50 text-red-800 border border-red-100'}`;
         toast.innerHTML = `
             <i class="ph ${type === 'success' ? 'ph-check-circle' : 'ph-x-circle'} mr-2"></i>
             <span>${message}</span>
@@ -349,48 +361,75 @@ function Customers() {
                     title: 'Add New Customer',
                     content: `
                         <form id="add-customer-form" class="p-2">
-                            <div class="mb-4">
-                                <label class="block text-gray-700 mb-1">Name</label>
-                                <input
-                                    type="text"
-                                    id="customer-name-input"
-                                    class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                                    placeholder="Customer name"
-                                    required
-                                />
-                            </div>
-
                             <div class="mb-6">
-                                <label class="block text-gray-700 mb-1">Phone</label>
-                                <div class="flex">
-                                    <div class="bg-gray-100 border border-gray-300 border-r-0 rounded-l-md px-3 flex items-center">
-                                        <span class="text-gray-500">+</span>
+                                <div class="flex justify-center mb-6">
+                                    <div class="bg-gray-100 rounded-full p-4">
+                                        <i class="ph ph-user-plus text-4xl text-gray-500"></i>
                                     </div>
-                                    <input
-                                        type="tel"
-                                        id="customer-phone-input"
-                                        class="flex-1 p-2 border border-gray-300 rounded-r-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                                        placeholder="Phone number"
-                                        required
-                                    />
+                                </div>
+                                
+                                <div class="mb-4">
+                                    <label class="block text-gray-700 mb-2 text-sm font-medium">Name</label>
+                                    <div class="relative">
+                                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <i class="ph ph-user text-gray-400"></i>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            id="customer-name-input"
+                                            class="w-full py-2.5 pl-10 pr-3 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                                            placeholder="Customer name"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-gray-700 mb-2 text-sm font-medium">Phone</label>
+                                    <div class="relative">
+                                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <i class="ph ph-phone text-gray-400"></i>
+                                        </div>
+                                        <input
+                                            type="tel"
+                                            id="customer-phone-input"
+                                            class="w-full py-2.5 pl-10 pr-3 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                                            placeholder="Phone number"
+                                            required
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </form>
                     `,
                     actions: `
-                        <button
-                            type="button"
-                            id="submit-customer-btn"
-                            class="w-full bg-red-500 hover:bg-red-600 text-white font-medium py-3 rounded-md transition-colors"
-                        >
-                            Add Customer
-                        </button>
+                        <div class="flex space-x-3">
+                            <button 
+                                type="button" 
+                                id="cancel-customer-btn" 
+                                class="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium rounded-md transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                id="submit-customer-btn"
+                                class="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-md transition-colors"
+                            >
+                                Add Customer
+                            </button>
+                        </div>
                     `,
                     size: 'md',
                     onShown: (modalControl) => {
                         const nameInput = document.getElementById('customer-name-input');
                         const phoneInput = document.getElementById('customer-phone-input');
                         const submitBtn = document.getElementById('submit-customer-btn');
+                        const cancelBtn = document.getElementById('cancel-customer-btn');
+
+                        cancelBtn.addEventListener('click', () => {
+                            modalControl.close();
+                        });
 
                         submitBtn.addEventListener('click', async () => {
                             if (!nameInput.value || !phoneInput.value) return;
@@ -446,59 +485,79 @@ function Customers() {
 
         // Fallback to original implementation if ModalManager is not available
         return (
-            <div className={`fixed inset-0 z-50 flex items-end justify-center ${isAddCustomerModalOpen ? 'visible' : 'invisible'}`}>
+            <div className={`fixed inset-0 z-50 flex items-center justify-center ${isAddCustomerModalOpen ? 'visible' : 'invisible'}`}>
                 <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setIsAddCustomerModalOpen(false)}></div>
-                <div className="bg-white w-full max-w-md rounded-t-xl shadow-lg overflow-hidden relative z-10">
-                    <div className="p-4">
+                <div className="bg-white w-full max-w-md rounded-xl shadow-lg overflow-hidden relative z-10">
+                    <div className="p-5">
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-medium">Add New Customer</h3>
-                            <button onClick={() => setIsAddCustomerModalOpen(false)} className="text-gray-500">
+                            <h3 className="text-xl font-medium text-gray-800">Add New Customer</h3>
+                            <button onClick={() => setIsAddCustomerModalOpen(false)} className="text-gray-500 hover:text-gray-700">
                                 <i className="ph ph-x text-xl" />
                             </button>
                         </div>
 
+                        <div className="flex justify-center mb-6">
+                            <div className="bg-gray-100 rounded-full p-4">
+                                <i className="ph ph-user-plus text-4xl text-gray-500"></i>
+                            </div>
+                        </div>
+
                         <form onSubmit={handleSubmit}>
                             <div className="mb-4">
-                                <label className="block text-gray-700 mb-1">Name</label>
-                                <input
-                                    type="text"
-                                    value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                                    placeholder="Customer name"
-                                    required
-                                />
+                                <label className="block text-gray-700 mb-2 text-sm font-medium">Name</label>
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <i className="ph ph-user text-gray-400"></i>
+                                    </div>
+                                    <input
+                                        type="text"
+                                        value={formData.name}
+                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                        className="w-full py-2.5 pl-10 pr-3 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                                        placeholder="Customer name"
+                                        required
+                                    />
+                                </div>
                             </div>
 
                             <div className="mb-6">
-                                <label className="block text-gray-700 mb-1">Phone</label>
-                                <div className="flex">
-                                    <div className="bg-gray-100 border border-gray-300 border-r-0 rounded-l-md px-3 flex items-center">
-                                        <span className="text-gray-500">+</span>
+                                <label className="block text-gray-700 mb-2 text-sm font-medium">Phone</label>
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <i className="ph ph-phone text-gray-400"></i>
                                     </div>
                                     <input
                                         type="tel"
                                         value={formData.phone}
                                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                        className="flex-1 p-2 border border-gray-300 rounded-r-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                                        className="w-full py-2.5 pl-10 pr-3 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                                         placeholder="Phone number"
                                         required
                                     />
                                 </div>
                             </div>
 
-                            <button
-                                type="submit"
-                                disabled={submitting}
-                                className="w-full bg-red-500 hover:bg-red-600 text-white font-medium py-3 rounded-md transition-colors disabled:opacity-70"
-                            >
-                                {submitting ? (
-                                    <div className="flex justify-center items-center">
-                                        <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                                        Adding...
-                                    </div>
-                                ) : 'Add Customer'}
-                            </button>
+                            <div className="flex space-x-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsAddCustomerModalOpen(false)}
+                                    className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium rounded-md transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={submitting}
+                                    className="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-md transition-colors disabled:opacity-70"
+                                >
+                                    {submitting ? (
+                                        <div className="flex justify-center items-center">
+                                            <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                                            Adding...
+                                        </div>
+                                    ) : 'Add Customer'}
+                                </button>
+                            </div>
                         </form>
                     </div>
                 </div>
@@ -545,26 +604,59 @@ function Customers() {
                     title: 'Import Customers',
                     content: `
                         <div class="text-center p-2">
-                            <div class="border-b mb-4"></div>
-                            <div class="mb-4 flex justify-center">
-                                <i class="ph ph-cloud-arrow-up text-6xl text-red-200"></i>
+                            <div class="mb-6 flex justify-center">
+                                <div class="bg-blue-50 rounded-full p-5">
+                                    <i class="ph ph-users-three text-5xl text-blue-500"></i>
+                                </div>
                             </div>
-                            <div class="text-left text-gray-600 mb-6">
-                                <p class="mb-2">1. Upload your customers pdf/image file here.</p>
-                                <p class="mb-2">2. After all customers are added we will inform you in app notification.</p>
-                                <p class="mb-2">3. Under 5 minutes your new customers will be added to your CRM.</p>
+                            <div class="text-left mb-6">
+                                <div class="flex items-start mb-3">
+                                    <div class="bg-gray-100 rounded-full p-1 mr-3 mt-0.5">
+                                        <span class="flex items-center justify-center w-5 h-5 text-xs text-gray-700 font-medium">1</span>
+                                    </div>
+                                    <p class="text-gray-600">Upload your customers pdf/image file here.</p>
+                                </div>
+                                <div class="flex items-start mb-3">
+                                    <div class="bg-gray-100 rounded-full p-1 mr-3 mt-0.5">
+                                        <span class="flex items-center justify-center w-5 h-5 text-xs text-gray-700 font-medium">2</span>
+                                    </div>
+                                    <p class="text-gray-600">After all customers are added we will inform you in app notification.</p>
+                                </div>
+                                <div class="flex items-start">
+                                    <div class="bg-gray-100 rounded-full p-1 mr-3 mt-0.5">
+                                        <span class="flex items-center justify-center w-5 h-5 text-xs text-gray-700 font-medium">3</span>
+                                    </div>
+                                    <p class="text-gray-600">Under 5 minutes your new customers will be added to your CRM.</p>
+                                </div>
                             </div>
-                            <label id="upload-files-btn" class="block w-full py-4 px-6 bg-red-500 text-white rounded-lg cursor-pointer hover:bg-red-600">
-                                <i class="ph ph-upload-simple mr-2"></i>
-                                Choose Files
-                                <input type="file" class="hidden" id="customer-files-input" accept=".jpg,.jpeg,.png,.pdf" multiple>
-                            </label>
+                            <div class="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50 mb-4">
+                                <label id="upload-files-btn" class="block w-full py-3 px-6 bg-gray-800 text-white rounded-md cursor-pointer hover:bg-gray-700 transition-colors">
+                                    <i class="ph ph-file-arrow-up mr-2"></i>
+                                    Choose Files
+                                    <input type="file" class="hidden" id="customer-files-input" accept=".jpg,.jpeg,.png,.pdf,.csv,.xlsx,.xls" multiple>
+                                </label>
+                                <p class="text-xs text-gray-500 mt-2">Supported formats: PDF, CSV, Excel, Images</p>
+                            </div>
                         </div>
+                    `,
+                    actions: `
+                        <button 
+                            type="button" 
+                            id="cancel-import-btn" 
+                            class="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium rounded-md transition-colors"
+                        >
+                            Cancel
+                        </button>
                     `,
                     size: 'md',
                     onShown: (modalControl) => {
                         const fileInput = document.getElementById('customer-files-input');
                         const uploadBtn = document.getElementById('upload-files-btn');
+                        const cancelBtn = document.getElementById('cancel-import-btn');
+
+                        cancelBtn.addEventListener('click', () => {
+                            modalControl.close();
+                        });
 
                         fileInput.addEventListener('change', async (e) => {
                             const files = e.target.files;
@@ -576,7 +668,7 @@ function Customers() {
                             try {
                                 // Show uploading state
                                 uploadBtn.classList.add('opacity-70');
-                                uploadBtn.classList.remove('hover:bg-red-600');
+                                uploadBtn.classList.remove('hover:bg-gray-700');
                                 uploadBtn.innerHTML = `
                                     <div class="flex justify-center items-center">
                                         <div class="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></div>
@@ -594,8 +686,8 @@ function Customers() {
                                 console.error("Error uploading files:", error);
                                 window.ModalManager.showToast("Failed to upload files", { type: "error" });
                                 uploadBtn.classList.remove('opacity-70');
-                                uploadBtn.classList.add('hover:bg-red-600');
-                                uploadBtn.innerHTML = `<i class="ph ph-upload-simple mr-2"></i> Choose Files`;
+                                uploadBtn.classList.add('hover:bg-gray-700');
+                                uploadBtn.innerHTML = `<i class="ph ph-file-arrow-up mr-2"></i> Choose Files`;
                                 uploadBtn.style.pointerEvents = 'auto';
                             }
                         });
@@ -622,21 +714,42 @@ function Customers() {
             <div className={`fixed inset-0 z-50 flex items-center justify-center ${isImportModalOpen ? 'visible' : 'invisible'}`}>
                 <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setIsImportModalOpen(false)}></div>
                 <div className="bg-white w-full max-w-md rounded-xl shadow-lg overflow-hidden relative z-10 p-6">
-                    <div className="text-center">
-                        <h3 className="text-xl font-medium mb-2">Import Customers</h3>
-                        <div className="border-b mb-4"></div>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-xl font-medium text-gray-800">Import Customers</h3>
+                        <button onClick={() => setIsImportModalOpen(false)} className="text-gray-500 hover:text-gray-700">
+                            <i className="ph ph-x text-xl" />
+                        </button>
+                    </div>
 
-                        <div className="mb-4 flex justify-center">
-                            <i className="ph ph-cloud-arrow-up text-6xl text-red-200" />
+                    <div className="mb-6 flex justify-center">
+                        <div className="bg-blue-50 rounded-full p-5">
+                            <i className="ph ph-users-three text-5xl text-blue-500"></i>
                         </div>
+                    </div>
 
-                        <div className="text-left text-gray-600 mb-6">
-                            <p className="mb-2">1. Upload your customers pdf/image file here.</p>
-                            <p className="mb-2">2. After all customers are added we will inform you in app notification.</p>
-                            <p className="mb-2">3. Under 5 minutes your new customers will be added to your CRM.</p>
+                    <div className="text-left mb-6">
+                        <div className="flex items-start mb-3">
+                            <div className="bg-gray-100 rounded-full p-1 mr-3 mt-0.5">
+                                <span className="flex items-center justify-center w-5 h-5 text-xs text-gray-700 font-medium">1</span>
+                            </div>
+                            <p className="text-gray-600">Upload your customers pdf/image file here.</p>
                         </div>
+                        <div className="flex items-start mb-3">
+                            <div className="bg-gray-100 rounded-full p-1 mr-3 mt-0.5">
+                                <span className="flex items-center justify-center w-5 h-5 text-xs text-gray-700 font-medium">2</span>
+                            </div>
+                            <p className="text-gray-600">After all customers are added we will inform you in app notification.</p>
+                        </div>
+                        <div className="flex items-start">
+                            <div className="bg-gray-100 rounded-full p-1 mr-3 mt-0.5">
+                                <span className="flex items-center justify-center w-5 h-5 text-xs text-gray-700 font-medium">3</span>
+                            </div>
+                            <p className="text-gray-600">Under 5 minutes your new customers will be added to your CRM.</p>
+                        </div>
+                    </div>
 
-                        <label className={`block w-full py-4 px-6 bg-red-500 text-white rounded-lg cursor-pointer transition-colors ${uploading ? 'opacity-70' : 'hover:bg-red-600'}`}>
+                    <div className="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50 mb-4">
+                        <label className={`block w-full py-3 px-6 bg-gray-800 text-white rounded-md cursor-pointer transition-colors ${uploading ? 'opacity-70' : 'hover:bg-gray-700'}`}>
                             {uploading ? (
                                 <div className="flex justify-center items-center">
                                     <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></div>
@@ -644,20 +757,29 @@ function Customers() {
                                 </div>
                             ) : (
                                 <>
-                                    <i className="ph ph-upload-simple mr-2"></i>
+                                    <i className="ph ph-file-arrow-up mr-2"></i>
                                     Choose Files
                                 </>
                             )}
                             <input
                                 type="file"
                                 className="hidden"
-                                accept=".jpg,.jpeg,.png,.pdf"
+                                accept=".jpg,.jpeg,.png,.pdf,.csv,.xlsx,.xls"
                                 multiple
                                 onChange={handleFileUpload}
                                 disabled={uploading}
                             />
                         </label>
+                        <p className="text-xs text-gray-500 mt-2 text-center">Supported formats: PDF, CSV, Excel, Images</p>
                     </div>
+
+                    <button
+                        type="button"
+                        onClick={() => setIsImportModalOpen(false)}
+                        className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium rounded-md transition-colors"
+                    >
+                        Cancel
+                    </button>
                 </div>
             </div>
         );

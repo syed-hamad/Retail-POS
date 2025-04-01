@@ -1358,7 +1358,7 @@ function Dashboard() {
                 <div className="flex items-center justify-between mb-5">
                     <h2 className="text-xl font-bold text-gray-800 flex items-center">
                         <i className="ph ph-storefront text-red-500 mr-2"></i>
-                        Orders Dashboard
+                        Today's Summary
                     </h2>
                 </div>
 
@@ -1414,7 +1414,7 @@ function Dashboard() {
             <div className="mb-6 bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
                 <div className="px-3 py-3 border-b border-gray-200 flex items-center">
                     <i className="ph ph-globe text-red-500 text-xl mr-2"></i>
-                    <h2 className="text-lg font-semibold text-gray-800">Kitchen Orders by Channel</h2>
+                    <h2 className="text-lg font-semibold text-gray-800">Order Channels</h2>
                 </div>
                 <div className="p-3">
                     {isLoading ? (
@@ -1463,7 +1463,7 @@ function Dashboard() {
                 <div className="px-3 py-3 border-b border-gray-200 flex items-center justify-between">
                     <div className="flex items-center">
                         <i className="ph ph-table text-red-500 text-xl mr-2"></i>
-                        <h2 className="text-lg font-semibold text-gray-800">Kitchen Orders by Table</h2>
+                        <h2 className="text-lg font-semibold text-gray-800">Dining Tables</h2>
                     </div>
                     <button
                         onClick={showAddTableModal}
@@ -1521,7 +1521,7 @@ function Dashboard() {
             <div className="mb-6 bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
                 <div className="px-3 py-3 border-b border-gray-200 flex items-center">
                     <i className="ph ph-qr-code text-red-500 text-xl mr-2"></i>
-                    <h2 className="text-lg font-semibold text-gray-800">Orders</h2>
+                    <h2 className="text-lg font-semibold text-gray-800">Recent Orders</h2>
                 </div>
 
                 {/* Order Tabs */}
