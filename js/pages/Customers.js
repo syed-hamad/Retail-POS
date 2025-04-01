@@ -7,11 +7,53 @@ function Customers() {
     const [filterType, setFilterType] = React.useState('all'); // 'all', 'creditors'
     const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = React.useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = React.useState(false);
+    const [customerCardLoaded, setCustomerCardLoaded] = React.useState(false);
 
     // Expose refreshCustomers function globally so it can be called from components
     window.refreshCustomers = fetchCustomers;
 
     React.useEffect(() => {
+        // Check if CustomerCard component is loaded
+        if (!window.CustomerCard) {
+            // Load CustomerCard component dynamically
+            // First ensure ModalManager is loaded
+            const loadDependencies = async () => {
+                try {
+                    // Check and load ModalManager first if needed
+                    if (!window.ModalManager) {
+                        console.log("Loading ModalManager before CustomerCard...");
+                        const modalManagerScript = document.createElement('script');
+                        modalManagerScript.src = 'js/components/ModalManager.js';
+
+                        await new Promise((resolve, reject) => {
+                            modalManagerScript.onload = resolve;
+                            modalManagerScript.onerror = reject;
+                            document.head.appendChild(modalManagerScript);
+                        });
+                        console.log("ModalManager loaded successfully");
+                    }
+
+                    // Now load CustomerCard
+                    const script = document.createElement('script');
+                    script.src = 'js/components/CustomerCard.js';
+
+                    script.onload = () => {
+                        console.log("CustomerCard loaded successfully");
+                        setCustomerCardLoaded(true);
+                    };
+
+                    document.head.appendChild(script);
+                } catch (error) {
+                    console.error("Error loading dependencies:", error);
+                    setCustomerCardLoaded(true); // Set to true anyway to prevent infinite loading
+                }
+            };
+
+            loadDependencies();
+        } else {
+            setCustomerCardLoaded(true);
+        }
+
         fetchCustomers();
     }, []);
 
@@ -435,17 +477,28 @@ function Customers() {
         );
     }
 
+    if (!customerCardLoaded) {
+        return (
+            <div className="p-4 text-center">
+                <div>Loading customer components...</div>
+                <div className="animate-spin inline-block w-8 h-8 border-4 border-red-500 border-t-transparent rounded-full mt-2" />
+            </div>
+        );
+    }
+
+    // Render the CustomerCard component for each filtered customer
+    const renderCustomerCard = (customer) => {
+        return window.CustomerCard ? (
+            <window.CustomerCard key={customer.id} customer={customer} />
+        ) : (
+            <div key={customer.id} className="p-3 border border-gray-200 rounded-lg mb-2">
+                Loading customer component...
+            </div>
+        );
+    };
+
     return (
         <div className="bg-gray-50 min-h-screen">
-            {/* Header */}
-            <div className="flex justify-between items-center p-4 bg-white border-b">
-                <button className="w-8 h-8 flex items-center justify-center" onClick={() => window.history.back()}>
-                    <i className="ph ph-arrow-left text-xl" />
-                </button>
-                <h1 className="text-xl font-medium">Customers</h1>
-                <ContextMenu />
-            </div>
-
             {/* Content */}
             <div className="p-4">
                 <SearchBar />
@@ -455,9 +508,7 @@ function Customers() {
                     <NoCustomers />
                 ) : (
                     <div className="mt-2">
-                        {filteredCustomers.map(customer => (
-                            <CustomerCard key={customer.id} customer={customer} />
-                        ))}
+                        {filteredCustomers.map(customer => renderCustomerCard(customer))}
                     </div>
                 )}
             </div>
@@ -467,4 +518,4 @@ function Customers() {
             <ImportCustomersModal />
         </div>
     );
-} 
+}
