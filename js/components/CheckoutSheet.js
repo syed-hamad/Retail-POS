@@ -75,11 +75,11 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
 
         // Add exclusive charges
         if (charges && charges.length > 0) {
-        charges.forEach(charge => {
-            if (!charge.inclusive && charge.value) {
-                total += parseFloat(charge.value);
-            }
-        });
+            charges.forEach(charge => {
+                if (!charge.inclusive && charge.value) {
+                    total += parseFloat(charge.value);
+                }
+            });
         }
 
         return total;
@@ -144,7 +144,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                             mrp: cartItem.product.mrp || cartItem.product.price,
                             price: cartItem.product.price,
                             veg: cartItem.product.veg || false,
-                served: false,
+                            served: false,
                             qnt: cartItem.quantity
                         }
                     };
@@ -205,27 +205,27 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                     billNo: billNo,
                     items: items.map(item => item.data || item),
                     sellerId: seller?.id,
-                priceVariant: priceVariant,
-                tableId: tableId,
-                discount: discount,
+                    priceVariant: priceVariant,
+                    tableId: tableId,
+                    discount: discount,
                     paid: true,
-                status: [
-                    {
-                        label: "PLACED",
+                    status: [
+                        {
+                            label: "PLACED",
                             date: now
-                    },
-                    {
+                        },
+                        {
+                            label: "KITCHEN",
+                            date: now
+                        }
+                    ],
+                    currentStatus: {
                         label: "KITCHEN",
-                            date: now
-                    }
-                ],
-                currentStatus: {
-                    label: "KITCHEN",
                         date: now
-                },
+                    },
                     charges: validCharges.map(c => typeof c.toJson === 'function' ? c.toJson() : c),
                     payMode: paymentMode,
-                instructions: instructions.trim(),
+                    instructions: instructions.trim(),
                     date: now
                 };
             }
@@ -303,19 +303,245 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
 
     // Handle discount application
     const applyDiscount = (amount) => {
+        // If no amount is provided, use the current discountInput value
+        if (amount === undefined) {
+            amount = percentMode
+                ? ((parseFloat(discountInput) || 0) * cartSubTotal / 100)
+                : Math.min(parseFloat(discountInput) || 0, cartSubTotal);
+        }
+
         if (isNaN(amount) || amount < 0) {
-            showToast("Please enter a valid discount amount", "error");
+            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                window.ModalManager.showToast("Please enter a valid discount amount", { type: "error" });
+            } else {
+                showToast("Please enter a valid discount amount", "error");
+            }
             return;
         }
 
         if (amount > cartSubTotal) {
-            showToast("Discount cannot be greater than subtotal", "error");
+            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                window.ModalManager.showToast("Discount cannot be greater than subtotal", { type: "error" });
+            } else {
+                showToast("Discount cannot be greater than subtotal", "error");
+            }
             setDiscount(0);
         } else {
             setDiscount(amount);
-            showToast(`Discount of ₹${amount.toFixed(2)} applied`, "success");
+            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                window.ModalManager.showToast(`Discount of ₹${amount.toFixed(2)} applied`, { type: "success" });
+            } else {
+                showToast(`Discount of ₹${amount.toFixed(2)} applied`, "success");
+            }
         }
         setShowDiscountModal(false);
+    };
+
+    // Open discount modal
+    const openDiscountModal = () => {
+        if (window.ModalManager && typeof window.ModalManager.createCenterModal === 'function') {
+            // Reset discount input when opening
+            setDiscountInput('');
+
+            const discountModalContent = `
+                <div>
+                    <!-- Toggle between percentage and fixed amount -->
+                    <div class="flex items-center justify-between bg-gray-100 rounded-lg p-1 mb-4">
+                        <button id="fixed-amount-btn" class="flex-1 py-2 rounded-md text-center ${!percentMode ? 'bg-white shadow-sm font-medium' : ''}">
+                            Fixed Amount
+                        </button>
+                        <button id="percent-mode-btn" class="flex-1 py-2 rounded-md text-center ${percentMode ? 'bg-white shadow-sm font-medium' : ''}">
+                            Percentage (%)
+                        </button>
+                    </div>
+
+                    <!-- Input field -->
+                    <div class="mb-5">
+                        <label class="block text-sm text-gray-600 mb-2">
+                            ${percentMode ? 'Discount Percentage' : 'Discount Amount'}
+                        </label>
+                        <div class="flex items-center border rounded-lg overflow-hidden shadow-sm">
+                            <span class="px-3 py-2 bg-gray-100 text-gray-500">
+                                ${percentMode ? '%' : '₹'}
+                            </span>
+                            <input
+                                type="number"
+                                id="discount-input"
+                                value="${discountInput}"
+                                placeholder="0"
+                                class="flex-1 px-3 py-2 outline-none"
+                            />
+                        </div>
+                        <p class="text-xs text-gray-500 mt-2">
+                            ${percentMode
+                    ? 'Enter percentage between 1-100'
+                    : `Maximum discount: ₹${cartSubTotal}`}
+                        </p>
+                    </div>
+
+                    <!-- Summary -->
+                    <div class="bg-gray-50 rounded-lg p-4 mb-5">
+                        <div class="flex justify-between mb-1">
+                            <span class="text-gray-600">Subtotal:</span>
+                            <span>₹${cartSubTotal}</span>
+                        </div>
+                        <div class="flex justify-between mb-1 text-green-600">
+                            <span>Discount:</span>
+                            <span id="discount-amount">
+                                - ₹${percentMode
+                    ? ((parseFloat(discountInput) || 0) * cartSubTotal / 100).toFixed(2)
+                    : (Math.min(parseFloat(discountInput) || 0, cartSubTotal)).toFixed(2)
+                }
+                            </span>
+                        </div>
+                        <div class="flex justify-between font-medium text-lg pt-2 border-t">
+                            <span>Final Total:</span>
+                            <span id="final-total">
+                                ₹${percentMode
+                    ? (cartSubTotal - ((parseFloat(discountInput) || 0) * cartSubTotal / 100)).toFixed(2)
+                    : (cartSubTotal - Math.min(parseFloat(discountInput) || 0, cartSubTotal)).toFixed(2)
+                }
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const discountFooter = `
+                <div class="flex gap-3">
+                    <button id="cancel-discount" class="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-lg">
+                        Cancel
+                    </button>
+                    <button id="apply-discount" class="flex-1 py-2.5 bg-blue-600 text-white rounded-lg">
+                        Apply Discount
+                    </button>
+                </div>
+            `;
+
+            const modal = window.ModalManager.createCenterModal({
+                id: 'discount-modal',
+                title: 'Apply Discount',
+                content: discountModalContent,
+                actions: discountFooter,
+                onShown: (modalControl) => {
+                    // Add event listeners
+                    const fixedAmountBtn = document.getElementById('fixed-amount-btn');
+                    const percentModeBtn = document.getElementById('percent-mode-btn');
+                    const discountInput = document.getElementById('discount-input');
+                    const cancelBtn = document.getElementById('cancel-discount');
+                    const applyBtn = document.getElementById('apply-discount');
+
+                    // Set up mode toggle
+                    if (fixedAmountBtn) {
+                        fixedAmountBtn.addEventListener('click', () => {
+                            setPercentMode(false);
+                            modalControl.close();
+                            setTimeout(openDiscountModal, 50);
+                        });
+                    }
+
+                    if (percentModeBtn) {
+                        percentModeBtn.addEventListener('click', () => {
+                            setPercentMode(true);
+                            modalControl.close();
+                            setTimeout(openDiscountModal, 50);
+                        });
+                    }
+
+                    // Set up input changes
+                    if (discountInput) {
+                        discountInput.addEventListener('input', (e) => {
+                            const newValue = e.target.value;
+                            setDiscountInput(newValue);
+
+                            // Update summary
+                            const discountAmount = document.getElementById('discount-amount');
+                            const finalTotal = document.getElementById('final-total');
+
+                            if (discountAmount && finalTotal) {
+                                const calculatedDiscount = percentMode
+                                    ? ((parseFloat(newValue) || 0) * cartSubTotal / 100)
+                                    : Math.min(parseFloat(newValue) || 0, cartSubTotal);
+
+                                discountAmount.textContent = `- ₹${calculatedDiscount.toFixed(2)}`;
+                                finalTotal.textContent = `₹${(cartSubTotal - calculatedDiscount).toFixed(2)}`;
+                            }
+                        });
+                    }
+
+                    // Set up buttons
+                    if (cancelBtn) {
+                        cancelBtn.addEventListener('click', () => modalControl.close());
+                    }
+
+                    if (applyBtn) {
+                        applyBtn.addEventListener('click', () => {
+                            applyDiscount();
+                            modalControl.close();
+                        });
+                    }
+                }
+            });
+        } else {
+            setShowDiscountModal(true);
+        }
+    };
+
+    // Open instructions modal
+    const openInstructionsModal = () => {
+        if (window.ModalManager && typeof window.ModalManager.createCenterModal === 'function') {
+            const instructionsContent = `
+                <div class="mb-5">
+                    <textarea
+                        id="instructions-textarea"
+                        placeholder="Add any special instructions for this order..."
+                        class="w-full p-3 border rounded-lg h-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >${instructions}</textarea>
+                </div>
+            `;
+
+            const instructionsFooter = `
+                <div class="flex gap-3">
+                    <button id="cancel-instructions" class="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-lg">
+                        Cancel
+                    </button>
+                    <button id="save-instructions" class="flex-1 py-2.5 bg-blue-600 text-white rounded-lg">
+                        Save Instructions
+                    </button>
+                </div>
+            `;
+
+            const modal = window.ModalManager.createCenterModal({
+                id: 'instructions-modal',
+                title: 'Order Instructions',
+                content: instructionsContent,
+                actions: instructionsFooter,
+                onShown: (modalControl) => {
+                    // Add event listeners
+                    const instructionsTextarea = document.getElementById('instructions-textarea');
+                    const cancelBtn = document.getElementById('cancel-instructions');
+                    const saveBtn = document.getElementById('save-instructions');
+
+                    if (cancelBtn) {
+                        cancelBtn.addEventListener('click', () => modalControl.close());
+                    }
+
+                    if (saveBtn) {
+                        saveBtn.addEventListener('click', () => {
+                            if (instructionsTextarea) {
+                                setInstructions(instructionsTextarea.value);
+                                if (window.ModalManager.showToast) {
+                                    window.ModalManager.showToast("Instructions saved");
+                                }
+                            }
+                            modalControl.close();
+                        });
+                    }
+                }
+            });
+        } else {
+            setShowInstructionsModal(true);
+        }
     };
 
     if (Object.keys(cart).length === 0) return null;
@@ -333,16 +559,23 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                         <div className="flex items-center">
                             <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
                                 <i className="ph ph-shopping-cart text-red-600 text-xl"></i>
-                    </div>
+                            </div>
                             <h2 className="text-xl font-semibold text-gray-800">Checkout</h2>
-                </div>
+                        </div>
                         <div className="flex items-center gap-2">
                             <button
-                                onClick={() => setShowDiscountModal(true)}
+                                onClick={openDiscountModal}
                                 className="p-2 hover:bg-red-50 rounded-full transition-colors"
                                 title="Apply Discount"
                             >
                                 <i className="ph ph-tag text-red-600"></i>
+                            </button>
+                            <button
+                                onClick={openInstructionsModal}
+                                className="p-2 hover:bg-red-50 rounded-full transition-colors"
+                                title="Add Instructions"
+                            >
+                                <i className="ph ph-note-pencil text-gray-600"></i>
                             </button>
                             <button
                                 onClick={() => onClose?.()}
@@ -352,7 +585,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                                 <i className="ph ph-x text-red-600"></i>
                             </button>
                         </div>
-                </div>
+                    </div>
 
                     {/* Order Info */}
                     <div className="bg-pink-50 px-4 py-2 border-b flex justify-between items-center">
@@ -373,7 +606,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                     <div className="p-4">
                         <h3 className="font-medium text-gray-700 mb-3">Order Items</h3>
                         <div className="space-y-3">
-                    {Object.values(cart).map((item, index) => (
+                            {Object.values(cart).map((item, index) => (
                                 <div key={index} className="flex items-start p-3 bg-white rounded-xl shadow-sm hover:shadow transition-shadow duration-200">
                                     <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden mr-3 flex-shrink-0">
                                         {item.product.imgs && item.product.imgs.length > 0 ? (
@@ -401,15 +634,15 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                                             <div className="mt-1">
                                                 <span className={`inline-block w-4 h-4 border ${item.product.veg ? 'border-green-500' : 'border-red-500'} p-0.5 rounded-sm`}>
                                                     <span className={`block w-full h-full rounded-sm ${item.product.veg ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                            </span>
+                                                </span>
                                             </div>
                                         )}
                                     </div>
                                     <div className="font-medium text-right whitespace-nowrap text-red-600">
                                         ₹{(item.quantity * item.product.price).toFixed(2)}
                                     </div>
-                        </div>
-                    ))}
+                                </div>
+                            ))}
                         </div>
                     </div>
 
@@ -431,24 +664,24 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                 <div className="bg-white border-t shadow-md" style={{ backgroundColor: "#fff8f8" }}>
                     <div className="p-4">
                         <div className="space-y-2">
-                        <div className="flex justify-between">
+                            <div className="flex justify-between">
                                 <span className="text-gray-600">Sub Total</span>
                                 <span>₹{cartSubTotal.toFixed(2)}</span>
-                        </div>
+                            </div>
 
-                        {/* Charges */}
+                            {/* Charges */}
                             {charges && charges.length > 0 && (
                                 <div className="flex justify-between text-gray-600">
                                     <span>Tax & Charges</span>
-                                <div className="text-right">
-                                    {charges.map((charge, index) => (
+                                    <div className="text-right">
+                                        {charges.map((charge, index) => (
                                             <div key={index}>
                                                 ₹{charge.value}
-                                        </div>
-                                    ))}
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
+                            )}
 
                             {discount > 0 && (
                                 <div className="flex justify-between text-green-600">
@@ -522,14 +755,14 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                                         Processing payment...
                                     </div>
                                 )}
-                        </div>
+                            </div>
                         )}
                     </div>
                 </div>
             </div>
 
-            {/* Discount Modal */}
-            {showDiscountModal && (
+            {/* Discount Modal - only show when not using ModalManager */}
+            {showDiscountModal && (!window.ModalManager || typeof window.ModalManager.createCenterModal !== 'function') && (
                 <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-60" onClick={() => setShowDiscountModal(false)}>
                     <div className="bg-white rounded-xl p-5 w-full max-w-md shadow-xl animate-fadeIn" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-center mb-5">
@@ -540,7 +773,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                             >
                                 <i className="ph ph-x text-gray-600"></i>
                             </button>
-        </div>
+                        </div>
 
                         {/* Toggle between percentage and fixed amount */}
                         <div className="flex items-center justify-between bg-gray-100 rounded-lg p-1 mb-4">
@@ -550,7 +783,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                             >
                                 Fixed Amount
                             </button>
-            <button
+                            <button
                                 className={`flex-1 py-2 rounded-md text-center ${percentMode ? 'bg-white shadow-sm font-medium' : ''}`}
                                 onClick={() => setPercentMode(true)}
                             >
@@ -600,25 +833,25 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                             </div>
                             <div className="flex justify-between font-medium text-lg pt-2 border-t">
                                 <span>Final Total:</span>
-                <span>
+                                <span>
                                     ₹{
                                         percentMode
                                             ? (cartSubTotal - ((parseFloat(discountInput) || 0) * cartSubTotal / 100)).toFixed(2)
                                             : (cartSubTotal - Math.min(parseFloat(discountInput) || 0, cartSubTotal)).toFixed(2)
-                    }
-                </span>
+                                    }
+                                </span>
                             </div>
                         </div>
 
                         {/* Action buttons */}
                         <div className="flex gap-3">
-                                <button
+                            <button
                                 onClick={() => setShowDiscountModal(false)}
                                 className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-lg"
-                                >
+                            >
                                 Cancel
-                                </button>
-                                <button
+                            </button>
+                            <button
                                 onClick={applyDiscount}
                                 className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg"
                             >
@@ -629,8 +862,8 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                 </div>
             )}
 
-            {/* Instructions Modal */}
-            {showInstructionsModal && (
+            {/* Instructions Modal - only show when not using ModalManager */}
+            {showInstructionsModal && (!window.ModalManager || typeof window.ModalManager.createCenterModal !== 'function') && (
                 <div
                     className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-60"
                     onClick={() => setShowInstructionsModal(false)}
@@ -646,8 +879,8 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                                 className="p-2 hover:bg-gray-100 rounded-full"
                             >
                                 <i className="ph ph-x text-gray-600"></i>
-                                </button>
-                            </div>
+                            </button>
+                        </div>
 
                         <div className="mb-5">
                             <textarea

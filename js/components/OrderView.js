@@ -34,10 +34,18 @@ function OrderView({ order, tableId, variant, onClose }) {
     const handleServeStatusChange = async (item, served) => {
         try {
             await order.serveItem(item, served);
-            showToast(served ? "Item marked as served" : "Item marked as not served");
+            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                window.ModalManager.showToast(served ? "Item marked as served" : "Item marked as not served");
+            } else {
+                showToast(served ? "Item marked as served" : "Item marked as not served");
+            }
         } catch (error) {
             console.error("Error updating serve status:", error);
-            showToast("Failed to update serve status", "error");
+            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                window.ModalManager.showToast("Failed to update serve status", { type: "error" });
+            } else {
+                showToast("Failed to update serve status", "error");
+            }
         }
     };
 
@@ -51,7 +59,11 @@ function OrderView({ order, tableId, variant, onClose }) {
             }
         } catch (error) {
             console.error("Error updating quantity:", error);
-            showToast("Failed to update quantity", "error");
+            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                window.ModalManager.showToast("Failed to update quantity", { type: "error" });
+            } else {
+                showToast("Failed to update quantity", "error");
+            }
         }
     };
 
@@ -60,7 +72,11 @@ function OrderView({ order, tableId, variant, onClose }) {
         // Check if POS component is available
         if (!window.POS) {
             console.error("POS component is not defined");
-            showToast("Cannot open POS: component not available", "error");
+            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                window.ModalManager.showToast("Cannot open POS: component not available", { type: "error" });
+            } else {
+                showToast("Cannot open POS: component not available", "error");
+            }
             return;
         }
 
@@ -103,7 +119,71 @@ function OrderView({ order, tableId, variant, onClose }) {
             if (document.body.contains(posContainer)) {
                 document.body.removeChild(posContainer);
             }
-            showToast("Failed to open POS", "error");
+            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                window.ModalManager.showToast("Failed to open POS", { type: "error" });
+            } else {
+                showToast("Failed to open POS", "error");
+            }
+        }
+    };
+
+    // Open checkout sheet
+    const openCheckoutSheet = () => {
+        if (window.ModalManager && typeof window.ModalManager.createSideDrawerModal === 'function' && window.CheckoutSheet) {
+            // Create a container for the CheckoutSheet
+            const checkoutContainer = document.createElement('div');
+            checkoutContainer.id = 'checkout-sheet-container';
+            document.body.appendChild(checkoutContainer);
+
+            try {
+                // Create a root element for React
+                const root = ReactDOM.createRoot(checkoutContainer);
+
+                // Render the CheckoutSheet inside the container
+                root.render(
+                    React.createElement(window.CheckoutSheet, {
+                        order: order,
+                        onClose: () => {
+                            // Unmount and clean up
+                            root.unmount();
+                            if (document.body.contains(checkoutContainer)) {
+                                document.body.removeChild(checkoutContainer);
+                            }
+                            // Refresh the order data
+                            if (onClose) onClose();
+                        }
+                    })
+                );
+
+                // Create a modal using ModalManager
+                const modal = window.ModalManager.createSideDrawerModal({
+                    id: 'checkout-sheet-modal',
+                    customContainer: checkoutContainer,
+                    fullscreen: true,
+                    onClosed: () => {
+                        // Clean up React root when modal is closed
+                        setTimeout(() => {
+                            root.unmount();
+                            if (document.body.contains(checkoutContainer)) {
+                                document.body.removeChild(checkoutContainer);
+                            }
+                        }, 100);
+                    }
+                });
+            } catch (error) {
+                console.error("Error rendering CheckoutSheet:", error);
+                if (document.body.contains(checkoutContainer)) {
+                    document.body.removeChild(checkoutContainer);
+                }
+                if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                    window.ModalManager.showToast("Failed to open checkout", { type: "error" });
+                } else {
+                    showToast("Failed to open checkout", "error");
+                }
+                setShowCheckout(true); // Fallback to the original modal
+            }
+        } else {
+            setShowCheckout(true);
         }
     };
 
@@ -115,11 +195,11 @@ function OrderView({ order, tableId, variant, onClose }) {
                     <div className="flex items-center">
                         <span className="text-lg font-bold text-gray-800">
                             Bill No: <span className="text-red-500">#{order.billNo}</span>
-                                </span>
+                        </span>
                         <span className="ml-2 px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
                             Served
-                                </span>
-                            </div>
+                        </span>
+                    </div>
                     <div className="flex items-center text-sm text-gray-600 mt-1">
                         <span>{order.date?.toLocaleString()}</span>
                         <span className="mx-2">•</span>
@@ -133,9 +213,9 @@ function OrderView({ order, tableId, variant, onClose }) {
                 >
                     <i className="ph ph-plus-circle text-2xl" />
                 </button>
-                </div>
+            </div>
 
-                {/* Progress Bar */}
+            {/* Progress Bar */}
             <div className="mb-4">
                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div
@@ -143,60 +223,60 @@ function OrderView({ order, tableId, variant, onClose }) {
                         style={{ width: `${(order.servedItems / order.totalItems) * 100}%` }}
                     />
                 </div>
-                </div>
+            </div>
 
             {/* Order Items */}
             <div className="space-y-3 mb-4">
-                    {order.items.map((item, index) => (
+                {order.items.map((item, index) => (
                     <div key={index} className="flex items-center gap-3 p-3 hover:bg-pink-50 rounded-xl border border-gray-100 shadow-sm">
-                                    <input
-                                        type="checkbox"
-                                        checked={item.served}
+                        <input
+                            type="checkbox"
+                            checked={item.served}
                             onChange={(e) => handleServeStatusChange(item, e.target.checked)}
                             className="w-5 h-5 text-red-500 rounded border-gray-300 focus:ring-red-500"
                         />
 
                         <div className="w-14 h-14 rounded-lg overflow-hidden bg-gray-100">
-                                            <img
-                                                src={item.thumb}
-                                                alt={item.title}
-                                                className="w-full h-full object-cover"
-                                                onError={(e) => {
-                                                    e.target.onerror = null;
+                            <img
+                                src={item.thumb}
+                                alt={item.title}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                    e.target.onerror = null;
                                     e.target.src = 'https://via.placeholder.com/150';
-                                                }}
-                                            />
-                                            </div>
+                                }}
+                            />
+                        </div>
 
                         <div className="flex-1">
                             <div className="font-medium text-gray-800">{item.title}</div>
                             <div className="text-sm text-gray-600">
                                 <span className="font-medium text-red-500">₹{item.price}</span> • {item.cat || 'Uncategorized'}
-                                    </div>
-                                </div>
+                            </div>
+                        </div>
 
                         <div className="flex items-center gap-2">
                             <div className="bg-gray-100 rounded-full px-1 py-0.5 flex items-center gap-1">
-                                    <button
+                                <button
                                     onClick={() => handleQuantityChange(item, false)}
                                     className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-full"
                                 >
                                     <i className="ph ph-minus text-lg" />
-                                    </button>
+                                </button>
                                 <span className="w-8 text-center font-medium">
                                     {item.qnt}
                                 </span>
-                                    <button
+                                <button
                                     onClick={() => handleQuantityChange(item, true)}
                                     className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-full"
                                 >
                                     <i className="ph ph-plus text-lg" />
-                                    </button>
-                                </div>
+                                </button>
                             </div>
                         </div>
-                    ))}
-                </div>
+                    </div>
+                ))}
+            </div>
 
             {/* Order Summary */}
             <div className="border-t pt-4">
@@ -204,19 +284,27 @@ function OrderView({ order, tableId, variant, onClose }) {
                     <span>Sub Total:</span>
                     <span className="text-red-500">₹{order.subTotal}</span>
                 </div>
-                </div>
+            </div>
 
-                {/* Action Buttons */}
+            {/* Action Buttons */}
             <div className="flex gap-2 mt-4">
-                        <button
+                <button
                     onClick={async () => {
                         try {
                             // Try Bluetooth printing first if available
                             if (window.BluetoothPrinting && window.BluetoothPrinting.isSupported()) {
                                 try {
-                                    showToast("Select your Bluetooth printer from the list", "info");
+                                    if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                        window.ModalManager.showToast("Select your Bluetooth printer from the list", { type: "info" });
+                                    } else {
+                                        showToast("Select your Bluetooth printer from the list", "info");
+                                    }
                                     await window.BluetoothPrinting.printKOT(order.id);
-                                    showToast("KOT printed successfully via Bluetooth", "success");
+                                    if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                        window.ModalManager.showToast("KOT printed successfully via Bluetooth", { type: "success" });
+                                    } else {
+                                        showToast("KOT printed successfully via Bluetooth", "success");
+                                    }
                                     return; // Exit if Bluetooth printing succeeds
                                 } catch (btError) {
                                     console.error("Bluetooth printing failed:", btError);
@@ -224,46 +312,70 @@ function OrderView({ order, tableId, variant, onClose }) {
                                     // If it's a connection error, show helpful message
                                     if (btError.message.includes("No suitable service") ||
                                         btError.message.includes("No services found")) {
-                                        showToast("Could not connect to printer. Make sure it's turned on and in pairing mode.", "error");
+                                        if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                            window.ModalManager.showToast("Could not connect to printer. Make sure it's turned on and in pairing mode.", { type: "error" });
+                                        } else {
+                                            showToast("Could not connect to printer. Make sure it's turned on and in pairing mode.", "error");
+                                        }
                                         return;
                                     }
 
                                     // If user cancelled device selection
                                     if (btError.name === "NotFoundError") {
-                                        showToast("Printer selection cancelled", "info");
+                                        if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                            window.ModalManager.showToast("Printer selection cancelled", { type: "info" });
+                                        } else {
+                                            showToast("Printer selection cancelled", "info");
+                                        }
                                         return;
                                     }
 
                                     // Fall through to traditional printing for other errors
-                                    showToast("Bluetooth printing failed, falling back to standard printing", "warning");
+                                    if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                        window.ModalManager.showToast("Bluetooth printing failed, falling back to standard printing", { type: "warning" });
+                                    } else {
+                                        showToast("Bluetooth printing failed, falling back to standard printing", "warning");
+                                    }
                                 }
                             }
 
                             // Traditional KOT printing (fallback)
                             if (window.UserSession?.seller?.kotEnabled) {
                                 window.sdk.kot.print(order.id);
-                                showToast("KOT printed successfully", "success");
+                                if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                    window.ModalManager.showToast("KOT printed successfully", { type: "success" });
+                                } else {
+                                    showToast("KOT printed successfully", "success");
+                                }
                             } else {
                                 console.log("KOT printed for order:", order.id);
-                                showToast("KOT printed successfully (simulation)", "success");
+                                if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                    window.ModalManager.showToast("KOT printed successfully (simulation)", { type: "success" });
+                                } else {
+                                    showToast("KOT printed successfully (simulation)", "success");
+                                }
                             }
                         } catch (error) {
                             console.error("Error printing KOT:", error);
-                            showToast(`Failed to print KOT: ${error.message}`, "error");
+                            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                window.ModalManager.showToast(`Failed to print KOT: ${error.message}`, { type: "error" });
+                            } else {
+                                showToast(`Failed to print KOT: ${error.message}`, "error");
+                            }
                         }
                     }}
                     className="flex-1 py-2.5 border border-red-500 text-red-500 rounded-lg font-medium hover:bg-red-50 transition-colors"
                 >
                     <i className="ph ph-printer mr-2"></i>
-                            Print KOT
-                        </button>
-                        <button
-                    onClick={() => setShowCheckout(true)}
+                    Print KOT
+                </button>
+                <button
+                    onClick={openCheckoutSheet}
                     className="flex-1 py-2.5 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition-colors"
-                        >
+                >
                     <i className="ph ph-credit-card mr-2"></i>
-                            Checkout
-                        </button>
+                    Checkout
+                </button>
             </div>
 
             {/* Checkout Sheet */}

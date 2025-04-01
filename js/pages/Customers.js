@@ -237,6 +237,76 @@ function Customers() {
         </div>
     );
 
+    // Show success dialog after import
+    const showImportSuccessDialog = (fileCount) => {
+        if (window.ModalManager) {
+            const modal = window.ModalManager.createCenterModal({
+                id: 'import-success-modal',
+                title: `${fileCount} File(s) Uploaded`,
+                content: `<p class="text-gray-600 mb-4">We will inform you in app notification after your customers are added.</p>`,
+                actions: `<button class="w-full py-3 bg-red-500 text-white rounded-lg" id="import-success-ok">OK</button>`,
+                size: 'sm',
+                onShown: (modalControl) => {
+                    document.getElementById('import-success-ok').addEventListener('click', () => {
+                        modalControl.close();
+                    });
+                }
+            });
+        } else {
+            // Fallback to original implementation
+            // Create the modal container if it doesn't exist
+            let modalContainer = document.getElementById('import-success-modal');
+            if (!modalContainer) {
+                modalContainer = document.createElement('div');
+                modalContainer.id = 'import-success-modal';
+                document.body.appendChild(modalContainer);
+            }
+
+            // Create a simple modal using vanilla JS
+            modalContainer.innerHTML = `
+                <div class="fixed inset-0 z-50 flex items-center justify-center">
+                    <div class="fixed inset-0 bg-black bg-opacity-50"></div>
+                    <div class="bg-white w-full max-w-sm rounded-xl shadow-lg overflow-hidden relative z-10 p-6">
+                        <h3 class="text-xl font-medium mb-2">${fileCount} File(s) Uploaded</h3>
+                        <p class="text-gray-600 mb-4">We will inform you in app notification after your customers are added.</p>
+                        <button class="w-full py-3 bg-red-500 text-white rounded-lg" onclick="document.getElementById('import-success-modal').remove()">
+                            OK
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+    };
+
+    // Handle showing toast notifications
+    const showToast = (message, type = "success") => {
+        // Create toast container if it doesn't exist
+        let toastContainer = document.getElementById('toast-container');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toast-container';
+            toastContainer.className = 'fixed bottom-4 right-4 z-50';
+            document.body.appendChild(toastContainer);
+        }
+
+        // Create toast element
+        const toast = document.createElement('div');
+        toast.className = `p-3 rounded-lg shadow-lg mb-2 flex items-center ${type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+        toast.innerHTML = `
+            <i class="ph ${type === 'success' ? 'ph-check-circle' : 'ph-x-circle'} mr-2"></i>
+            <span>${message}</span>
+        `;
+
+        // Add to container and set timeout to remove
+        toastContainer.appendChild(toast);
+        setTimeout(() => {
+            toast.remove();
+            if (toastContainer.children.length === 0) {
+                toastContainer.remove();
+            }
+        }, 3000);
+    };
+
     // Add Customer Modal component
     const AddCustomerModal = () => {
         const [formData, setFormData] = React.useState({ name: '', phone: '' });
@@ -271,6 +341,110 @@ function Customers() {
             }
         };
 
+        // Use ModalManager if available
+        if (window.ModalManager && isAddCustomerModalOpen) {
+            React.useEffect(() => {
+                const modal = window.ModalManager.createCenterModal({
+                    id: 'add-customer-modal',
+                    title: 'Add New Customer',
+                    content: `
+                        <form id="add-customer-form" class="p-2">
+                            <div class="mb-4">
+                                <label class="block text-gray-700 mb-1">Name</label>
+                                <input
+                                    type="text"
+                                    id="customer-name-input"
+                                    class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                                    placeholder="Customer name"
+                                    required
+                                />
+                            </div>
+
+                            <div class="mb-6">
+                                <label class="block text-gray-700 mb-1">Phone</label>
+                                <div class="flex">
+                                    <div class="bg-gray-100 border border-gray-300 border-r-0 rounded-l-md px-3 flex items-center">
+                                        <span class="text-gray-500">+</span>
+                                    </div>
+                                    <input
+                                        type="tel"
+                                        id="customer-phone-input"
+                                        class="flex-1 p-2 border border-gray-300 rounded-r-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                                        placeholder="Phone number"
+                                        required
+                                    />
+                                </div>
+                            </div>
+                        </form>
+                    `,
+                    actions: `
+                        <button
+                            type="button"
+                            id="submit-customer-btn"
+                            class="w-full bg-red-500 hover:bg-red-600 text-white font-medium py-3 rounded-md transition-colors"
+                        >
+                            Add Customer
+                        </button>
+                    `,
+                    size: 'md',
+                    onShown: (modalControl) => {
+                        const nameInput = document.getElementById('customer-name-input');
+                        const phoneInput = document.getElementById('customer-phone-input');
+                        const submitBtn = document.getElementById('submit-customer-btn');
+
+                        submitBtn.addEventListener('click', async () => {
+                            if (!nameInput.value || !phoneInput.value) return;
+
+                            try {
+                                submitBtn.disabled = true;
+                                submitBtn.innerHTML = `<div class="flex justify-center items-center">
+                                    <div class="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                                    Adding...
+                                </div>`;
+
+                                // Generate an ID using phone and timestamp
+                                const id = `${phoneInput.value.replace(/\s/g, '')}_${Date.now()}`;
+
+                                await sdk.collection("Customers").doc(id).set({
+                                    name: nameInput.value,
+                                    phone: phoneInput.value,
+                                    date: new Date(),
+                                    balance: 0,
+                                    totalSpent: 0
+                                });
+
+                                modalControl.close();
+                                window.ModalManager.showToast("Customer added successfully");
+                                fetchCustomers(); // Refresh the list
+                            } catch (error) {
+                                console.error("Error adding customer:", error);
+                                window.ModalManager.showToast("Failed to add customer", { type: "error" });
+                                submitBtn.disabled = false;
+                                submitBtn.textContent = "Add Customer";
+                            }
+                        });
+
+                        // Focus the name input
+                        nameInput.focus();
+                    },
+                    onClose: () => {
+                        setIsAddCustomerModalOpen(false);
+                    }
+                });
+
+                return () => {
+                    // Clean up
+                    if (modal && modal.close) {
+                        modal.close();
+                    }
+                };
+            }, [isAddCustomerModalOpen]);
+
+            // The modal is created via useEffect, so return null here
+            return null;
+        }
+
+        // Fallback to original implementation if ModalManager is not available
         return (
             <div className={`fixed inset-0 z-50 flex items-end justify-center ${isAddCustomerModalOpen ? 'visible' : 'invisible'}`}>
                 <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setIsAddCustomerModalOpen(false)}></div>
@@ -363,6 +537,87 @@ function Customers() {
             }
         };
 
+        // Use ModalManager if available
+        if (window.ModalManager && isImportModalOpen) {
+            React.useEffect(() => {
+                const modal = window.ModalManager.createCenterModal({
+                    id: 'import-customers-modal',
+                    title: 'Import Customers',
+                    content: `
+                        <div class="text-center p-2">
+                            <div class="border-b mb-4"></div>
+                            <div class="mb-4 flex justify-center">
+                                <i class="ph ph-cloud-arrow-up text-6xl text-red-200"></i>
+                            </div>
+                            <div class="text-left text-gray-600 mb-6">
+                                <p class="mb-2">1. Upload your customers pdf/image file here.</p>
+                                <p class="mb-2">2. After all customers are added we will inform you in app notification.</p>
+                                <p class="mb-2">3. Under 5 minutes your new customers will be added to your CRM.</p>
+                            </div>
+                            <label id="upload-files-btn" class="block w-full py-4 px-6 bg-red-500 text-white rounded-lg cursor-pointer hover:bg-red-600">
+                                <i class="ph ph-upload-simple mr-2"></i>
+                                Choose Files
+                                <input type="file" class="hidden" id="customer-files-input" accept=".jpg,.jpeg,.png,.pdf" multiple>
+                            </label>
+                        </div>
+                    `,
+                    size: 'md',
+                    onShown: (modalControl) => {
+                        const fileInput = document.getElementById('customer-files-input');
+                        const uploadBtn = document.getElementById('upload-files-btn');
+
+                        fileInput.addEventListener('change', async (e) => {
+                            const files = e.target.files;
+                            if (!files || files.length === 0) {
+                                window.ModalManager.showToast("No files selected", { type: "error" });
+                                return;
+                            }
+
+                            try {
+                                // Show uploading state
+                                uploadBtn.classList.add('opacity-70');
+                                uploadBtn.classList.remove('hover:bg-red-600');
+                                uploadBtn.innerHTML = `
+                                    <div class="flex justify-center items-center">
+                                        <div class="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                                        Uploading...
+                                    </div>
+                                `;
+                                uploadBtn.style.pointerEvents = 'none';
+
+                                // Simulate upload
+                                setTimeout(() => {
+                                    modalControl.close();
+                                    showImportSuccessDialog(files.length);
+                                }, 2000);
+                            } catch (error) {
+                                console.error("Error uploading files:", error);
+                                window.ModalManager.showToast("Failed to upload files", { type: "error" });
+                                uploadBtn.classList.remove('opacity-70');
+                                uploadBtn.classList.add('hover:bg-red-600');
+                                uploadBtn.innerHTML = `<i class="ph ph-upload-simple mr-2"></i> Choose Files`;
+                                uploadBtn.style.pointerEvents = 'auto';
+                            }
+                        });
+                    },
+                    onClose: () => {
+                        setIsImportModalOpen(false);
+                    }
+                });
+
+                return () => {
+                    // Clean up
+                    if (modal && modal.close) {
+                        modal.close();
+                    }
+                };
+            }, [isImportModalOpen]);
+
+            // The modal is created via useEffect, so return null here
+            return null;
+        }
+
+        // Fallback to original implementation if ModalManager is not available
         return (
             <div className={`fixed inset-0 z-50 flex items-center justify-center ${isImportModalOpen ? 'visible' : 'invisible'}`}>
                 <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setIsImportModalOpen(false)}></div>
@@ -406,60 +661,6 @@ function Customers() {
                 </div>
             </div>
         );
-    };
-
-    // Show success dialog after import
-    const showImportSuccessDialog = (fileCount) => {
-        // Create the modal container if it doesn't exist
-        let modalContainer = document.getElementById('import-success-modal');
-        if (!modalContainer) {
-            modalContainer = document.createElement('div');
-            modalContainer.id = 'import-success-modal';
-            document.body.appendChild(modalContainer);
-        }
-
-        // Create a simple modal using vanilla JS
-        modalContainer.innerHTML = `
-            <div class="fixed inset-0 z-50 flex items-center justify-center">
-                <div class="fixed inset-0 bg-black bg-opacity-50"></div>
-                <div class="bg-white w-full max-w-sm rounded-xl shadow-lg overflow-hidden relative z-10 p-6">
-                    <h3 class="text-xl font-medium mb-2">${fileCount} File(s) Uploaded</h3>
-                    <p class="text-gray-600 mb-4">We will inform you in app notification after your customers are added.</p>
-                    <button class="w-full py-3 bg-red-500 text-white rounded-lg" onclick="document.getElementById('import-success-modal').remove()">
-                        OK
-                    </button>
-                </div>
-            </div>
-        `;
-    };
-
-    // Handle showing toast notifications
-    const showToast = (message, type = "success") => {
-        // Create toast container if it doesn't exist
-        let toastContainer = document.getElementById('toast-container');
-        if (!toastContainer) {
-            toastContainer = document.createElement('div');
-            toastContainer.id = 'toast-container';
-            toastContainer.className = 'fixed bottom-4 right-4 z-50';
-            document.body.appendChild(toastContainer);
-        }
-
-        // Create toast element
-        const toast = document.createElement('div');
-        toast.className = `p-3 rounded-lg shadow-lg mb-2 flex items-center ${type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
-        toast.innerHTML = `
-            <i class="ph ${type === 'success' ? 'ph-check-circle' : 'ph-x-circle'} mr-2"></i>
-            <span>${message}</span>
-        `;
-
-        // Add to container and set timeout to remove
-        toastContainer.appendChild(toast);
-        setTimeout(() => {
-            toast.remove();
-            if (toastContainer.children.length === 0) {
-                toastContainer.remove();
-            }
-        }, 3000);
     };
 
     // Main render

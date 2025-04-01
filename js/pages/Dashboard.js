@@ -305,42 +305,289 @@ function Dashboard() {
 
     // Function to show the add table modal
     const showAddTableModal = () => {
-        setIsAddTableModalOpen(true);
+        // Check if ModalManager is available
+        if (window.ModalManager && typeof window.ModalManager.createCenterModal === 'function') {
+            // Use ModalManager directly
+            const modalId = 'add-table-modal-' + Date.now();
+            const content = `
+                <div id="add-table-form">
+                    <div id="add-table-error-container" class="mb-4 hidden p-3 bg-red-50 text-red-700 rounded-md"></div>
+                    <div class="mb-6">
+                        <label class="block text-gray-700 mb-2" for="table-title">
+                            Title
+                        </label>
+                        <input
+                            type="text"
+                            id="table-title"
+                            class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="eg. T1"
+                        />
+                    </div>
+                    <div class="mb-6">
+                        <label class="block text-gray-700 mb-2" for="table-desc">
+                            Description (optional)
+                        </label>
+                        <input
+                            type="text"
+                            id="table-desc"
+                            class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="eg. Corner Table"
+                        />
+                    </div>
+                </div>
+            `;
+
+            const actions = `
+                <div class="flex justify-end gap-3">
+                    <button
+                        id="cancel-add-table"
+                        type="button"
+                        class="px-4 py-2 border rounded-md hover:bg-gray-50"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        id="save-add-table"
+                        type="button"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                    >
+                        Add Table
+                    </button>
+                </div>
+            `;
+
+            const modal = window.ModalManager.createCenterModal({
+                id: modalId,
+                title: "Add Table",
+                content: content,
+                actions: actions,
+                onShown: (modalControl) => {
+                    const titleInput = document.getElementById('table-title');
+                    const descInput = document.getElementById('table-desc');
+                    const errorContainer = document.getElementById('add-table-error-container');
+                    const cancelButton = document.getElementById('cancel-add-table');
+                    const saveButton = document.getElementById('save-add-table');
+
+                    if (titleInput && cancelButton && saveButton) {
+                        titleInput.focus();
+
+                        cancelButton.addEventListener('click', () => {
+                            modalControl.close();
+                        });
+
+                        saveButton.addEventListener('click', async () => {
+                            const newTitle = titleInput.value.trim();
+                            const newDesc = descInput.value.trim();
+
+                            // Validate form
+                            if (!newTitle) {
+                                errorContainer.textContent = 'Please enter a title';
+                                errorContainer.classList.remove('hidden');
+                                return;
+                            }
+
+                            try {
+                                // Get current tables
+                                const currentTables = seller?.tables || [];
+
+                                // Check if table already exists
+                                if (currentTables.some(t => t.title === newTitle)) {
+                                    errorContainer.textContent = 'A table with this name already exists';
+                                    errorContainer.classList.remove('hidden');
+                                    return;
+                                }
+
+                                // Add the new table
+                                const updatedTables = [...currentTables, { title: newTitle, desc: newDesc }];
+
+                                // Update seller document in Firestore
+                                await sdk.profile.update({
+                                    tables: updatedTables
+                                });
+
+                                window.ModalManager.showToast('Table added successfully');
+                                modalControl.close();
+                            } catch (err) {
+                                console.error('Error adding table:', err);
+                                errorContainer.textContent = 'Failed to add table. Please try again.';
+                                errorContainer.classList.remove('hidden');
+                            }
+                        });
+                    }
+                }
+            });
+        } else {
+            // Fallback to original React component modal
+            setIsAddTableModalOpen(true);
+        }
     };
 
     // Function to show the rename room modal
     const showRenameRoomModal = (tableId, variant) => {
-        setSelectedTableId(tableId);
-        setSelectedVariant(variant);
-        setIsRenameRoomModalOpen(true);
+        // Check if ModalManager is available
+        if (window.ModalManager && typeof window.ModalManager.createCenterModal === 'function') {
+            // Use ModalManager directly
+            const modalId = 'rename-room-modal-' + Date.now();
+            const initialTitle = tableId || variant || '';
+            const modalTitle = tableId ? "Rename Table" : "Rename Channel";
+
+            const content = `
+                <div id="rename-room-form">
+                    <div id="rename-error-container" class="mb-4 hidden p-3 bg-red-50 text-red-700 rounded-md"></div>
+                    <div class="mb-6">
+                        <label class="block text-gray-700 mb-2" for="room-title">
+                            Title
+                        </label>
+                        <input
+                            type="text"
+                            id="room-title"
+                            value="${initialTitle}"
+                            class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="eg. T1"
+                        />
+                    </div>
+                </div>
+            `;
+
+            const actions = `
+                <div class="flex justify-end gap-3">
+                    <button
+                        id="cancel-rename"
+                        type="button"
+                        class="px-4 py-2 border rounded-md hover:bg-gray-50"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        id="save-rename"
+                        type="button"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                    >
+                        Save
+                    </button>
+                </div>
+            `;
+
+            const modal = window.ModalManager.createCenterModal({
+                id: modalId,
+                title: modalTitle,
+                content: content,
+                actions: actions,
+                onShown: (modalControl) => {
+                    const titleInput = document.getElementById('room-title');
+                    const errorContainer = document.getElementById('rename-error-container');
+                    const cancelButton = document.getElementById('cancel-rename');
+                    const saveButton = document.getElementById('save-rename');
+
+                    if (titleInput && cancelButton && saveButton) {
+                        titleInput.focus();
+                        titleInput.select();
+
+                        cancelButton.addEventListener('click', () => {
+                            modalControl.close();
+                        });
+
+                        saveButton.addEventListener('click', async () => {
+                            const newTitle = titleInput.value.trim();
+
+                            // Validate form
+                            if (!newTitle) {
+                                errorContainer.textContent = 'Please enter a title';
+                                errorContainer.classList.remove('hidden');
+                                return;
+                            }
+
+                            try {
+                                if (variant) {
+                                    // Rename price variant
+                                    const vars = seller?.priceVariants || [];
+                                    const index = vars.findIndex(v => v.title === variant);
+
+                                    if (index === -1) {
+                                        errorContainer.textContent = "Can't rename this default room";
+                                        errorContainer.classList.remove('hidden');
+                                        return;
+                                    }
+
+                                    const updatedVars = [...vars];
+                                    updatedVars[index] = { title: newTitle };
+
+                                    await sdk.profile.update({ priceVariants: updatedVars });
+                                } else if (tableId) {
+                                    // Rename table
+                                    const tables = seller?.tables || [];
+                                    const index = tables.findIndex(t => t.title === tableId);
+
+                                    if (index === -1) {
+                                        errorContainer.textContent = "Can't rename this table";
+                                        errorContainer.classList.remove('hidden');
+                                        return;
+                                    }
+
+                                    const updatedTables = [...tables];
+                                    updatedTables[index] = { ...updatedTables[index], title: newTitle };
+
+                                    await sdk.profile.update({ tables: updatedTables });
+                                } else {
+                                    errorContainer.textContent = "Can't rename room";
+                                    errorContainer.classList.remove('hidden');
+                                    return;
+                                }
+
+                                window.ModalManager.showToast('Renamed successfully');
+                                modalControl.close();
+                            } catch (err) {
+                                console.error('Error renaming:', err);
+                                errorContainer.textContent = 'Failed to rename. Please try again.';
+                                errorContainer.classList.remove('hidden');
+                            }
+                        });
+                    }
+                }
+            });
+        } else {
+            // Fallback to original React component modal
+            setSelectedTableId(tableId);
+            setSelectedVariant(variant);
+            setIsRenameRoomModalOpen(true);
+        }
     };
 
     // Function to remove a table
     const removeTable = async (tableId) => {
         try {
-            // Confirm before removing
-            if (!confirm(`Are you sure you want to remove table ${tableId}?`)) {
-                return;
-            }
+            // Use confirmDialog utility instead of native confirm
+            confirmDialog({
+                title: 'Remove Table',
+                content: `Are you sure you want to remove table ${tableId}?`,
+                confirmText: 'Remove',
+                cancelText: 'Cancel',
+                onConfirm: async () => {
+                    try {
+                        // Get current tables from seller
+                        const currentTables = seller?.tables || [];
 
-            // Get current tables from seller
-            const currentTables = seller?.tables || [];
+                        // Remove the table
+                        const updatedTables = currentTables.filter(table => table.title !== tableId);
 
-            // Remove the table
-            const updatedTables = currentTables.filter(table => table.title !== tableId);
+                        // Update seller document in Firestore
+                        await sdk.profile.update({
+                            tables: updatedTables
+                        });
 
-            // Update seller document in Firestore
-            await sdk.profile.update({
-                tables: updatedTables
+                        showToast('Table removed successfully');
+
+                        // Analytics tracking (if needed)
+                        // analytics.track("REMOVE_TABLE");
+                    } catch (err) {
+                        console.error('Error removing table:', err);
+                        showToast('Failed to remove table. Please try again.');
+                    }
+                }
             });
-
-            showToast('Table removed successfully');
-
-            // Analytics tracking (if needed)
-            // analytics.track("REMOVE_TABLE");
         } catch (err) {
-            console.error('Error removing table:', err);
-            showToast('Failed to remove table. Please try again.');
+            console.error('Error in confirm dialog:', err);
+            showToast('An error occurred. Please try again.');
         }
     };
 

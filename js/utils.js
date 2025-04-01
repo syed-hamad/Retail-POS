@@ -324,110 +324,138 @@ function toTwoDigits(n) {
 
 // Utility function to show toast notifications
 function showToast(message, type = 'success') {
-    // Create toast container if it doesn't exist
-    let toastContainer = document.getElementById('toast-container');
-    if (!toastContainer) {
-        toastContainer = document.createElement('div');
-        toastContainer.id = 'toast-container';
-        toastContainer.className = 'fixed top-4 right-4 z-50 flex flex-col gap-2';
-        document.body.appendChild(toastContainer);
-    }
+    if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+        // Use ModalManager if available
+        window.ModalManager.showToast(message, {
+            type: type,
+            position: 'top-right'
+        });
+    } else {
+        // Fallback to original implementation
+        // Create toast container if it doesn't exist
+        let toastContainer = document.getElementById('toast-container');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toast-container';
+            toastContainer.className = 'fixed top-4 right-4 z-50 flex flex-col gap-2';
+            document.body.appendChild(toastContainer);
+        }
 
-    // Create toast element
-    const toast = document.createElement('div');
-    toast.className = `px-4 py-2 rounded-lg shadow-lg text-white flex items-center ${type === 'success' ? 'bg-green-500' : 'bg-red-500'
-        }`;
+        // Create toast element
+        const toast = document.createElement('div');
+        toast.className = `px-4 py-2 rounded-lg shadow-lg text-white flex items-center ${type === 'success' ? 'bg-green-500' : 'bg-red-500'
+            }`;
 
-    // Add icon based on type
-    const icon = document.createElement('i');
-    icon.className = `ph ${type === 'success' ? 'ph-check-circle' : 'ph-x-circle'} mr-2`;
-    toast.appendChild(icon);
+        // Add icon based on type
+        const icon = document.createElement('i');
+        icon.className = `ph ${type === 'success' ? 'ph-check-circle' : 'ph-x-circle'} mr-2`;
+        toast.appendChild(icon);
 
-    // Add message
-    const text = document.createElement('span');
-    text.textContent = message;
-    toast.appendChild(text);
+        // Add message
+        const text = document.createElement('span');
+        text.textContent = message;
+        toast.appendChild(text);
 
-    // Add to container
-    toastContainer.appendChild(toast);
+        // Add to container
+        toastContainer.appendChild(toast);
 
-    // Remove after 3 seconds
-    setTimeout(() => {
-        toast.classList.add('opacity-0', 'transition-opacity');
+        // Remove after 3 seconds
         setTimeout(() => {
-            toastContainer.removeChild(toast);
-        }, 300);
-    }, 3000);
+            toast.classList.add('opacity-0', 'transition-opacity');
+            setTimeout(() => {
+                toastContainer.removeChild(toast);
+            }, 300);
+        }, 3000);
+    }
 }
 
 // Confirm dialog
 function confirmDialog({ title, content, confirmText = 'Confirm', cancelText = 'Cancel', onConfirm, onCancel }) {
-    // Create modal container
-    const modalContainer = document.createElement('div');
-    modalContainer.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+    if (window.ModalManager && typeof window.ModalManager.confirm === 'function') {
+        // Use ModalManager if available
+        window.ModalManager.confirm({
+            title: title,
+            message: content,
+            confirmText: confirmText,
+            cancelText: cancelText,
+            confirmButtonClass: "bg-blue-600 hover:bg-blue-700 text-white",
+            cancelButtonClass: "bg-gray-100 hover:bg-gray-200 text-gray-700"
+        }).then(result => {
+            if (result && onConfirm) {
+                onConfirm();
+            } else if (!result && onCancel) {
+                onCancel();
+            }
+        });
+    } else {
+        // Fallback to original implementation if ModalManager not available
+        // Create modal container
+        const modalContainer = document.createElement('div');
+        modalContainer.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
 
-    // Create modal content
-    const modal = document.createElement('div');
-    modal.className = 'bg-white rounded-lg shadow-xl max-w-md w-full mx-4 overflow-hidden';
+        // Create modal content
+        const modal = document.createElement('div');
+        modal.className = 'bg-white rounded-lg shadow-xl max-w-md w-full mx-4 overflow-hidden';
 
-    // Create modal header
-    const header = document.createElement('div');
-    header.className = 'p-4 border-b';
-    const titleElement = document.createElement('h2');
-    titleElement.className = 'text-xl font-semibold text-gray-900';
-    titleElement.textContent = title;
-    header.appendChild(titleElement);
+        // Create modal header
+        const header = document.createElement('div');
+        header.className = 'p-4 border-b';
+        const titleElement = document.createElement('h2');
+        titleElement.className = 'text-xl font-semibold text-gray-900';
+        titleElement.textContent = title;
+        header.appendChild(titleElement);
 
-    // Create modal body
-    const body = document.createElement('div');
-    body.className = 'p-4';
-    const contentElement = document.createElement('p');
-    contentElement.className = 'text-gray-700';
-    contentElement.textContent = content;
-    body.appendChild(contentElement);
+        // Create modal body
+        const body = document.createElement('div');
+        body.className = 'p-4';
+        const contentElement = document.createElement('p');
+        contentElement.className = 'text-gray-700';
+        contentElement.textContent = content;
+        body.appendChild(contentElement);
 
-    // Create modal footer
-    const footer = document.createElement('div');
-    footer.className = 'p-4 border-t flex justify-end gap-3';
+        // Create modal footer
+        const footer = document.createElement('div');
+        footer.className = 'p-4 border-t flex justify-end gap-3';
 
-    // Create cancel button
-    const cancelButton = document.createElement('button');
-    cancelButton.className = 'px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors';
-    cancelButton.textContent = cancelText;
-    cancelButton.onclick = () => {
-        document.body.removeChild(modalContainer);
-        if (onCancel) onCancel();
-    };
-
-    // Create confirm button
-    const confirmButton = document.createElement('button');
-    confirmButton.className = 'px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors';
-    confirmButton.textContent = confirmText;
-    confirmButton.onclick = () => {
-        document.body.removeChild(modalContainer);
-        if (onConfirm) onConfirm();
-    };
-
-    // Add buttons to footer
-    footer.appendChild(cancelButton);
-    footer.appendChild(confirmButton);
-
-    // Assemble modal
-    modal.appendChild(header);
-    modal.appendChild(body);
-    modal.appendChild(footer);
-    modalContainer.appendChild(modal);
-
-    // Add click outside to cancel
-    modalContainer.onclick = (e) => {
-        if (e.target === modalContainer) {
+        // Create cancel button
+        const cancelButton = document.createElement('button');
+        cancelButton.className = 'px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors';
+        cancelButton.textContent = cancelText;
+        cancelButton.onclick = () => {
             document.body.removeChild(modalContainer);
             if (onCancel) onCancel();
-        }
-    };
+        };
 
-    // Add to document
-    document.body.appendChild(modalContainer);
+        // Create confirm button
+        const confirmButton = document.createElement('button');
+        confirmButton.className = 'px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors';
+        confirmButton.textContent = confirmText;
+        confirmButton.onclick = () => {
+            document.body.removeChild(modalContainer);
+            if (onConfirm) onConfirm();
+        };
+
+        // Add buttons to footer
+        footer.appendChild(cancelButton);
+        footer.appendChild(confirmButton);
+
+        // Assemble modal
+        modal.appendChild(header);
+        modal.appendChild(body);
+        modal.appendChild(footer);
+        modalContainer.appendChild(modal);
+
+        // Add click outside to cancel
+        modalContainer.onclick = (e) => {
+            if (e.target === modalContainer) {
+                document.body.removeChild(modalContainer);
+                if (onCancel) onCancel();
+            }
+        };
+
+        // Add to document
+        document.body.appendChild(modalContainer);
+    }
 }
 
 // Utility function for modal/dialog classes (to reduce duplication across components)
@@ -459,57 +487,187 @@ function getModalOverlayClasses(isClosing, zIndex = "z-50") {
 
 // Create a modal
 function createModal(content, { title, footer, onClose, baseClasses, headerClasses, bodyClasses, footerClasses, showCloseButton = true, closeOnBackdropClick = true } = {}) {
-    // Create the modal container
-    const modalContainer = document.createElement('div');
-    modalContainer.className = 'fixed inset-0 z-50 flex items-center justify-center p-4';
-
-    // Create the backdrop
-    const backdrop = document.createElement('div');
-    backdrop.className = 'fixed inset-0 bg-black bg-opacity-50';
-    if (closeOnBackdropClick) {
-        backdrop.addEventListener('click', () => {
-            closeModal(modalContainer);
-            if (onClose) onClose();
+    if (window.ModalManager && typeof window.ModalManager.createCenterModal === 'function') {
+        // Use ModalManager if available
+        return window.ModalManager.createCenterModal({
+            id: 'modal-' + Date.now(),
+            title: title || '',
+            content: content,
+            actions: footer || '',
+            customClass: baseClasses || '',
+            closeOnBackdropClick: closeOnBackdropClick,
+            onClose: onClose || (() => { }),
+            size: 'md'
         });
+    } else {
+        // Fallback to original implementation
+        // Create the modal container
+        const modalContainer = document.createElement('div');
+        modalContainer.className = 'fixed inset-0 z-50 flex items-center justify-center p-4';
+
+        // Create the backdrop
+        const backdrop = document.createElement('div');
+        backdrop.className = 'fixed inset-0 bg-black bg-opacity-50';
+        if (closeOnBackdropClick) {
+            backdrop.addEventListener('click', () => {
+                closeModal(modalContainer);
+                if (onClose) onClose();
+            });
+        }
+
+        // Create the modal itself
+        const modal = document.createElement('div');
+        modal.className = baseClasses || 'bg-white rounded-lg shadow-xl max-w-md w-full mx-4 overflow-hidden';
+        modal.addEventListener('click', (e) => e.stopPropagation());
+
+        // Add the modal content
+        if (title) {
+            const header = document.createElement('div');
+            header.className = headerClasses || 'p-4 border-b flex items-center justify-between';
+
+            const titleEl = document.createElement('h3');
+            titleEl.className = 'font-medium text-lg';
+            titleEl.textContent = title;
+            header.appendChild(titleEl);
+
+            if (showCloseButton) {
+                const closeBtn = document.createElement('button');
+                closeBtn.className = 'p-1 rounded-full hover:bg-gray-100';
+                closeBtn.innerHTML = '<i class="ph ph-x"></i>';
+                closeBtn.addEventListener('click', () => {
+                    closeModal(modalContainer);
+                    if (onClose) onClose();
+                });
+                header.appendChild(closeBtn);
+            }
+
+            modal.appendChild(header);
+        }
+
+        const body = document.createElement('div');
+        body.className = bodyClasses || 'p-4';
+        body.innerHTML = content;
+        modal.appendChild(body);
+
+        if (footer) {
+            const footerEl = document.createElement('div');
+            footerEl.className = footerClasses || 'p-4 border-t';
+            footerEl.innerHTML = footer;
+            modal.appendChild(footerEl);
+        }
+
+        // Assemble the modal
+        modalContainer.appendChild(backdrop);
+        modalContainer.appendChild(modal);
+        document.body.appendChild(modalContainer);
+
+        // Return interface for controlling the modal
+        return {
+            close: () => {
+                closeModal(modalContainer);
+                if (onClose) onClose();
+            },
+            container: modalContainer,
+            modalElement: modal
+        };
     }
+}
 
-    // Create the modal itself
-    const modal = document.createElement('div');
-    modal.className = 'bg-section-bg rounded-lg shadow-section max-w-md w-full mx-4 overflow-hidden';
-    modal.addEventListener('click', (e) => e.stopPropagation());
-
-    // ... existing code ...
+// Helper function to close a modal
+function closeModal(modalContainer) {
+    if (modalContainer && document.body.contains(modalContainer)) {
+        document.body.removeChild(modalContainer);
+    }
 }
 
 // Create a sliding panel
 function createSlidingPanel(content, { title, position = 'right', onClose, customWidth, customBaseClasses } = {}) {
-    // Create the panel container
-    const panelContainer = document.createElement('div');
-    panelContainer.className = 'fixed inset-0 z-50';
+    if (window.ModalManager && typeof window.ModalManager.createSideDrawerModal === 'function' && position === 'right') {
+        // Use ModalManager if available (but only for right-side panels, as that's what ModalManager supports)
+        return window.ModalManager.createSideDrawerModal({
+            id: 'sliding-panel-' + Date.now(),
+            title: title || '',
+            content: content,
+            width: customWidth || '600px',
+            customClass: customBaseClasses || '',
+            closeOnBackdropClick: true,
+            onClose: onClose || (() => { })
+        });
+    } else {
+        // Fallback to original implementation
+        // Create the panel container
+        const panelContainer = document.createElement('div');
+        panelContainer.className = 'fixed inset-0 z-50';
 
-    // Create the backdrop
-    const backdrop = document.createElement('div');
-    backdrop.className = 'fixed inset-0 bg-black bg-opacity-50';
-    backdrop.addEventListener('click', () => {
-        closeSlidingPanel(panelContainer);
-        if (onClose) onClose();
-    });
+        // Create the backdrop
+        const backdrop = document.createElement('div');
+        backdrop.className = 'fixed inset-0 bg-black bg-opacity-50';
+        backdrop.addEventListener('click', () => {
+            closeSlidingPanel(panelContainer);
+            if (onClose) onClose();
+        });
 
-    // Create the panel itself
-    const panel = document.createElement('div');
-    const baseClasses = customBaseClasses || "bg-section-bg overflow-y-auto shadow-section custom-scrollbar";
+        // Create the panel itself
+        const panel = document.createElement('div');
+        const baseClasses = customBaseClasses || "bg-white overflow-y-auto shadow-xl custom-scrollbar";
 
-    if (position === 'right') {
-        panel.className = `absolute top-0 right-0 h-full ${customWidth || 'w-full md:w-96'} ${baseClasses}`;
-    } else if (position === 'left') {
-        panel.className = `absolute top-0 left-0 h-full ${customWidth || 'w-full md:w-96'} ${baseClasses}`;
-    } else if (position === 'bottom') {
-        panel.className = `absolute bottom-0 left-0 w-full ${customWidth || 'h-2/3'} rounded-t-xl ${baseClasses}`;
+        if (position === 'right') {
+            panel.className = `absolute top-0 right-0 h-full ${customWidth || 'w-full md:w-96'} ${baseClasses}`;
+        } else if (position === 'left') {
+            panel.className = `absolute top-0 left-0 h-full ${customWidth || 'w-full md:w-96'} ${baseClasses}`;
+        } else if (position === 'bottom') {
+            panel.className = `absolute bottom-0 left-0 w-full ${customWidth || 'h-2/3'} rounded-t-xl ${baseClasses}`;
+        }
+
+        // Add the panel content
+        if (title) {
+            const header = document.createElement('div');
+            header.className = 'p-4 border-b flex items-center justify-between';
+
+            const titleEl = document.createElement('h3');
+            titleEl.className = 'font-medium text-lg';
+            titleEl.textContent = title;
+            header.appendChild(titleEl);
+
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'p-1 rounded-full hover:bg-gray-100';
+            closeBtn.innerHTML = '<i class="ph ph-x"></i>';
+            closeBtn.addEventListener('click', () => {
+                closeSlidingPanel(panelContainer);
+                if (onClose) onClose();
+            });
+            header.appendChild(closeBtn);
+
+            panel.appendChild(header);
+        }
+
+        const body = document.createElement('div');
+        body.className = 'p-4';
+        body.innerHTML = content;
+        panel.appendChild(body);
+
+        // Assemble the panel
+        panelContainer.appendChild(backdrop);
+        panelContainer.appendChild(panel);
+        document.body.appendChild(panelContainer);
+
+        // Return interface for controlling the panel
+        return {
+            close: () => {
+                closeSlidingPanel(panelContainer);
+                if (onClose) onClose();
+            },
+            container: panelContainer,
+            panelElement: panel
+        };
     }
+}
 
-    panel.addEventListener('click', (e) => e.stopPropagation());
-
-    // ... existing code ...
+// Helper function to close a sliding panel
+function closeSlidingPanel(panelContainer) {
+    if (panelContainer && document.body.contains(panelContainer)) {
+        document.body.removeChild(panelContainer);
+    }
 }
 
 // Get orderSource from an order object, matching the Flutter MOrder orderSource getter

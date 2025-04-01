@@ -170,27 +170,56 @@ function OrderGroupTile({ order, onAccept, onReject, onPrintBill }) {
     const isCompletedOrder = order.currentStatus?.label === "COMPLETED" || order.paid === true;
 
     const handleOrderClick = () => {
-        // Create a modal that displays the order details using the OrderDetailsModal component
-        const modalContainer = document.createElement('div');
-        modalContainer.id = 'order-details-modal';
-        document.body.appendChild(modalContainer);
+        // Use ModalManager if available, otherwise fall back to original implementation
+        if (window.ModalManager && typeof window.ModalManager.createSideDrawerModal === 'function') {
+            const modal = window.ModalManager.createSideDrawerModal({
+                id: `order-details-modal-${order.id}`,
+                title: 'Order Details',
+                content: `<div class="p-4 text-center">
+                            <div class="animate-spin inline-block w-8 h-8 border-4 border-red-500 border-t-transparent rounded-full"></div>
+                            <p class="mt-2">Loading order details...</p>
+                         </div>`,
+                onShown: (modalControl) => {
+                    // Create a temporary div to render the React component
+                    const tempDiv = document.createElement('div');
+                    ReactDOM.render(
+                        React.createElement(OrderDetailsContent, {
+                            order: order,
+                            modalControl: modalControl,
+                            onAccept,
+                            onReject,
+                            onPrintBill
+                        }),
+                        tempDiv,
+                        () => {
+                            modalControl.setContent(tempDiv.innerHTML);
+                        }
+                    );
+                }
+            });
+        } else {
+            // Fallback to original implementation
+            const modalContainer = document.createElement('div');
+            modalContainer.id = 'order-details-modal';
+            document.body.appendChild(modalContainer);
 
-        try {
-            ReactDOM.render(
-                React.createElement(OrderDetailsModal, {
-                    order: order,
-                    onClose: () => {
-                        ReactDOM.unmountComponentAtNode(modalContainer);
-                        document.body.removeChild(modalContainer);
-                    },
-                    onAccept,
-                    onReject,
-                    onPrintBill
-                }),
-                modalContainer
-            );
-        } catch (error) {
-            console.error('Error rendering order details modal:', error);
+            try {
+                ReactDOM.render(
+                    React.createElement(OrderDetailsModal, {
+                        order: order,
+                        onClose: () => {
+                            ReactDOM.unmountComponentAtNode(modalContainer);
+                            document.body.removeChild(modalContainer);
+                        },
+                        onAccept,
+                        onReject,
+                        onPrintBill
+                    }),
+                    modalContainer
+                );
+            } catch (error) {
+                console.error('Error rendering order details modal:', error);
+            }
         }
     };
 
@@ -344,9 +373,7 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onPrintBill }) 
             // Show success message
             showToast(`Customer ${customer.name} assigned to order`);
 
-            // Refresh the order data
-            // In a real implementation, you would update the order state
-            // For now, we'll just close and reopen the modal
+            // Close the modal
             onClose();
         } catch (err) {
             console.error('Error assigning customer:', err);
@@ -567,6 +594,263 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onPrintBill }) 
 
             {/* Customer Search Modal */}
             {isCustomerSearchOpen && (
+                <CustomerSearch
+                    isOpen={isCustomerSearchOpen}
+                    onClose={() => setIsCustomerSearchOpen(false)}
+                    onSelectCustomer={handleSelectCustomer}
+                />
+            )}
+        </div>
+    );
+}
+
+// Order Details Content Component for use with ModalManager
+function OrderDetailsContent({ order, modalControl, onAccept, onReject, onPrintBill }) {
+    const [isCustomerSearchOpen, setIsCustomerSearchOpen] = React.useState(false);
+    const totalAmount = order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || item.qnt || 1)), 0) || 0;
+    const taxAmount = totalAmount * 0.18; // Assuming 18% tax
+    const finalAmount = totalAmount + taxAmount;
+
+    // Determine order status for showing appropriate actions
+    const isNewOrder = order.currentStatus?.label === "PLACED";
+    const isCompletedOrder = order.currentStatus?.label === "COMPLETED" || order.paid === true;
+    const isProcessingOrder = order.currentStatus?.label === "KITCHEN";
+
+    // Handle selecting a customer
+    const handleSelectCustomer = async (customer) => {
+        try {
+            // Update the order with the selected customer
+            await sdk.orders.setCustomer(order.id, customer);
+
+            // Show success message
+            showToast(`Customer ${customer.name} assigned to order`);
+
+            // Close the modal
+            modalControl.close();
+        } catch (err) {
+            console.error('Error assigning customer:', err);
+            showToast('Failed to assign customer', 'error');
+        }
+    };
+
+    // Show customer search modal
+    const showCustomerSearch = () => {
+        if (window.ModalManager) {
+            const searchModal = window.ModalManager.createCenterModal({
+                id: 'customer-search-modal',
+                title: 'Select Customer',
+                content: `<div class="p-4 text-center">
+                            <div class="animate-spin inline-block w-8 h-8 border-4 border-red-500 border-t-transparent rounded-full"></div>
+                            <p class="mt-2">Loading customer search...</p>
+                         </div>`,
+                size: 'md',
+                zIndex: 60, // Higher z-index for modal on top of another modal
+                onShown: (modalControl) => {
+                    // Create a temporary container to render the React component
+                    const tempDiv = document.createElement('div');
+                    const originalCustomerSearch = window.CustomerSearch || CustomerSearch;
+
+                    ReactDOM.render(
+                        React.createElement(originalCustomerSearch, {
+                            isOpen: true,
+                            onClose: () => modalControl.close(),
+                            onSelectCustomer: (selectedCustomer) => {
+                                handleSelectCustomer(selectedCustomer);
+                                modalControl.close();
+                            }
+                        }),
+                        tempDiv,
+                        () => {
+                            // Extract just the content part of the rendered component
+                            // This removes the outer modal shell created by CustomerSearch
+                            const contentDiv = tempDiv.querySelector('.p-4') || tempDiv;
+                            modalControl.setContent(contentDiv.innerHTML);
+                        }
+                    );
+                }
+            });
+        } else {
+            // Fallback - use the original CustomerSearch modal directly
+            setIsCustomerSearchOpen(true);
+        }
+    };
+
+    React.useEffect(() => {
+        modalControl.setTitle('Order Details');
+    }, []);
+
+    return (
+        <div className="p-4 space-y-4">
+            {/* Customer Info */}
+            <div className="bg-gradient-to-br from-warm-bg to-white rounded-xl p-4 border border-gray-200 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-red-50 to-white rounded-lg flex items-center justify-center shadow-sm">
+                            <i className="ph ph-user text-red-500 text-lg"></i>
+                        </div>
+                        <div>
+                            <h3 className="font-medium text-gray-900 truncate max-w-[160px]">
+                                {order.customer?.name || "Guest Customer"}
+                            </h3>
+                            <p className="text-xs text-gray-500 truncate max-w-[160px]">
+                                {order.customer?.phone || "No phone"}
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        className="w-8 h-8 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            showCustomerSearch();
+                        }}
+                        title="Assign Customer"
+                    >
+                        <i className="ph ph-user-plus"></i>
+                    </button>
+                </div>
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                    <div className="bg-gradient-to-br from-gray-100 to-gray-50 p-2 rounded-lg">
+                        <p className="text-xs text-gray-500">Order ID</p>
+                        <p className="font-medium text-sm">#{order.id?.slice(-6)}</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-gray-100 to-gray-50 p-2 rounded-lg">
+                        <p className="text-xs text-gray-500">Date & Time</p>
+                        <p className="font-medium text-sm truncate">
+                            {formatDate(order.date, 'full')}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Items List */}
+            <div>
+                <h3 className="text-sm font-semibold mb-2 text-gray-700 flex items-center">
+                    <i className="ph ph-shopping-cart text-red-500 mr-1.5"></i>
+                    Order Items
+                </h3>
+                <div className="space-y-2">
+                    {order.items?.map((item, index) => (
+                        <div key={index} className="flex items-center gap-2 p-3 bg-gradient-to-br from-warm-bg to-white rounded-lg border border-gray-200 shadow-sm">
+                            <div className="w-12 h-12 bg-gradient-to-br from-gray-100 to-white rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm">
+                                {item.image ? (
+                                    <img
+                                        src={item.image}
+                                        alt={item.title}
+                                        className="w-full h-full object-cover rounded-lg"
+                                        onError={(e) => {
+                                            e.target.onerror = null;
+                                            e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="%23ccc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>';
+                                        }}
+                                    />
+                                ) : (
+                                    <i className="ph ph-hamburger text-gray-400 text-lg"></i>
+                                )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h4 className="font-medium text-gray-900 truncate">{item.title}</h4>
+                                <div className="flex justify-between items-center mt-1">
+                                    <p className="text-xs text-gray-500">
+                                        {item.quantity || 1} x ₹{item.price || 0}
+                                    </p>
+                                    <p className="font-medium text-sm">
+                                        ₹{(item.quantity || 1) * (item.price || 0)}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Bill Details */}
+            <div className="bg-gradient-to-br from-warm-bg to-white rounded-xl p-4 border border-gray-200 shadow-sm">
+                <h3 className="text-sm font-semibold mb-3 text-gray-700 flex items-center">
+                    <i className="ph ph-receipt text-red-500 mr-1.5"></i>
+                    Bill Details
+                </h3>
+                <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                        <span className="text-gray-600">Item Total</span>
+                        <span className="font-medium">₹{totalAmount}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span className="text-gray-600">Tax (18%)</span>
+                        <span className="font-medium">₹{taxAmount.toFixed(2)}</span>
+                    </div>
+                    <div className="border-t border-gray-200 pt-2 flex justify-between mt-2">
+                        <span className="font-medium">Grand Total</span>
+                        <span className="font-semibold text-red-600">₹{finalAmount.toFixed(2)}</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Order Status */}
+            <div className="bg-gradient-to-br from-warm-bg to-white rounded-xl p-4 border border-gray-200 shadow-sm">
+                <h3 className="text-sm font-semibold mb-3 text-gray-700 flex items-center">
+                    <i className="ph ph-flag text-red-500 mr-1.5"></i>
+                    Order Status
+                </h3>
+                <div className="flex items-center">
+                    <div className={`px-3 py-1.5 rounded-full text-sm font-medium ${isNewOrder ? 'bg-blue-100 text-blue-600' :
+                        isProcessingOrder ? 'bg-orange-100 text-orange-600' :
+                            isCompletedOrder ? 'bg-green-100 text-green-600' :
+                                'bg-gray-100 text-gray-600'
+                        }`}>
+                        <i className={`ph ${isNewOrder ? 'ph-hourglass text-blue-600' :
+                            isProcessingOrder ? 'ph-cooking-pot text-orange-600' :
+                                isCompletedOrder ? 'ph-check-circle text-green-600' :
+                                    'ph-question text-gray-600'
+                            } mr-1.5`}></i>
+                        {order.currentStatus?.label?.toUpperCase() || "PLACED"}
+                    </div>
+                </div>
+            </div>
+
+            {/* Action Buttons */}
+            {isNewOrder && (
+                <div className="pt-2 space-y-2">
+                    <div className="flex gap-2">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onAccept && onAccept();
+                                modalControl.close();
+                            }}
+                            className="flex-1 py-2.5 bg-gradient-to-r from-green-600 to-green-500 text-white rounded-lg flex items-center justify-center gap-1.5 hover:from-green-700 hover:to-green-600 transition-colors text-sm font-medium shadow-sm"
+                        >
+                            <i className="ph ph-check"></i>
+                            <span>Accept Order</span>
+                        </button>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onReject && onReject();
+                                modalControl.close();
+                            }}
+                            className="flex-1 py-2.5 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg flex items-center justify-center gap-1.5 hover:from-red-700 hover:to-red-600 transition-colors text-sm font-medium shadow-sm"
+                        >
+                            <i className="ph ph-x"></i>
+                            <span>Reject Order</span>
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {isCompletedOrder && (
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onPrintBill && onPrintBill();
+                    }}
+                    className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg flex items-center justify-center gap-1.5 hover:from-blue-700 hover:to-blue-600 transition-colors text-sm font-medium shadow-sm mt-2"
+                >
+                    <i className="ph ph-printer"></i>
+                    <span>Print Bill</span>
+                </button>
+            )}
+
+            {/* Only show the direct CustomerSearch component when not using ModalManager */}
+            {isCustomerSearchOpen && !window.ModalManager && (
                 <CustomerSearch
                     isOpen={isCustomerSearchOpen}
                     onClose={() => setIsCustomerSearchOpen(false)}
