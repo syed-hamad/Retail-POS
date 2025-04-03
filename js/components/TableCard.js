@@ -29,7 +29,7 @@ function TableCard({ title, orders, duration, status, onTap, onLongPress, compac
 
         const minutes = duration.minutes || 0;
 
-        if (minutes < 3) return 'New order';
+        if (minutes < 3) return 'Just now';
         return `${duration.display}`;
     };
 
@@ -714,9 +714,9 @@ function OrderDetailsContent({ order, modalControl }) {
                         <div className="flex justify-between items-center pt-1 text-xs">
                             <span className="text-gray-600">Payment Method</span>
                             <span className={`font-medium px-2 py-0.5 rounded-full ${order.payMode === 'CASH' ? 'bg-green-50 text-green-600' :
-                                    order.payMode === 'DIGITAL' ? 'bg-blue-50 text-blue-600' :
-                                        order.payMode === 'CREDIT' ? 'bg-orange-50 text-orange-600' :
-                                            'bg-gray-50 text-gray-600'
+                                order.payMode === 'DIGITAL' ? 'bg-blue-50 text-blue-600' :
+                                    order.payMode === 'CREDIT' ? 'bg-orange-50 text-orange-600' :
+                                        'bg-gray-50 text-gray-600'
                                 }`}>
                                 {getPaymentModeDisplay(order.payMode)}
                             </span>

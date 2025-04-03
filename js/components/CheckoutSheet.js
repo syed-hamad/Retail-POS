@@ -521,22 +521,6 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
             if (!orderId) {
                 // Create new order
                 await orderRef.set(orderData);
-
-                // If this is a CREDIT purchase, update the customer's balance
-                if (mode === 'CREDIT' && customer && customer.id) {
-                    const customerRef = window.sdk.collection("Customers").doc(customer.id);
-
-                    // Update customer's purchase history and balance
-                    await customerRef.update({
-                        lastPurchase: new Date(),
-                        balance: window.sdk.FieldValue.increment(-cartTotal),
-                        orders: window.sdk.FieldValue.arrayUnion({
-                            id: targetOrderId,
-                            amount: cartTotal,
-                            date: new Date()
-                        })
-                    });
-                }
             } else {
                 // Update existing order
                 // FIX: Use a manual approach instead of arrayUnion which might be undefined
@@ -578,22 +562,6 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                     // Only add discount if it's set
                     if (discount > 0) {
                         updateData.discount = (existingData.discount || 0) + discount;
-                    }
-
-                    // If this is a CREDIT checkout, update the customer's balance
-                    if (mode === 'CREDIT' && customer && customer.id) {
-                        const customerRef = window.sdk.collection("Customers").doc(customer.id);
-
-                        // Update customer's purchase history and balance
-                        await customerRef.update({
-                            lastPurchase: new Date(),
-                            balance: window.sdk.FieldValue.increment(-cartTotal),
-                            orders: window.sdk.FieldValue.arrayUnion({
-                                id: targetOrderId,
-                                amount: cartTotal,
-                                date: new Date()
-                            })
-                        });
                     }
                 } else {
                     // If not in checkout mode, add items to the existing order
