@@ -12,6 +12,12 @@ class BluetoothPrinting {
         this.device = null;
         this.characteristic = null;
         this.encoder = new TextEncoder();
+
+        // Try to restore the last successful connection info from localStorage
+        this.lastConnectedDevice = this.getSavedPrinter();
+
+        // Track attempts to auto-reconnect to prevent infinite loops
+        this.reconnectAttempted = false;
     }
 
     /**
@@ -19,6 +25,241 @@ class BluetoothPrinting {
      */
     isSupported() {
         return !!navigator.bluetooth;
+    }
+
+    /**
+     * Save the current printer details to localStorage
+     * @private
+     */
+    savePrinter() {
+        if (!this.device) return;
+
+        try {
+            const printerInfo = {
+                id: this.device.id,
+                name: this.device.name || 'Unknown Printer'
+            };
+
+            localStorage.setItem('lastConnectedPrinter', JSON.stringify(printerInfo));
+            this.lastConnectedDevice = printerInfo;
+            console.log('Printer information saved:', printerInfo);
+        } catch (error) {
+            console.error('Error saving printer information:', error);
+        }
+    }
+
+    /**
+     * Get saved printer details from localStorage
+     * @returns {Object|null} The saved printer info or null if none exists
+     */
+    getSavedPrinter() {
+        try {
+            const savedPrinter = localStorage.getItem('lastConnectedPrinter');
+            if (savedPrinter) {
+                return JSON.parse(savedPrinter);
+            }
+        } catch (error) {
+            console.error('Error retrieving saved printer:', error);
+        }
+        return null;
+    }
+
+    /**
+     * Clear saved printer from localStorage
+     */
+    clearSavedPrinter() {
+        try {
+            localStorage.removeItem('lastConnectedPrinter');
+            this.lastConnectedDevice = null;
+        } catch (error) {
+            console.error('Error clearing saved printer:', error);
+        }
+    }
+
+    /**
+     * Attempt to silently reconnect to the last used printer without UI interaction
+     * This is called internally when a print operation is requested and we're not connected
+     * @returns {Promise<boolean>} True if reconnection was successful
+     * @private
+     */
+    async attemptSilentReconnect() {
+        if (!this.isSupported() || !this.lastConnectedDevice || this.reconnectAttempted) {
+            return false;
+        }
+
+        console.log('Attempting silent reconnect to saved printer:', this.lastConnectedDevice.name);
+        this.reconnectAttempted = true;
+
+        try {
+            // Try to get the device by name
+            this.device = await navigator.bluetooth.requestDevice({
+                filters: [{
+                    name: this.lastConnectedDevice.name
+                }],
+                optionalServices: [
+                    '000018f0-0000-1000-8000-00805f9b34fb',  // Common printer service
+                    '00001101-0000-1000-8000-00805f9b34fb',  // Serial Port Profile
+                    '00001800-0000-1000-8000-00805f9b34fb',  // Generic Access Service
+                    '00001801-0000-1000-8000-00805f9b34fb',  // Generic Attribute Service
+                    '0000180a-0000-1000-8000-00805f9b34fb',  // Device Information Service
+                    '0000ffff-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                    '0000fff0-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                    '0000ff00-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                    '0000fe00-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                    '00010000-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                    '00000000-0000-1000-8000-00805f9b34fb'   // Vendor specific service
+                ]
+            });
+
+            // Connect to GATT server
+            const server = await this.device.gatt.connect();
+            console.log('Silent reconnect: Connected to GATT server');
+
+            // Get all available services
+            const services = await server.getPrimaryServices();
+            if (services.length === 0) {
+                throw new Error('No services found on the device');
+            }
+
+            // Try to find a service we can use for printing
+            let service = null;
+            let characteristic = null;
+
+            // Try each service to find a writable characteristic
+            for (const s of services) {
+                try {
+                    const chars = await s.getCharacteristics();
+
+                    // Find a writable characteristic
+                    const writableChar = chars.find(c =>
+                        c.properties.write || c.properties.writeWithoutResponse
+                    );
+
+                    if (writableChar) {
+                        service = s;
+                        characteristic = writableChar;
+                        break;
+                    }
+                } catch (e) {
+                    console.log(`Error exploring service ${s.uuid}:`, e);
+                }
+            }
+
+            if (!service || !characteristic) {
+                throw new Error('No suitable service or characteristic found');
+            }
+
+            this.characteristic = characteristic;
+            this.connected = true;
+            this.reconnectAttempted = false;
+
+            // Set up disconnection listener to reset state
+            this.device.addEventListener('gattserverdisconnected', () => {
+                console.log('Bluetooth device disconnected');
+                this.connected = false;
+                this.characteristic = null;
+            });
+
+            console.log('Silent reconnect successful');
+            return true;
+        } catch (error) {
+            console.error('Silent reconnect failed:', error);
+            this.connected = false;
+            this.reconnectAttempted = false;
+            return false;
+        }
+    }
+
+    /**
+     * Shows a modal to connect to a printer
+     * @returns {Promise} Resolves when printer is selected or rejects if cancelled
+     */
+    async showPrinterConnectionModal() {
+        return new Promise((resolve, reject) => {
+            // If ModalManager is available, use it to create a modal
+            if (window.ModalManager && typeof window.ModalManager.createCenterModal === 'function') {
+                const hasSavedPrinter = !!this.lastConnectedDevice;
+
+                const modalContent = `
+                    <div class="py-2">
+                        <div class="flex items-center justify-center mb-4">
+                            <i class="ph ph-printer text-red-500 text-3xl"></i>
+                        </div>
+                        
+                        ${hasSavedPrinter ? `
+                            <div class="mb-4 bg-gray-50 p-3 rounded-lg">
+                                <div class="font-medium text-gray-800 mb-1">Last Connected Printer</div>
+                                <div class="flex items-center">
+                                    <i class="ph ph-printer text-gray-500 mr-2"></i>
+                                    <span>${this.lastConnectedDevice.name}</span>
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        <div class="space-y-3">
+                            ${hasSavedPrinter ? `
+                                <button id="use-saved-printer" class="w-full py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center">
+                                    <i class="ph ph-printer mr-2"></i>
+                                    Use Last Connected Printer
+                                </button>
+                            ` : ''}
+                            
+                            <button id="select-new-printer" class="w-full py-2.5 ${hasSavedPrinter ? 'bg-gray-100 text-gray-800 hover:bg-gray-200' : 'bg-red-500 text-white hover:bg-red-600'} rounded-lg transition-colors flex items-center justify-center">
+                                <i class="ph ph-${hasSavedPrinter ? 'plus-circle' : 'printer'} mr-2"></i>
+                                ${hasSavedPrinter ? 'Select Different Printer' : 'Select Printer'}
+                            </button>
+                            
+                            <button id="cancel-printer-select" class="w-full py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                const modal = window.ModalManager.createCenterModal({
+                    id: 'printer-connection-modal',
+                    title: 'Connect to Printer',
+                    content: modalContent,
+                    onShown: (modalControl) => {
+                        // Handle using saved printer
+                        const useSavedPrinterBtn = document.getElementById('use-saved-printer');
+                        if (useSavedPrinterBtn) {
+                            useSavedPrinterBtn.addEventListener('click', () => {
+                                modalControl.close();
+                                resolve('use-saved');
+                            });
+                        }
+
+                        // Handle selecting new printer
+                        const selectNewPrinterBtn = document.getElementById('select-new-printer');
+                        if (selectNewPrinterBtn) {
+                            selectNewPrinterBtn.addEventListener('click', () => {
+                                modalControl.close();
+                                resolve('select-new');
+                            });
+                        }
+
+                        // Handle cancel
+                        const cancelBtn = document.getElementById('cancel-printer-select');
+                        if (cancelBtn) {
+                            cancelBtn.addEventListener('click', () => {
+                                modalControl.close();
+                                reject(new Error('Device selection cancelled by user'));
+                            });
+                        }
+                    }
+                });
+            } else {
+                // If ModalManager is not available, go straight to selecting a new printer
+                if (this.lastConnectedDevice && confirm(`Use last connected printer: ${this.lastConnectedDevice.name}?`)) {
+                    resolve('use-saved');
+                } else if (confirm('Select a printer?')) {
+                    resolve('select-new');
+                } else {
+                    reject(new Error('Device selection cancelled by user'));
+                }
+            }
+        });
     }
 
     /**
@@ -30,37 +271,104 @@ class BluetoothPrinting {
             throw new Error('Web Bluetooth is not supported in this browser. Please use Chrome or Edge.');
         }
 
+        // If already connected, return immediately
+        if (this.connected && this.device && this.characteristic) {
+            return true;
+        }
+
         try {
-            // Request device without strict filtering to allow discovering all devices
-            // This will let the user pick from all available Bluetooth devices
+            // Show connection modal to let user decide whether to use saved printer or select new one
+            let action;
             try {
-                this.device = await navigator.bluetooth.requestDevice({
-                    // Instead of filters, use acceptAllDevices to show all available devices
-                    acceptAllDevices: true,
-                    // Include all possible printer-related services as optional
-                    optionalServices: [
-                        '000018f0-0000-1000-8000-00805f9b34fb',  // Common printer service
-                        '00001101-0000-1000-8000-00805f9b34fb',  // Serial Port Profile
-                        '00001800-0000-1000-8000-00805f9b34fb',  // Generic Access Service
-                        '00001801-0000-1000-8000-00805f9b34fb',  // Generic Attribute Service
-                        '0000180a-0000-1000-8000-00805f9b34fb',  // Device Information Service
-                        '0000ffff-0000-1000-8000-00805f9b34fb',  // Vendor specific service
-                        '0000fff0-0000-1000-8000-00805f9b34fb',  // Vendor specific service
-                        '0000ff00-0000-1000-8000-00805f9b34fb',  // Vendor specific service
-                        '0000fe00-0000-1000-8000-00805f9b34fb',  // Vendor specific service
-                        '00010000-0000-1000-8000-00805f9b34fb',  // Vendor specific service
-                        '00000000-0000-1000-8000-00805f9b34fb'   // Vendor specific service
-                    ]
-                });
-            } catch (deviceSelectError) {
-                // This will catch when a user cancels the device selection dialog
-                // navigator.bluetooth.requestDevice() throws a NotFoundError when the selection is cancelled
-                if (deviceSelectError.name === "NotFoundError") {
-                    console.log('Device selection cancelled by user');
-                    // Re-throw with a clearer message indicating user cancellation
-                    throw new Error('Device selection cancelled by user');
+                action = await this.showPrinterConnectionModal();
+            } catch (modalError) {
+                throw modalError; // User cancelled from the modal
+            }
+
+            // Handle different user actions
+            if (action === 'use-saved' && this.lastConnectedDevice) {
+                try {
+                    // Try to reconnect to the last connected device by ID
+                    this.device = await navigator.bluetooth.requestDevice({
+                        filters: [{
+                            name: this.lastConnectedDevice.name
+                        }],
+                        // Include all possible printer-related services as optional
+                        optionalServices: [
+                            '000018f0-0000-1000-8000-00805f9b34fb',  // Common printer service
+                            '00001101-0000-1000-8000-00805f9b34fb',  // Serial Port Profile
+                            '00001800-0000-1000-8000-00805f9b34fb',  // Generic Access Service
+                            '00001801-0000-1000-8000-00805f9b34fb',  // Generic Attribute Service
+                            '0000180a-0000-1000-8000-00805f9b34fb',  // Device Information Service
+                            '0000ffff-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                            '0000fff0-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                            '0000ff00-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                            '0000fe00-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                            '00010000-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                            '00000000-0000-1000-8000-00805f9b34fb'   // Vendor specific service
+                        ]
+                    });
+                } catch (reconnectError) {
+                    console.log('Error reconnecting to saved printer, falling back to device selection:', reconnectError);
+
+                    // Fallback to regular device selection if reconnection fails
+                    try {
+                        this.device = await navigator.bluetooth.requestDevice({
+                            acceptAllDevices: true,
+                            optionalServices: [
+                                '000018f0-0000-1000-8000-00805f9b34fb',  // Common printer service
+                                '00001101-0000-1000-8000-00805f9b34fb',  // Serial Port Profile
+                                '00001800-0000-1000-8000-00805f9b34fb',  // Generic Access Service
+                                '00001801-0000-1000-8000-00805f9b34fb',  // Generic Attribute Service
+                                '0000180a-0000-1000-8000-00805f9b34fb',  // Device Information Service
+                                '0000ffff-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                                '0000fff0-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                                '0000ff00-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                                '0000fe00-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                                '00010000-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                                '00000000-0000-1000-8000-00805f9b34fb'   // Vendor specific service
+                            ]
+                        });
+                    } catch (deviceSelectError) {
+                        // This will catch when a user cancels the device selection dialog
+                        if (deviceSelectError.name === "NotFoundError") {
+                            console.log('Device selection cancelled by user');
+                            throw new Error('Device selection cancelled by user');
+                        }
+                        throw deviceSelectError;
+                    }
                 }
-                throw deviceSelectError;
+            } else if (action === 'select-new') {
+                // Request device without strict filtering to allow discovering all devices
+                try {
+                    this.device = await navigator.bluetooth.requestDevice({
+                        // Instead of filters, use acceptAllDevices to show all available devices
+                        acceptAllDevices: true,
+                        // Include all possible printer-related services as optional
+                        optionalServices: [
+                            '000018f0-0000-1000-8000-00805f9b34fb',  // Common printer service
+                            '00001101-0000-1000-8000-00805f9b34fb',  // Serial Port Profile
+                            '00001800-0000-1000-8000-00805f9b34fb',  // Generic Access Service
+                            '00001801-0000-1000-8000-00805f9b34fb',  // Generic Attribute Service
+                            '0000180a-0000-1000-8000-00805f9b34fb',  // Device Information Service
+                            '0000ffff-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                            '0000fff0-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                            '0000ff00-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                            '0000fe00-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                            '00010000-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                            '00000000-0000-1000-8000-00805f9b34fb'   // Vendor specific service
+                        ]
+                    });
+                } catch (deviceSelectError) {
+                    // This will catch when a user cancels the device selection dialog
+                    if (deviceSelectError.name === "NotFoundError") {
+                        console.log('Device selection cancelled by user');
+                        throw new Error('Device selection cancelled by user');
+                    }
+                    throw deviceSelectError;
+                }
+            } else {
+                throw new Error('Invalid action selected');
             }
 
             console.log('Device selected:', this.device.name || 'Unknown device');
@@ -129,6 +437,17 @@ class BluetoothPrinting {
 
             this.characteristic = characteristic;
             this.connected = true;
+
+            // Set up disconnection listener to reset state
+            this.device.addEventListener('gattserverdisconnected', () => {
+                console.log('Bluetooth device disconnected');
+                this.connected = false;
+                this.characteristic = null;
+            });
+
+            // Save successful connection
+            this.savePrinter();
+
             return true;
         } catch (error) {
             console.error('Error connecting to printer:', error);
@@ -194,20 +513,27 @@ class BluetoothPrinting {
 
             // Connect to printer if not already connected
             if (!this.connected) {
-                try {
-                    await this.connect();
-                } catch (connectError) {
-                    // Handle user cancellation with a specific error
-                    if (connectError.message.includes("Device selection cancelled")) {
-                        throw new Error("Printing cancelled: No printer selected");
+                // First try silent reconnect if we have a saved printer
+                const silentReconnected = await this.attemptSilentReconnect();
+
+                // If silent reconnect fails, try regular connection with user interaction
+                if (!silentReconnected) {
+                    try {
+                        await this.connect();
+                    } catch (connectError) {
+                        // Handle user cancellation with a specific error
+                        if (connectError.message.includes("Device selection cancelled") ||
+                            connectError.message.includes("cancelled by user")) {
+                            throw new Error("Printing cancelled: No printer selected");
+                        }
+                        // Handle unsupported device errors with a friendly message
+                        if (connectError.name === 'NetworkError' ||
+                            connectError.message.includes('not supported as a printer') ||
+                            connectError.message.includes('Unsupported device')) {
+                            throw new Error("This device cannot be used for printing. Please select a compatible Bluetooth printer.");
+                        }
+                        throw connectError;
                     }
-                    // Handle unsupported device errors with a friendly message
-                    if (connectError.name === 'NetworkError' ||
-                        connectError.message.includes('not supported as a printer') ||
-                        connectError.message.includes('Unsupported device')) {
-                        throw new Error("This device cannot be used for printing. Please select a compatible Bluetooth printer.");
-                    }
-                    throw connectError;
                 }
             }
 
@@ -240,20 +566,27 @@ class BluetoothPrinting {
 
             // Connect to printer if not already connected
             if (!this.connected) {
-                try {
-                    await this.connect();
-                } catch (connectError) {
-                    // Handle user cancellation with a specific error
-                    if (connectError.message.includes("Device selection cancelled")) {
-                        throw new Error("Printing cancelled: No printer selected");
+                // First try silent reconnect if we have a saved printer
+                const silentReconnected = await this.attemptSilentReconnect();
+
+                // If silent reconnect fails, try regular connection with user interaction
+                if (!silentReconnected) {
+                    try {
+                        await this.connect();
+                    } catch (connectError) {
+                        // Handle user cancellation with a specific error
+                        if (connectError.message.includes("Device selection cancelled") ||
+                            connectError.message.includes("cancelled by user")) {
+                            throw new Error("Printing cancelled: No printer selected");
+                        }
+                        // Handle unsupported device errors with a friendly message
+                        if (connectError.name === 'NetworkError' ||
+                            connectError.message.includes('not supported as a printer') ||
+                            connectError.message.includes('Unsupported device')) {
+                            throw new Error("This device cannot be used for printing. Please select a compatible Bluetooth printer.");
+                        }
+                        throw connectError;
                     }
-                    // Handle unsupported device errors with a friendly message
-                    if (connectError.name === 'NetworkError' ||
-                        connectError.message.includes('not supported as a printer') ||
-                        connectError.message.includes('Unsupported device')) {
-                        throw new Error("This device cannot be used for printing. Please select a compatible Bluetooth printer.");
-                    }
-                    throw connectError;
                 }
             }
 

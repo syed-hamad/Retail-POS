@@ -807,7 +807,9 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
     const orders = getOrdersForSource(tableId, variant, orderStatus);
 
     // State to track printer connection status
-    const [printerConnected, setPrinterConnected] = React.useState(false);
+    const [printerConnected, setPrinterConnected] = React.useState(
+        window.BluetoothPrinting ? window.BluetoothPrinting.connected : false
+    );
     const [connectingPrinter, setConnectingPrinter] = React.useState(false);
 
     // Debug logging
@@ -827,75 +829,32 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
         }
     }, [orders, tableId, variant, orderStatus]);
 
-    // Attempt to connect to printer when the room is opened
+    // Update printer connection status when BluetoothPrinting state changes
     React.useEffect(() => {
-        // Only attempt to connect if the modal is open, BluetoothPrinting is available, 
-        // and we're not already connected or in the process of connecting
-        if (isOpen &&
-            window.BluetoothPrinting &&
-            window.BluetoothPrinting.isSupported() &&
-            !printerConnected &&
-            !connectingPrinter) {
-
-            const connectToPrinter = async () => {
-                try {
-                    setConnectingPrinter(true);
-
-                    if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                        window.ModalManager.showToast("Select your Bluetooth printer", { type: "info" });
-                    } else {
-                        showToast("Select your Bluetooth printer", "info");
-                    }
-
-                    await window.BluetoothPrinting.connect();
-                    setPrinterConnected(true);
-
-                    if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                        window.ModalManager.showToast("Printer connected successfully", { type: "success" });
-                    } else {
-                        showToast("Printer connected successfully", "success");
-                    }
-                } catch (error) {
-                    console.error("Error connecting to printer:", error);
-
-                    // Don't show error for user cancellation
-                    if (error.name === "NotFoundError" ||
-                        error.message.includes("Device selection cancelled") ||
-                        error.message.includes("No printer selected")) {
-                        console.log("User cancelled printer selection");
-                    }
-                    // Show message for unsupported device
-                    else if (error.name === 'NetworkError' ||
-                        error.message.includes('not supported as a printer') ||
-                        error.message.includes('Unsupported device') ||
-                        error.message.includes('cannot be used for printing')) {
-                        if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                            window.ModalManager.showToast("The selected device is not a compatible printer", { type: "error" });
-                        } else {
-                            showToast("The selected device is not a compatible printer", "error");
-                        }
-                    }
-                    // Don't display any toast for user cancellation
-                } finally {
-                    setConnectingPrinter(false);
-                }
+        if (window.BluetoothPrinting) {
+            const checkConnectionStatus = () => {
+                setPrinterConnected(window.BluetoothPrinting.connected);
             };
 
-            connectToPrinter();
-        }
-    }, [isOpen, printerConnected, connectingPrinter]);
+            // Initial check
+            checkConnectionStatus();
 
-    // Disconnect printer when closing the room
+            // Set up an interval to periodically check printer connection status
+            const interval = setInterval(checkConnectionStatus, 2000);
+
+            return () => clearInterval(interval);
+        }
+    }, [isOpen]);
+
+    // No longer attempt to automatically connect to printer on modal open
+    // This was causing repeated prompts. Users can connect manually from the menu.
+
+    // Keep the disconnect function when closing the room
     React.useEffect(() => {
         if (!isOpen && printerConnected && window.BluetoothPrinting) {
-            window.BluetoothPrinting.disconnect()
-                .then(() => {
-                    setPrinterConnected(false);
-                    console.log("Printer disconnected");
-                })
-                .catch(err => {
-                    console.error("Error disconnecting printer:", err);
-                });
+            // We don't need to actually disconnect the printer, as we want to maintain
+            // the connection for future use. Just update the UI state.
+            setPrinterConnected(window.BluetoothPrinting.connected);
         }
     }, [isOpen, printerConnected]);
 
@@ -1144,8 +1103,9 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
                                         .catch(error => {
                                             console.error("Error connecting to printer:", error);
                                             // Only show error messages for non-cancellation errors
-                                            if (!error.name === "NotFoundError" &&
+                                            if (error.name !== "NotFoundError" &&
                                                 !error.message.includes("Device selection cancelled") &&
+                                                !error.message.includes("cancelled by user") &&
                                                 !error.message.includes("No printer selected")) {
                                                 if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
                                                     window.ModalManager.showToast("Error connecting to printer", { type: "error" });
@@ -1512,18 +1472,29 @@ function OrderView({ order, tableId, variant }) {
             // Try Bluetooth printing first if available
             if (window.BluetoothPrinting && window.BluetoothPrinting.isSupported()) {
                 try {
-                    showToast("Select your Bluetooth printer from the list", "info");
+                    // Check if we already have a printer connected
+                    const printerAlreadyConnected = window.BluetoothPrinting.connected && window.BluetoothPrinting.characteristic;
+
+                    if (printerAlreadyConnected) {
+                        showToast("Printing KOT using connected printer...", "info");
+                    } else if (window.BluetoothPrinting.lastConnectedDevice) {
+                        showToast(`Connecting to printer...`, "info");
+                    } else {
+                        showToast("Select a printer to print KOT", "info");
+                    }
+
                     await window.BluetoothPrinting.printKOT(order.id);
-                    showToast("KOT printed successfully via Bluetooth", "success");
+                    showToast("KOT printed successfully", "success");
                     return; // Exit if Bluetooth printing succeeds
                 } catch (btError) {
                     console.error("Bluetooth printing failed:", btError);
 
-                    // If it's a user cancellation error
+                    // Handle user cancellation errors
                     if (btError.message.includes("Device selection cancelled") ||
                         btError.message.includes("No printer selected") ||
+                        btError.message.includes("cancelled by user") ||
                         btError.name === "NotFoundError") {
-                        showToast("Printer selection cancelled", "info");
+                        showToast("Printing cancelled", "info");
                         return;
                     }
 
@@ -1536,6 +1507,9 @@ function OrderView({ order, tableId, variant }) {
                         showToast("Could not connect to printer. Please select a compatible thermal printer.", "error");
                         return;
                     }
+
+                    // Generic error case
+                    showToast(`Printing error: ${btError.message}`, "error");
 
                     // Fall through to traditional printing for other errors
                     showToast("Bluetooth printing failed, falling back to standard printing", "warning");
@@ -1561,9 +1535,19 @@ function OrderView({ order, tableId, variant }) {
             // Try Bluetooth printing first if available
             if (window.BluetoothPrinting && window.BluetoothPrinting.isSupported()) {
                 try {
-                    showToast("Select your Bluetooth printer from the list", "info");
+                    // Check if we already have a printer connected
+                    const printerAlreadyConnected = window.BluetoothPrinting.connected && window.BluetoothPrinting.characteristic;
+
+                    if (printerAlreadyConnected) {
+                        showToast("Printing bill using connected printer...", "info");
+                    } else if (window.BluetoothPrinting.lastConnectedDevice) {
+                        showToast(`Connecting to printer...`, "info");
+                    } else {
+                        showToast("Select a printer to print bill", "info");
+                    }
+
                     await window.BluetoothPrinting.printBill(order.id);
-                    showToast("Bill printed successfully via Bluetooth, order completed 👍", "success");
+                    showToast("Bill printed successfully", "success");
 
                     // Refresh the page after successful printing
                     if (window.refreshOrders && typeof window.refreshOrders === 'function') {
@@ -1576,11 +1560,12 @@ function OrderView({ order, tableId, variant }) {
                 } catch (btError) {
                     console.error("Bluetooth printing failed:", btError);
 
-                    // If it's a user cancellation error
+                    // Handle user cancellation errors
                     if (btError.message.includes("Device selection cancelled") ||
                         btError.message.includes("No printer selected") ||
+                        btError.message.includes("cancelled by user") ||
                         btError.name === "NotFoundError") {
-                        showToast("Printer selection cancelled", "info");
+                        showToast("Printing cancelled", "info");
                         return false;
                     }
 
@@ -1593,6 +1578,9 @@ function OrderView({ order, tableId, variant }) {
                         showToast("Could not connect to printer. Please select a compatible thermal printer.", "error");
                         return false;
                     }
+
+                    // Generic error case
+                    showToast(`Printing error: ${btError.message}`, "error");
 
                     // Fall through to update order status for other errors
                     showToast("Bluetooth printing failed, marking order as completed", "warning");
@@ -3531,8 +3519,9 @@ const renderContextMenu = () => {
                                     .catch(error => {
                                         console.error("Error connecting to printer:", error);
                                         // Only show error messages for non-cancellation errors
-                                        if (!error.name === "NotFoundError" &&
+                                        if (error.name !== "NotFoundError" &&
                                             !error.message.includes("Device selection cancelled") &&
+                                            !error.message.includes("cancelled by user") &&
                                             !error.message.includes("No printer selected")) {
                                             if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
                                                 window.ModalManager.showToast("Error connecting to printer", { type: "error" });

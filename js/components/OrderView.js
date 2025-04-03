@@ -294,42 +294,76 @@ function OrderView({ order, tableId, variant, onClose }) {
                             // Try Bluetooth printing first if available
                             if (window.BluetoothPrinting && window.BluetoothPrinting.isSupported()) {
                                 try {
+                                    // Check if we already have a printer connected
+                                    const printerAlreadyConnected = window.BluetoothPrinting.connected && window.BluetoothPrinting.characteristic;
+
                                     if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                        window.ModalManager.showToast("Select your Bluetooth printer from the list", { type: "info" });
+                                        if (!printerAlreadyConnected) {
+                                            if (window.BluetoothPrinting.lastConnectedDevice) {
+                                                window.ModalManager.showToast(`Connecting to printer...`, { type: "info" });
+                                            } else {
+                                                window.ModalManager.showToast("Select a printer to print KOT", { type: "info" });
+                                            }
+                                        } else {
+                                            window.ModalManager.showToast("Printing KOT using connected printer...", { type: "info" });
+                                        }
                                     } else {
-                                        showToast("Select your Bluetooth printer from the list", "info");
+                                        if (!printerAlreadyConnected) {
+                                            if (window.BluetoothPrinting.lastConnectedDevice) {
+                                                showToast(`Connecting to printer...`, "info");
+                                            } else {
+                                                showToast("Select a printer to print KOT", "info");
+                                            }
+                                        } else {
+                                            showToast("Printing KOT using connected printer...", "info");
+                                        }
                                     }
+
                                     await window.BluetoothPrinting.printKOT(order.id);
+
                                     if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                        window.ModalManager.showToast("KOT printed successfully via Bluetooth", { type: "success" });
+                                        window.ModalManager.showToast("KOT printed successfully", { type: "success" });
                                     } else {
-                                        showToast("KOT printed successfully via Bluetooth", "success");
+                                        showToast("KOT printed successfully", "success");
                                     }
                                     return; // Exit if Bluetooth printing succeeds
                                 } catch (btError) {
                                     console.error("Bluetooth printing failed:", btError);
 
-                                    // If it's a user cancellation error
+                                    // Handle user cancellation errors
                                     if (btError.message.includes("Device selection cancelled") ||
                                         btError.message.includes("No printer selected") ||
+                                        btError.message.includes("cancelled by user") ||
                                         btError.name === "NotFoundError") {
+
                                         if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                            window.ModalManager.showToast("Printer selection cancelled", { type: "info" });
+                                            window.ModalManager.showToast("Printing cancelled", { type: "info" });
                                         } else {
-                                            showToast("Printer selection cancelled", "info");
+                                            showToast("Printing cancelled", "info");
                                         }
                                         return;
                                     }
 
-                                    // If it's a connection error, show helpful message
+                                    // If it's a connection error or unsupported device, show helpful message
                                     if (btError.message.includes("No suitable service") ||
-                                        btError.message.includes("No services found")) {
+                                        btError.message.includes("No services found") ||
+                                        btError.message.includes("not supported as a printer") ||
+                                        btError.message.includes("cannot be used for printing") ||
+                                        (btError.name === 'NetworkError' && btError.message.includes("Unsupported device"))) {
+
                                         if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                            window.ModalManager.showToast("Could not connect to printer. Make sure it's turned on and in pairing mode.", { type: "error" });
+                                            window.ModalManager.showToast("Could not connect to printer. Please select a compatible thermal printer.", { type: "error" });
                                         } else {
-                                            showToast("Could not connect to printer. Make sure it's turned on and in pairing mode.", "error");
+                                            showToast("Could not connect to printer. Please select a compatible thermal printer.", "error");
                                         }
                                         return;
+                                    }
+
+                                    // Generic error case
+                                    if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                        window.ModalManager.showToast(`Printing error: ${btError.message}`, { type: "error" });
+                                    } else {
+                                        showToast(`Printing error: ${btError.message}`, "error");
                                     }
 
                                     // Fall through to traditional printing for other errors
