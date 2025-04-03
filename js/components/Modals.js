@@ -1602,7 +1602,7 @@ function OrderView({ order, tableId, variant }) {
             // Update order status to COMPLETED
             const orderRef = window.sdk.collection("Orders").doc(order.id);
             await orderRef.update({
-                status: window.firebase.firestore.FieldValue.arrayUnion({
+                status: window.sdk.FieldValue.arrayUnion({
                     label: "COMPLETED",
                     date: new Date()
                 }),

@@ -460,7 +460,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                 orderData = order.data;
 
                 // Add payment mode
-                orderData.payMode = paymentMode;
+                orderData.payMode = mode;
 
                 // Add customer details if a customer is selected
                 if (customer) {
@@ -470,7 +470,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                 }
 
                 // For CREDIT payment mode, mark as unpaid
-                if (paymentMode === 'CREDIT') {
+                if (mode === 'CREDIT') {
                     orderData.paid = false;
                 }
             } catch (err) {
@@ -489,7 +489,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                     priceVariant: priceVariant,
                     tableId: tableId,
                     discount: discount,
-                    paid: paymentMode !== 'CREDIT', // Set paid to false for CREDIT mode
+                    paid: mode !== 'CREDIT', // Set paid to false for CREDIT mode
                     status: [
                         {
                             label: "PLACED",
@@ -505,7 +505,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                         date: now
                     },
                     charges: validCharges.map(c => typeof c.toJson === 'function' ? c.toJson() : c),
-                    payMode: paymentMode,
+                    payMode: mode,
                     instructions: instructions.trim(),
                     date: now
                 };
@@ -523,14 +523,14 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                 await orderRef.set(orderData);
 
                 // If this is a CREDIT purchase, update the customer's balance
-                if (paymentMode === 'CREDIT' && customer && customer.id) {
+                if (mode === 'CREDIT' && customer && customer.id) {
                     const customerRef = window.sdk.collection("Customers").doc(customer.id);
 
                     // Update customer's purchase history and balance
                     await customerRef.update({
                         lastPurchase: new Date(),
-                        balance: window.firebase.firestore.FieldValue.increment(-cartTotal),
-                        orders: window.firebase.firestore.FieldValue.arrayUnion({
+                        balance: window.sdk.FieldValue.increment(-cartTotal),
+                        orders: window.sdk.FieldValue.arrayUnion({
                             id: targetOrderId,
                             amount: cartTotal,
                             date: new Date()
@@ -549,8 +549,8 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                 if (checkout) {
                     // If checkout mode, set paid flag based on payment mode
                     updateData = {
-                        paid: paymentMode !== 'CREDIT',
-                        payMode: paymentMode
+                        paid: mode !== 'CREDIT',
+                        payMode: mode
                     };
 
                     // Add customer details if a customer is selected
@@ -581,14 +581,14 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                     }
 
                     // If this is a CREDIT checkout, update the customer's balance
-                    if (paymentMode === 'CREDIT' && customer && customer.id) {
+                    if (mode === 'CREDIT' && customer && customer.id) {
                         const customerRef = window.sdk.collection("Customers").doc(customer.id);
 
                         // Update customer's purchase history and balance
                         await customerRef.update({
                             lastPurchase: new Date(),
-                            balance: window.firebase.firestore.FieldValue.increment(-cartTotal),
-                            orders: window.firebase.firestore.FieldValue.arrayUnion({
+                            balance: window.sdk.FieldValue.increment(-cartTotal),
+                            orders: window.sdk.FieldValue.arrayUnion({
                                 id: targetOrderId,
                                 amount: cartTotal,
                                 date: new Date()
@@ -624,7 +624,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
 
             // Show success message for order completion
             if (checkout) {
-                if (paymentMode === 'CREDIT') {
+                if (mode === 'CREDIT') {
                     showToast("Credit order completed!");
                 } else {
                     showToast("Order completed!");
@@ -654,7 +654,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                         // Print the bill
                         await window.BluetoothPrinting.printBill(targetOrderId);
 
-            // Show success message
+                        // Show success message
                         if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
                             window.ModalManager.showToast("Bill printed successfully", { type: "success" });
                         } else {
@@ -1415,7 +1415,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
             {/* The rest of the modals remain unchanged */}
             {/* Discount Modal, Instructions Modal, Customer Selection Modal */}
             {/* ... existing modal code ... */}
-                        </div>
+        </div>
     );
 }
 
