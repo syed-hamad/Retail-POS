@@ -62,22 +62,42 @@ function Customers() {
         try {
             setLoading(true);
             // Use the SDK to fetch customers as in the Flutter code
-            const customersSnapshot = await sdk.collection("Customers")
-                .get();
+            const customersQuery = sdk.collection("Customers");
 
-            const customersList = customersSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            // Cancel any existing listener
+            if (window.customersUnsubscribe) {
+                window.customersUnsubscribe();
+            }
 
-            setCustomers(customersList);
-            setLoading(false);
+            // Setup real-time listener
+            window.customersUnsubscribe = customersQuery.onSnapshot(snapshot => {
+                const customersList = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+
+                setCustomers(customersList);
+                setLoading(false);
+            }, error => {
+                console.error('Error listening to customers:', error);
+                setError('Failed to load customers');
+                setLoading(false);
+            });
         } catch (err) {
-            console.error('Error fetching customers:', err);
+            console.error('Error setting up customers listener:', err);
             setError('Failed to load customers');
             setLoading(false);
         }
     };
+
+    // Clean up listener when component unmounts
+    React.useEffect(() => {
+        return () => {
+            if (window.customersUnsubscribe) {
+                window.customersUnsubscribe();
+            }
+        };
+    }, []);
 
     // Filter customers based on search query and filter type
     const filteredCustomers = React.useMemo(() => {
@@ -108,17 +128,30 @@ function Customers() {
     // Function to export customers to CSV
     const exportAll = async () => {
         try {
-            // Prepare data for export - similar to Flutter code
+            // Check if we have customers to export
+            if (!customers || customers.length === 0) {
+                showToast("No customers available to export", "error");
+                return;
+            }
+
+            // Prepare data for export with safe handling of all fields
             const data = customers.map(c => ({
                 name: c.name || "",
                 phone: c.phone || "",
                 balance: c.balance || 0,
-                date: c.date ? new Date(c.date).toISOString() : ""
+                totalSpent: c.totalSpent || 0,
+                orderCount: c.orderCount || 0,
+                date: formatDateForExport(c.date)
             }));
 
-            // Create CSV content
+            // Create CSV content with safer string handling
             const headers = Object.keys(data[0]).join(',');
-            const rows = data.map(obj => Object.values(obj).map(val => typeof val === 'string' ? `"${val}"` : val).join(','));
+            const rows = data.map(obj =>
+                Object.values(obj).map(val => {
+                    if (val === null || val === undefined) return '""';
+                    return typeof val === 'string' ? `"${val.replace(/"/g, '""')}"` : val;
+                }).join(',')
+            );
             const csvContent = [headers, ...rows].join('\n');
 
             // Create download
@@ -132,17 +165,44 @@ function Customers() {
             link.click();
             document.body.removeChild(link);
 
-            showToast("Customers exported to CSV");
+            // Clean up the URL object
+            setTimeout(() => URL.revokeObjectURL(url), 100);
+
+            showToast(`${customers.length} customers exported to CSV`);
         } catch (error) {
             console.error("Error exporting customers:", error);
-            showToast("Failed to export customers", "error");
+            showToast(`Failed to export: ${error.message || "Unknown error"}`, "error");
+        }
+    };
+
+    // Helper to safely format dates for export
+    const formatDateForExport = (dateValue) => {
+        if (!dateValue) return "";
+
+        try {
+            // Handle Firestore timestamp objects
+            if (dateValue && typeof dateValue.toDate === 'function') {
+                return dateValue.toDate().toISOString();
+            }
+
+            // Handle JavaScript Date objects and strings
+            const date = new Date(dateValue);
+            if (!isNaN(date.getTime())) {
+                return date.toISOString();
+            }
+
+            // Return original if we can't parse it
+            return String(dateValue);
+        } catch (e) {
+            console.warn("Date formatting error:", e);
+            return "";
         }
     };
 
     // Search Bar Component
     const SearchBar = () => {
         return (
-            <div className="flex items-center mb-4 bg-white rounded-full shadow-sm overflow-hidden">
+            <div className="flex items-center bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
                 <div className="flex-1 relative">
                     <i className="ph ph-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
@@ -150,14 +210,15 @@ function Customers() {
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="Search customers"
-                        className="w-full pl-12 pr-4 py-3 border-none focus:outline-none"
+                        className="w-full pl-12 pr-4 py-3.5 border-none focus:outline-none text-gray-700"
                     />
                 </div>
-                <div className="px-4 flex items-center">
+                <div className="border-l border-gray-100 px-4 flex items-center">
                     <select
                         value={filterType}
                         onChange={(e) => setFilterType(e.target.value)}
-                        className="border-none bg-transparent outline-none text-gray-700 py-2 pr-8"
+                        className="border-none bg-transparent outline-none text-gray-700 py-2 pr-6 appearance-none"
+                        style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%23718096\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpath d=\'M6 9l6 6 6-6\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right center', paddingRight: '1.5rem' }}
                     >
                         <option value="all">All</option>
                         <option value="creditors">Creditors</option>
@@ -165,7 +226,7 @@ function Customers() {
                 </div>
                 {searchQuery && (
                     <button
-                        className="pr-4"
+                        className="pr-4 pl-2 hover:text-gray-700 transition-colors"
                         onClick={() => setSearchQuery('')}
                     >
                         <i className="ph ph-x text-gray-500" />
@@ -177,11 +238,12 @@ function Customers() {
 
     // "No Customers" empty state component
     const NoCustomers = () => (
-        <div className="text-center py-10">
+        <div className="text-center py-16 px-4 bg-white rounded-xl shadow-sm mt-4 border border-gray-100">
             <div className="mb-4">
-                <i className="ph ph-users text-5xl text-gray-300" />
+                <i className="ph ph-users text-6xl text-gray-200" />
             </div>
-            <h3 className="text-xl font-medium text-gray-500">No Customers yet.</h3>
+            <h3 className="text-xl font-medium text-gray-500 mb-2">No Customers yet</h3>
+            <p className="text-gray-400">Add your first customer to get started</p>
         </div>
     );
 
@@ -189,12 +251,12 @@ function Customers() {
     const ContextMenu = () => (
         <div className="relative">
             <button
-                className="p-2 rounded-full"
+                className="p-2.5 rounded-full hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-red-100"
                 onClick={() => document.getElementById('customer-actions-menu').classList.toggle('hidden')}
             >
                 <i className="ph ph-dots-three-vertical text-gray-700" />
             </button>
-            <div id="customer-actions-menu" className="absolute right-0 mt-2 z-10 hidden bg-white rounded-lg shadow-lg overflow-hidden w-40">
+            <div id="customer-actions-menu" className="absolute right-0 mt-2 z-10 hidden bg-white rounded-lg shadow-lg overflow-hidden w-48 border border-gray-100">
                 <ul className="py-1">
                     <li>
                         <button
@@ -202,10 +264,10 @@ function Customers() {
                                 document.getElementById('customer-actions-menu').classList.add('hidden');
                                 addCustomer();
                             }}
-                            className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center"
+                            className="w-full text-left px-4 py-2.5 hover:bg-gray-50 flex items-center text-gray-700"
                         >
-                            <i className="ph ph-user-plus mr-2 text-gray-500" />
-                            <span>New customer</span>
+                            <i className="ph ph-user-plus mr-3 text-gray-500" />
+                            <span>Add Customer</span>
                         </button>
                     </li>
                     <li>
@@ -214,10 +276,10 @@ function Customers() {
                                 document.getElementById('customer-actions-menu').classList.add('hidden');
                                 importCustomers();
                             }}
-                            className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center"
+                            className="w-full text-left px-4 py-2.5 hover:bg-gray-50 flex items-center text-gray-700"
                         >
-                            <i className="ph ph-upload-simple mr-2 text-gray-500" />
-                            <span>Import customers</span>
+                            <i className="ph ph-upload-simple mr-3 text-gray-500" />
+                            <span>Import Customers</span>
                         </button>
                     </li>
                     <li>
@@ -226,9 +288,9 @@ function Customers() {
                                 document.getElementById('customer-actions-menu').classList.add('hidden');
                                 exportAll();
                             }}
-                            className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center"
+                            className="w-full text-left px-4 py-2.5 hover:bg-gray-50 flex items-center text-gray-700"
                         >
-                            <i className="ph ph-download-simple mr-2 text-gray-500" />
+                            <i className="ph ph-download-simple mr-3 text-gray-500" />
                             <span>Export CSV</span>
                         </button>
                     </li>
@@ -243,15 +305,8 @@ function Customers() {
             const modal = window.ModalManager.createCenterModal({
                 id: 'import-success-modal',
                 title: `${fileCount} File(s) Uploaded`,
-                content: `
-                    <div class="text-center py-2">
-                        <div class="flex justify-center mb-4">
-                            <i class="ph ph-check-circle text-5xl text-green-500"></i>
-                        </div>
-                        <p class="text-gray-600 mb-4">We will inform you in app notification after your customers are added.</p>
-                    </div>
-                `,
-                actions: `<button class="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium rounded-lg transition-colors" id="import-success-ok">Done</button>`,
+                content: `<p class="text-gray-600 mb-4">We will inform you in app notification after your customers are added.</p>`,
+                actions: `<button class="w-full py-3 bg-red-500 text-white rounded-lg" id="import-success-ok">OK</button>`,
                 size: 'sm',
                 onShown: (modalControl) => {
                     document.getElementById('import-success-ok').addEventListener('click', () => {
@@ -274,16 +329,11 @@ function Customers() {
                 <div class="fixed inset-0 z-50 flex items-center justify-center">
                     <div class="fixed inset-0 bg-black bg-opacity-50"></div>
                     <div class="bg-white w-full max-w-sm rounded-xl shadow-lg overflow-hidden relative z-10 p-6">
-                        <div class="text-center">
-                            <div class="flex justify-center mb-4">
-                                <i class="ph ph-check-circle text-5xl text-green-500"></i>
-                            </div>
-                            <h3 class="text-xl font-medium mb-2">${fileCount} File(s) Uploaded</h3>
-                            <p class="text-gray-600 mb-4">We will inform you in app notification after your customers are added.</p>
-                            <button class="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium rounded-lg transition-colors" onclick="document.getElementById('import-success-modal').remove()">
-                                Done
-                            </button>
-                        </div>
+                        <h3 class="text-xl font-medium mb-2">${fileCount} File(s) Uploaded</h3>
+                        <p class="text-gray-600 mb-4">We will inform you in app notification after your customers are added.</p>
+                        <button class="w-full py-3 bg-red-500 text-white rounded-lg" onclick="document.getElementById('import-success-modal').remove()">
+                            OK
+                        </button>
                     </div>
                 </div>
             `;
@@ -303,7 +353,7 @@ function Customers() {
 
         // Create toast element
         const toast = document.createElement('div');
-        toast.className = `p-3 rounded-lg shadow-lg mb-2 flex items-center ${type === 'success' ? 'bg-green-50 text-green-800 border border-green-100' : 'bg-red-50 text-red-800 border border-red-100'}`;
+        toast.className = `p-3 rounded-lg shadow-lg mb-2 flex items-center ${type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
         toast.innerHTML = `
             <i class="ph ${type === 'success' ? 'ph-check-circle' : 'ph-x-circle'} mr-2"></i>
             <span>${message}</span>
@@ -323,13 +373,25 @@ function Customers() {
     const AddCustomerModal = () => {
         const [formData, setFormData] = React.useState({ name: '', phone: '' });
         const [submitting, setSubmitting] = React.useState(false);
+        const [error, setError] = React.useState(null);
 
         const handleSubmit = async (e) => {
             e.preventDefault();
-            if (!formData.name || !formData.phone) return;
+            if (!formData.name || !formData.phone) {
+                setError('Please fill all required fields');
+                return;
+            }
 
             try {
                 setSubmitting(true);
+                setError(null);
+
+                // Check if customer already exists
+                const existingCustomer = customers.find(c => c.phone === formData.phone);
+                if (existingCustomer) {
+                    setError('A customer with this phone number already exists');
+                    return;
+                }
 
                 // Generate an ID using phone and timestamp
                 const id = `${formData.phone.replace(/\s/g, '')}_${Date.now()}`;
@@ -339,7 +401,8 @@ function Customers() {
                     phone: formData.phone,
                     date: new Date(),
                     balance: 0,
-                    totalSpent: 0
+                    totalSpent: 0,
+                    orderCount: 0
                 });
 
                 setSubmitting(false);
@@ -348,7 +411,7 @@ function Customers() {
                 fetchCustomers(); // Refresh the list
             } catch (error) {
                 console.error("Error adding customer:", error);
-                showToast("Failed to add customer", "error");
+                setError('Failed to add customer. Please try again.');
                 setSubmitting(false);
             }
         };
@@ -363,8 +426,8 @@ function Customers() {
                         <form id="add-customer-form" class="p-2">
                             <div class="mb-6">
                                 <div class="flex justify-center mb-6">
-                                    <div class="bg-gray-100 rounded-full p-4">
-                                        <i class="ph ph-user-plus text-4xl text-gray-500"></i>
+                                    <div class="bg-blue-50 rounded-full p-4">
+                                        <i class="ph ph-user-plus text-4xl text-blue-500"></i>
                                     </div>
                                 </div>
                                 
@@ -377,8 +440,8 @@ function Customers() {
                                         <input
                                             type="text"
                                             id="customer-name-input"
-                                            class="w-full py-2.5 pl-10 pr-3 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
-                                            placeholder="Customer name"
+                                            class="w-full py-2.5 pl-10 pr-3 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                            placeholder="Enter customer name"
                                             required
                                         />
                                     </div>
@@ -393,8 +456,8 @@ function Customers() {
                                         <input
                                             type="tel"
                                             id="customer-phone-input"
-                                            class="w-full py-2.5 pl-10 pr-3 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
-                                            placeholder="Phone number"
+                                            class="w-full py-2.5 pl-10 pr-3 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                            placeholder="Enter phone number"
                                             required
                                         />
                                     </div>
@@ -414,7 +477,7 @@ function Customers() {
                             <button
                                 type="button"
                                 id="submit-customer-btn"
-                                class="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-md transition-colors"
+                                class="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors"
                             >
                                 Add Customer
                             </button>
@@ -432,9 +495,19 @@ function Customers() {
                         });
 
                         submitBtn.addEventListener('click', async () => {
-                            if (!nameInput.value || !phoneInput.value) return;
+                            if (!nameInput.value || !phoneInput.value) {
+                                window.ModalManager.showToast("Please fill all required fields", { type: "error" });
+                                return;
+                            }
 
                             try {
+                                // Check if customer already exists
+                                const existingCustomer = customers.find(c => c.phone === phoneInput.value);
+                                if (existingCustomer) {
+                                    window.ModalManager.showToast("A customer with this phone number already exists", { type: "error" });
+                                    return;
+                                }
+
                                 submitBtn.disabled = true;
                                 submitBtn.innerHTML = `<div class="flex justify-center items-center">
                                     <div class="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></div>
@@ -449,7 +522,8 @@ function Customers() {
                                     phone: phoneInput.value,
                                     date: new Date(),
                                     balance: 0,
-                                    totalSpent: 0
+                                    totalSpent: 0,
+                                    orderCount: 0
                                 });
 
                                 modalControl.close();
@@ -457,7 +531,7 @@ function Customers() {
                                 fetchCustomers(); // Refresh the list
                             } catch (error) {
                                 console.error("Error adding customer:", error);
-                                window.ModalManager.showToast("Failed to add customer", { type: "error" });
+                                window.ModalManager.showToast("Failed to add customer. Please try again.", { type: "error" });
                                 submitBtn.disabled = false;
                                 submitBtn.textContent = "Add Customer";
                             }
@@ -497,8 +571,8 @@ function Customers() {
                         </div>
 
                         <div className="flex justify-center mb-6">
-                            <div className="bg-gray-100 rounded-full p-4">
-                                <i className="ph ph-user-plus text-4xl text-gray-500"></i>
+                            <div className="bg-blue-50 rounded-full p-4">
+                                <i className="ph ph-user-plus text-4xl text-blue-500"></i>
                             </div>
                         </div>
 
@@ -513,8 +587,8 @@ function Customers() {
                                         type="text"
                                         value={formData.name}
                                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                        className="w-full py-2.5 pl-10 pr-3 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
-                                        placeholder="Customer name"
+                                        className="w-full py-2.5 pl-10 pr-3 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="Enter customer name"
                                         required
                                     />
                                 </div>
@@ -530,11 +604,12 @@ function Customers() {
                                         type="tel"
                                         value={formData.phone}
                                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                        className="w-full py-2.5 pl-10 pr-3 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
-                                        placeholder="Phone number"
+                                        className="w-full py-2.5 pl-10 pr-3 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="Enter phone number"
                                         required
                                     />
                                 </div>
+                                {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
                             </div>
 
                             <div className="flex space-x-3">
@@ -548,7 +623,7 @@ function Customers() {
                                 <button
                                     type="submit"
                                     disabled={submitting}
-                                    className="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-md transition-colors disabled:opacity-70"
+                                    className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors disabled:opacity-70"
                                 >
                                     {submitting ? (
                                         <div className="flex justify-center items-center">
@@ -568,16 +643,18 @@ function Customers() {
     // Import Customers Modal component
     const ImportCustomersModal = () => {
         const [uploading, setUploading] = React.useState(false);
+        const [error, setError] = React.useState(null);
 
         const handleFileUpload = async (e) => {
             const files = e.target.files;
             if (!files || files.length === 0) {
-                showToast("No files selected", "error");
+                setError('Please select at least one file');
                 return;
             }
 
             try {
                 setUploading(true);
+                setError(null);
 
                 // In real implementation, you would upload these files to your server
                 // for processing. For now, we'll simulate a successful upload.
@@ -591,7 +668,7 @@ function Customers() {
                 }, 2000);
             } catch (error) {
                 console.error("Error uploading files:", error);
-                showToast("Failed to upload files", "error");
+                setError('Failed to upload files. Please try again.');
                 setUploading(false);
             }
         };
@@ -611,31 +688,31 @@ function Customers() {
                             </div>
                             <div class="text-left mb-6">
                                 <div class="flex items-start mb-3">
-                                    <div class="bg-gray-100 rounded-full p-1 mr-3 mt-0.5">
-                                        <span class="flex items-center justify-center w-5 h-5 text-xs text-gray-700 font-medium">1</span>
+                                    <div class="bg-blue-50 rounded-full p-1 mr-3 mt-0.5">
+                                        <span class="flex items-center justify-center w-5 h-5 text-xs text-blue-600 font-medium">1</span>
                                     </div>
-                                    <p class="text-gray-600">Upload your customers pdf/image file here.</p>
+                                    <p class="text-gray-600">Upload your customers file (CSV, Excel, or PDF)</p>
                                 </div>
                                 <div class="flex items-start mb-3">
-                                    <div class="bg-gray-100 rounded-full p-1 mr-3 mt-0.5">
-                                        <span class="flex items-center justify-center w-5 h-5 text-xs text-gray-700 font-medium">2</span>
+                                    <div class="bg-blue-50 rounded-full p-1 mr-3 mt-0.5">
+                                        <span class="flex items-center justify-center w-5 h-5 text-xs text-blue-600 font-medium">2</span>
                                     </div>
-                                    <p class="text-gray-600">After all customers are added we will inform you in app notification.</p>
+                                    <p class="text-gray-600">We'll process your file and add customers automatically</p>
                                 </div>
                                 <div class="flex items-start">
-                                    <div class="bg-gray-100 rounded-full p-1 mr-3 mt-0.5">
-                                        <span class="flex items-center justify-center w-5 h-5 text-xs text-gray-700 font-medium">3</span>
+                                    <div class="bg-blue-50 rounded-full p-1 mr-3 mt-0.5">
+                                        <span class="flex items-center justify-center w-5 h-5 text-xs text-blue-600 font-medium">3</span>
                                     </div>
-                                    <p class="text-gray-600">Under 5 minutes your new customers will be added to your CRM.</p>
+                                    <p class="text-gray-600">You'll be notified when the import is complete</p>
                                 </div>
                             </div>
                             <div class="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50 mb-4">
-                                <label id="upload-files-btn" class="block w-full py-3 px-6 bg-gray-800 text-white rounded-md cursor-pointer hover:bg-gray-700 transition-colors">
+                                <label id="upload-files-btn" class="block w-full py-3 px-6 bg-blue-600 text-white rounded-md cursor-pointer hover:bg-blue-700 transition-colors">
                                     <i class="ph ph-file-arrow-up mr-2"></i>
                                     Choose Files
-                                    <input type="file" class="hidden" id="customer-files-input" accept=".jpg,.jpeg,.png,.pdf,.csv,.xlsx,.xls" multiple>
+                                    <input type="file" class="hidden" id="customer-files-input" accept=".csv,.xlsx,.xls,.pdf" multiple>
                                 </label>
-                                <p class="text-xs text-gray-500 mt-2">Supported formats: PDF, CSV, Excel, Images</p>
+                                <p class="text-xs text-gray-500 mt-2">Supported formats: CSV, Excel, PDF</p>
                             </div>
                         </div>
                     `,
@@ -661,14 +738,14 @@ function Customers() {
                         fileInput.addEventListener('change', async (e) => {
                             const files = e.target.files;
                             if (!files || files.length === 0) {
-                                window.ModalManager.showToast("No files selected", { type: "error" });
+                                window.ModalManager.showToast("Please select at least one file", { type: "error" });
                                 return;
                             }
 
                             try {
                                 // Show uploading state
                                 uploadBtn.classList.add('opacity-70');
-                                uploadBtn.classList.remove('hover:bg-gray-700');
+                                uploadBtn.classList.remove('hover:bg-blue-700');
                                 uploadBtn.innerHTML = `
                                     <div class="flex justify-center items-center">
                                         <div class="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></div>
@@ -684,9 +761,9 @@ function Customers() {
                                 }, 2000);
                             } catch (error) {
                                 console.error("Error uploading files:", error);
-                                window.ModalManager.showToast("Failed to upload files", { type: "error" });
+                                window.ModalManager.showToast("Failed to upload files. Please try again.", { type: "error" });
                                 uploadBtn.classList.remove('opacity-70');
-                                uploadBtn.classList.add('hover:bg-gray-700');
+                                uploadBtn.classList.add('hover:bg-blue-700');
                                 uploadBtn.innerHTML = `<i class="ph ph-file-arrow-up mr-2"></i> Choose Files`;
                                 uploadBtn.style.pointerEvents = 'auto';
                             }
@@ -729,27 +806,27 @@ function Customers() {
 
                     <div className="text-left mb-6">
                         <div className="flex items-start mb-3">
-                            <div className="bg-gray-100 rounded-full p-1 mr-3 mt-0.5">
-                                <span className="flex items-center justify-center w-5 h-5 text-xs text-gray-700 font-medium">1</span>
+                            <div className="bg-blue-50 rounded-full p-1 mr-3 mt-0.5">
+                                <span className="flex items-center justify-center w-5 h-5 text-xs text-blue-600 font-medium">1</span>
                             </div>
-                            <p className="text-gray-600">Upload your customers pdf/image file here.</p>
+                            <p className="text-gray-600">Upload your customers file (CSV, Excel, or PDF)</p>
                         </div>
                         <div className="flex items-start mb-3">
-                            <div className="bg-gray-100 rounded-full p-1 mr-3 mt-0.5">
-                                <span className="flex items-center justify-center w-5 h-5 text-xs text-gray-700 font-medium">2</span>
+                            <div className="bg-blue-50 rounded-full p-1 mr-3 mt-0.5">
+                                <span className="flex items-center justify-center w-5 h-5 text-xs text-blue-600 font-medium">2</span>
                             </div>
-                            <p className="text-gray-600">After all customers are added we will inform you in app notification.</p>
+                            <p className="text-gray-600">We'll process your file and add customers automatically</p>
                         </div>
                         <div className="flex items-start">
-                            <div className="bg-gray-100 rounded-full p-1 mr-3 mt-0.5">
-                                <span className="flex items-center justify-center w-5 h-5 text-xs text-gray-700 font-medium">3</span>
+                            <div className="bg-blue-50 rounded-full p-1 mr-3 mt-0.5">
+                                <span className="flex items-center justify-center w-5 h-5 text-xs text-blue-600 font-medium">3</span>
                             </div>
-                            <p className="text-gray-600">Under 5 minutes your new customers will be added to your CRM.</p>
+                            <p className="text-gray-600">You'll be notified when the import is complete</p>
                         </div>
                     </div>
 
                     <div className="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50 mb-4">
-                        <label className={`block w-full py-3 px-6 bg-gray-800 text-white rounded-md cursor-pointer transition-colors ${uploading ? 'opacity-70' : 'hover:bg-gray-700'}`}>
+                        <label className={`block w-full py-3 px-6 bg-blue-600 text-white rounded-md cursor-pointer transition-colors ${uploading ? 'opacity-70' : 'hover:bg-blue-700'}`}>
                             {uploading ? (
                                 <div className="flex justify-center items-center">
                                     <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></div>
@@ -764,13 +841,14 @@ function Customers() {
                             <input
                                 type="file"
                                 className="hidden"
-                                accept=".jpg,.jpeg,.png,.pdf,.csv,.xlsx,.xls"
+                                accept=".csv,.xlsx,.xls,.pdf"
                                 multiple
                                 onChange={handleFileUpload}
                                 disabled={uploading}
                             />
                         </label>
-                        <p className="text-xs text-gray-500 mt-2 text-center">Supported formats: PDF, CSV, Excel, Images</p>
+                        <p className="text-xs text-gray-500 mt-2 text-center">Supported formats: CSV, Excel, PDF</p>
+                        {error && <p className="mt-2 text-sm text-red-600 text-center">{error}</p>}
                     </div>
 
                     <button
@@ -823,14 +901,19 @@ function Customers() {
     return (
         <div className="bg-gray-50 min-h-screen">
             {/* Content */}
-            <div className="p-4">
-                <SearchBar />
+            <div className="p-4 max-w-3xl mx-auto">
+                <div className="flex justify-between items-center mb-6">
+                    <div className="flex-1 mr-4">
+                        <SearchBar />
+                    </div>
+                    <ContextMenu />
+                </div>
 
                 {/* Customer List */}
                 {customers.length === 0 ? (
                     <NoCustomers />
                 ) : (
-                    <div className="mt-2">
+                    <div className="space-y-3">
                         {filteredCustomers.map(customer => renderCustomerCard(customer))}
                     </div>
                 )}

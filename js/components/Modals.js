@@ -1015,24 +1015,11 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
 
         return (
             <div className="flex flex-col items-center justify-center h-full py-10 text-center">
-                <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-50 rounded-full flex items-center justify-center mb-4">
-                    <i className="ph ph-shopping-bag-open text-2xl text-red-500"></i>
+                <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mb-5">
+                    <i className="ph ph-shopping-bag text-4xl text-red-400"></i>
                 </div>
-                <h3 className="text-lg font-medium text-gray-700 mb-1">No Orders Yet</h3>
-                <p className="text-gray-500 max-w-sm mb-2">Add new orders using the button below</p>
-
-                <div className="text-xs text-gray-400 mb-6">
-                    <p>Looking for: {tableId ? `Table ${tableId}` : variant || 'Default'}</p>
-                    <p>Status filter: {orderStatus}</p>
-                </div>
-
-                <button
-                    onClick={handleAddNewOrder}
-                    className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg hover:from-red-700 hover:to-red-600 transition-colors flex items-center gap-2"
-                >
-                    <i className="ph ph-plus-circle"></i>
-                    <span>Create Order</span>
-                </button>
+                <h3 className="text-2xl font-medium text-gray-700 mb-2">No Orders Yet</h3>
+                <p className="text-gray-500 max-w-sm mb-8">Add new orders using the button below</p>
             </div>
         );
     };
@@ -1044,11 +1031,11 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
         return (
             <div
                 ref={menuRef}
-                className="absolute right-4 top-16 w-48 bg-white rounded-lg shadow-section border border-gray-200 overflow-hidden z-50"
+                className="absolute right-0 top-12 w-52 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden z-50"
             >
                 <div className="py-1">
                     <button
-                        className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
+                        className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3"
                         onClick={() => {
                             setIsMenuOpen(false);
                             handleShowQR();
@@ -1059,7 +1046,7 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
                     </button>
 
                     <button
-                        className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
+                        className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3"
                         onClick={() => {
                             if (confirm(`Are you sure you want to delete all orders for ${tableId || variant}?`)) {
                                 confirmDelete();
@@ -1072,7 +1059,7 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
                     </button>
 
                     <button
-                        className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
+                        className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3"
                         onClick={() => {
                             setIsMenuOpen(false);
                             showRenameRoomModal(tableId, variant);
@@ -1084,7 +1071,7 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
 
                     {tableId && (
                         <button
-                            className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
+                            className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3"
                             onClick={() => {
                                 if (confirm(`Are you sure you want to delete table ${tableId}?`)) {
                                     deleteTable(tableId);
@@ -1122,33 +1109,32 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
             <div className="absolute right-0 top-0 h-full w-full md:w-2/3 lg:w-1/2 bg-section-bg shadow-section overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="sticky top-0 bg-white border-b z-10">
                     <div className="p-4 flex items-center justify-between">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-xl font-semibold">{variant || `Table ${tableId}`}</h2>
-                            <div className="flex items-center gap-2">
+                        <h2 className="text-xl font-semibold">{variant || `Table ${tableId}`}</h2>
+                        <div className="flex items-center gap-3">
+                            <button
+                                className="p-2 hover:bg-gray-100 rounded-full"
+                                onClick={() => refreshCompletedOrders(true)}
+                                title="Refresh Orders"
+                            >
+                                <i className="ph ph-arrows-clockwise text-xl text-gray-600"></i>
+                            </button>
+                            <div className="relative" ref={menuRef}>
                                 <button
                                     className="p-2 hover:bg-gray-100 rounded-full"
-                                    onClick={() => refreshCompletedOrders(true)}
-                                    title="Refresh Orders"
+                                    onClick={() => setIsMenuOpen(!isMenuOpen)}
+                                    title="Menu"
                                 >
-                                    <i className="ph ph-arrows-clockwise text-xl"></i>
+                                    <i className="ph ph-dots-three-vertical text-xl text-gray-600"></i>
                                 </button>
-                                <button
-                                    onClick={handleClose}
-                                    className="p-2 hover:bg-gray-100 rounded-full"
-                                    title="Close"
-                                >
-                                    <i className="ph ph-x text-xl"></i>
-                                </button>
-                                <div className="relative" ref={menuRef}>
-                                    <button
-                                        className="p-2 hover:bg-gray-100 rounded-full"
-                                        onClick={() => setIsMenuOpen(!isMenuOpen)}
-                                    >
-                                        <i className="ph ph-dots-three-vertical text-xl"></i>
-                                    </button>
-                                    {isMenuOpen && renderContextMenu()}
-                                </div>
+                                {renderContextMenu()}
                             </div>
+                            <button
+                                onClick={handleClose}
+                                className="p-2 hover:bg-gray-100 rounded-full"
+                                title="Close"
+                            >
+                                <i className="ph ph-x text-xl text-gray-600"></i>
+                            </button>
                         </div>
                     </div>
 
@@ -1185,11 +1171,11 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
                             </div>
                             <div className="p-4 mt-auto">
                                 <button
-                                    className="w-full py-3 px-4 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg hover:from-red-700 hover:to-red-600 transition-colors flex items-center justify-center gap-2"
+                                    className="w-full py-3 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
                                     onClick={handleAddNewOrder}
                                 >
-                                    <i className="ph ph-plus-circle text-lg"></i>
-                                    Add New Order
+                                    <i className="ph ph-plus-circle text-xl"></i>
+                                    <span>Add New Order</span>
                                 </button>
                             </div>
                         </div>
@@ -1305,11 +1291,11 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
                             </div>
                             <div className="p-4 mt-auto border-t sticky bottom-0 bg-white">
                                 <button
-                                    className="w-full py-3 px-4 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg hover:from-red-700 hover:to-red-600 transition-colors flex items-center justify-center gap-2"
+                                    className="w-full py-3 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
                                     onClick={handleAddNewOrder}
                                 >
-                                    <i className="ph ph-plus-circle text-lg"></i>
-                                    Add New Order
+                                    <i className="ph ph-plus-circle text-xl"></i>
+                                    <span>Add New Order</span>
                                 </button>
                             </div>
                         </div>
@@ -3279,11 +3265,12 @@ function ContextMenu() {
 const renderContextMenu = () => {
     return (
         <div
-            className="absolute right-0 top-10 w-48 bg-white rounded-lg shadow-section border border-gray-200 overflow-hidden z-50"
+            ref={menuRef}
+            className="absolute right-0 top-12 w-52 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden z-50"
         >
             <div className="py-1">
                 <button
-                    className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
+                    className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3"
                     onClick={() => {
                         setIsMenuOpen(false);
                         handleShowQR();
@@ -3294,7 +3281,7 @@ const renderContextMenu = () => {
                 </button>
 
                 <button
-                    className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
+                    className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3"
                     onClick={() => {
                         if (confirm(`Are you sure you want to delete all orders for ${tableId || variant}?`)) {
                             confirmDelete();
@@ -3307,7 +3294,7 @@ const renderContextMenu = () => {
                 </button>
 
                 <button
-                    className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
+                    className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3"
                     onClick={() => {
                         setIsMenuOpen(false);
                         showRenameRoomModal(tableId, variant);
@@ -3319,7 +3306,7 @@ const renderContextMenu = () => {
 
                 {tableId && (
                     <button
-                        className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gradient-to-r hover:from-warm-bg hover:to-white flex items-center gap-2"
+                        className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3"
                         onClick={() => {
                             if (confirm(`Are you sure you want to delete table ${tableId}?`)) {
                                 deleteTable(tableId);

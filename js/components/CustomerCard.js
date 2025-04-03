@@ -1,10 +1,40 @@
 // Customer Card Component
 function CustomerCard({ customer }) {
+    // Setup state for real-time updates
+    const [customerData, setCustomerData] = React.useState(customer);
+    const [listener, setListener] = React.useState(null);
+
+    // Set up real-time listener when component mounts
+    React.useEffect(() => {
+        if (customer?.id) {
+            const unsubscribe = sdk.collection("Customers").doc(customer.id)
+                .onSnapshot(doc => {
+                    if (doc.exists) {
+                        setCustomerData({
+                            id: doc.id,
+                            ...doc.data()
+                        });
+                    }
+                }, error => {
+                    console.error("Error listening to customer in card:", error);
+                });
+
+            setListener(unsubscribe);
+
+            // Clean up listener when component unmounts
+            return () => {
+                if (unsubscribe) {
+                    unsubscribe();
+                }
+            };
+        }
+    }, [customer?.id]);
+
     // Handle null or undefined customer data with defaults
-    const name = customer?.name || "Unknown";
-    const phone = customer?.phone || "No phone";
-    const balance = customer?.balance || 0;
-    const totalSpent = customer?.totalSpent || 0;
+    const name = customerData?.name || "Unknown";
+    const phone = customerData?.phone || "No phone";
+    const balance = customerData?.balance || 0;
+    const totalSpent = customerData?.totalSpent || 0;
 
     // Format last order date
     const formatLastOrderDate = (date) => {
@@ -36,7 +66,7 @@ function CustomerCard({ customer }) {
         }
     };
 
-    const lastOrderDate = formatLastOrderDate(customer?.date);
+    const lastOrderDate = formatLastOrderDate(customerData?.date);
 
     // Handle phone call
     const handleCall = (e) => {
@@ -63,11 +93,11 @@ function CustomerCard({ customer }) {
         // Use waitForModalManager helper to ensure ModalManager is ready before proceeding
         waitForModalManager().then(() => {
             // Create a modal for customer details
-            showCustomerDetails(customer);
+            showCustomerDetails(customerData);
         }).catch(error => {
             console.error("Error opening customer details:", error);
             // Fallback to alert if modal can't be shown
-            alert(`Unable to show details for ${customer.name}. Please try again.`);
+            alert(`Unable to show details for ${customerData.name}. Please try again.`);
         });
     };
 

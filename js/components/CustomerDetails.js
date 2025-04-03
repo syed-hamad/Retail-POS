@@ -1,9 +1,57 @@
 // CustomerDetails Component
 function CustomerDetails() {
     // Instance properties
+    this.customerListener = null;
+    this.walletListener = null;
+
     this.showCustomerDetailsModal = function (customerData, existingModal = null) {
+        const self = this;
         // Use the existing modal if provided, otherwise create a new one
         let modal;
+
+        // Cancel any previous listeners
+        if (this.customerListener) {
+            this.customerListener();
+            this.customerListener = null;
+        }
+
+        if (this.walletListener) {
+            this.walletListener();
+            this.walletListener = null;
+        }
+
+        // Set up real-time listener for this customer
+        this.customerListener = sdk.collection("Customers").doc(customerData.id)
+            .onSnapshot(doc => {
+                if (doc.exists) {
+                    // Update the customer data
+                    const updatedData = {
+                        id: doc.id,
+                        ...doc.data()
+                    };
+
+                    // Update the UI with new customer data
+                    this.updateCustomerUI(updatedData, modal);
+
+                    // Update our reference to the customer data
+                    customerData = updatedData;
+                }
+            }, error => {
+                console.error("Error listening to customer updates:", error);
+            });
+
+        // Set up real-time listener for wallet transactions
+        this.walletListener = sdk.collection("Wallet")
+            .where("customerId", "==", customerData.id)
+            .onSnapshot(() => {
+                // When wallet changes, refresh transactions if transactions tab is active
+                const transactionsTab = document.getElementById('tab-transactions');
+                if (transactionsTab && transactionsTab.classList.contains('text-red-500')) {
+                    this.loadTransactions(customerData);
+                }
+            }, error => {
+                console.error("Error listening to wallet updates:", error);
+            });
 
         const modalContent = `
             <!-- Customer Info -->
@@ -80,7 +128,16 @@ function CustomerDetails() {
                 customClass: '',
                 closeOnBackdropClick: true,
                 onClose: () => {
-                    // Any cleanup code here
+                    // Clean up listener when modal is closed
+                    if (this.customerListener) {
+                        this.customerListener();
+                        this.customerListener = null;
+                    }
+
+                    if (this.walletListener) {
+                        this.walletListener();
+                        this.walletListener = null;
+                    }
                 }
             });
         }
@@ -322,11 +379,25 @@ function CustomerDetails() {
 
             const walletTrans = walletSnapshot.docs.map(doc => {
                 const data = doc.data();
+                // Handle both Firestore timestamp and JavaScript Date
+                let transactionDate;
+                if (data.date) {
+                    // Check if it's a Firestore timestamp (has toDate method)
+                    if (typeof data.date.toDate === 'function') {
+                        transactionDate = data.date.toDate();
+                    } else {
+                        // Handle it as a JavaScript Date or timestamp number
+                        transactionDate = new Date(data.date);
+                    }
+                } else {
+                    transactionDate = new Date();
+                }
+
                 return {
                     id: doc.id,
                     amount: data.amount || 0,
                     type: 'DEPOSIT',
-                    date: data.date ? new Date(data.date.toDate()) : new Date(),
+                    date: transactionDate,
                     description: `Deposited ₹${data.amount} in ${data.mode} payment.`,
                     balance: 0 // Will calculate
                 };
@@ -340,11 +411,25 @@ function CustomerDetails() {
 
             const orderTrans = ordersSnapshot.docs.map(doc => {
                 const data = doc.data();
+                // Handle both Firestore timestamp and JavaScript Date
+                let orderDate;
+                if (data.placeDate) {
+                    // Check if it's a Firestore timestamp (has toDate method)
+                    if (typeof data.placeDate.toDate === 'function') {
+                        orderDate = data.placeDate.toDate();
+                    } else {
+                        // Handle it as a JavaScript Date or timestamp number
+                        orderDate = new Date(data.placeDate);
+                    }
+                } else {
+                    orderDate = new Date();
+                }
+
                 return {
                     id: doc.id,
                     amount: data.total || 0,
                     type: 'CREDIT',
-                    date: data.placeDate ? new Date(data.placeDate.toDate()) : new Date(),
+                    date: orderDate,
                     description: `Items: ${data.description || ''}`,
                     balance: 0, // Will calculate
                     order: { id: doc.id, ...data }
@@ -382,10 +467,22 @@ function CustomerDetails() {
 
             return snapshot.docs.map(doc => {
                 const data = doc.data();
+                // Handle both Firestore timestamp and JavaScript Date
+                let placeDate = null;
+                if (data.placeDate) {
+                    // Check if it's a Firestore timestamp (has toDate method)
+                    if (typeof data.placeDate.toDate === 'function') {
+                        placeDate = data.placeDate.toDate();
+                    } else {
+                        // Handle it as a JavaScript Date or timestamp number
+                        placeDate = new Date(data.placeDate);
+                    }
+                }
+
                 return {
                     id: doc.id,
                     ...data,
-                    placeDate: data.placeDate ? new Date(data.placeDate.toDate()) : null
+                    placeDate: placeDate
                 };
             });
         } catch (error) {
@@ -478,11 +575,6 @@ function CustomerDetails() {
                             date: new Date()
                         });
 
-                        // Update customer balance
-                        await sdk.collection("Customers").doc(customerData.id).update({
-                            balance: Number(customerData.balance || 0) + Number(amount)
-                        });
-
                         // Show success message
                         window.ModalManager.showToast(`Added ₹${amount} to ${customerData.name}'s balance`);
 
@@ -490,7 +582,6 @@ function CustomerDetails() {
                         modalControl.close();
 
                         // Refresh data
-                        customerData.balance = Number(customerData.balance || 0) + Number(amount);
                         self.showCustomerDetailsModal(customerData);
 
                         // Refresh customers list in main page
@@ -601,6 +692,61 @@ function CustomerDetails() {
     // Use common toast
     this.showToast = function (message, type = "success") {
         window.ModalManager.showToast(message, { type });
+    };
+
+    // Update the customer UI when data changes
+    this.updateCustomerUI = function (customerData, modal) {
+        if (!modal) return;
+
+        // Update balance display
+        const balanceElement = modal.container.querySelector('.mt-4.p-4.bg-red-50 p.text-xl.font-bold');
+        if (balanceElement) {
+            balanceElement.className = `text-xl font-bold ${Number(customerData.balance || 0) < 0 ? 'text-red-600' : 'text-green-600'}`;
+            balanceElement.textContent = `₹${Number(customerData.balance || 0) < 0
+                ? `-${Math.abs(Number(customerData.balance || 0)).toLocaleString()}`
+                : (Number(customerData.balance || 0)).toLocaleString()}`;
+        }
+
+        // Check if we need to update reminder button visibility
+        const actionsContainer = modal.container.querySelector('.mt-4.p-4.bg-red-50 .flex.space-x-2');
+        if (actionsContainer) {
+            const hasReminderBtn = !!actionsContainer.querySelector('#send-reminder');
+            const shouldHaveReminderBtn = Number(customerData.balance || 0) < 0;
+
+            if (shouldHaveReminderBtn && !hasReminderBtn) {
+                // Add reminder button if needed
+                const reminderBtn = document.createElement('button');
+                reminderBtn.id = 'send-reminder';
+                reminderBtn.className = 'px-3 py-2 bg-red-500 text-white text-sm rounded-lg flex items-center hover:bg-red-600';
+                reminderBtn.innerHTML = '<i class="ph ph-paper-plane-tilt mr-1.5"></i>Send Reminder';
+                reminderBtn.addEventListener('click', () => {
+                    this.handleSendReminder(customerData);
+                });
+                actionsContainer.insertBefore(reminderBtn, actionsContainer.firstChild);
+            } else if (!shouldHaveReminderBtn && hasReminderBtn) {
+                // Remove reminder button if no longer needed
+                actionsContainer.querySelector('#send-reminder').remove();
+            }
+        }
+    };
+
+    // Clean up when modal is closed
+    this.closeModal = function () {
+        // Clear the listeners
+        if (this.customerListener) {
+            this.customerListener();
+            this.customerListener = null;
+        }
+
+        if (this.walletListener) {
+            this.walletListener();
+            this.walletListener = null;
+        }
+
+        if (this.modalControl) {
+            this.modalControl.close();
+            this.modalControl = null;
+        }
     };
 }
 
