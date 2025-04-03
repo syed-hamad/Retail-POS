@@ -354,7 +354,6 @@ function OrderGroupTile({ order, onAccept, onReject, onPrintBill }) {
 
 // Order Details Modal Component
 function OrderDetailsModal({ order, onClose, onAccept, onReject, onPrintBill }) {
-    const [isCustomerSearchOpen, setIsCustomerSearchOpen] = React.useState(false);
     const totalAmount = order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || item.qnt || 1)), 0) || 0;
     const taxAmount = totalAmount * 0.18; // Assuming 18% tax
     const finalAmount = totalAmount + taxAmount;
@@ -363,23 +362,6 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onPrintBill }) 
     const isNewOrder = order.currentStatus?.label === "PLACED";
     const isCompletedOrder = order.currentStatus?.label === "COMPLETED" || order.paid === true;
     const isProcessingOrder = order.currentStatus?.label === "KITCHEN";
-
-    // Handle selecting a customer
-    const handleSelectCustomer = async (customer) => {
-        try {
-            // Update the order with the selected customer
-            await sdk.orders.setCustomer(order.id, customer);
-
-            // Show success message
-            showToast(`Customer ${customer.name} assigned to order`);
-
-            // Close the modal
-            onClose();
-        } catch (err) {
-            console.error('Error assigning customer:', err);
-            showToast('Failed to assign customer', 'error');
-        }
-    };
 
     return (
         <div
@@ -417,16 +399,6 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onPrintBill }) 
                                     </p>
                                 </div>
                             </div>
-                            <button
-                                className="w-8 h-8 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setIsCustomerSearchOpen(true);
-                                }}
-                                title="Assign Customer"
-                            >
-                                <i className="ph ph-user-plus"></i>
-                            </button>
                         </div>
                         <div className="grid grid-cols-2 gap-3 mt-3">
                             <div className="bg-gradient-to-br from-gray-100 to-gray-50 p-2 rounded-lg">
@@ -591,22 +563,12 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onPrintBill }) 
                     </div>
                 </div>
             </div>
-
-            {/* Customer Search Modal */}
-            {isCustomerSearchOpen && (
-                <CustomerSearch
-                    isOpen={isCustomerSearchOpen}
-                    onClose={() => setIsCustomerSearchOpen(false)}
-                    onSelectCustomer={handleSelectCustomer}
-                />
-            )}
         </div>
     );
 }
 
 // Order Details Content Component for use with ModalManager
 function OrderDetailsContent({ order, modalControl, onAccept, onReject, onPrintBill }) {
-    const [isCustomerSearchOpen, setIsCustomerSearchOpen] = React.useState(false);
     const totalAmount = order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || item.qnt || 1)), 0) || 0;
     const taxAmount = totalAmount * 0.18; // Assuming 18% tax
     const finalAmount = totalAmount + taxAmount;
@@ -615,65 +577,6 @@ function OrderDetailsContent({ order, modalControl, onAccept, onReject, onPrintB
     const isNewOrder = order.currentStatus?.label === "PLACED";
     const isCompletedOrder = order.currentStatus?.label === "COMPLETED" || order.paid === true;
     const isProcessingOrder = order.currentStatus?.label === "KITCHEN";
-
-    // Handle selecting a customer
-    const handleSelectCustomer = async (customer) => {
-        try {
-            // Update the order with the selected customer
-            await sdk.orders.setCustomer(order.id, customer);
-
-            // Show success message
-            showToast(`Customer ${customer.name} assigned to order`);
-
-            // Close the modal
-            modalControl.close();
-        } catch (err) {
-            console.error('Error assigning customer:', err);
-            showToast('Failed to assign customer', 'error');
-        }
-    };
-
-    // Show customer search modal
-    const showCustomerSearch = () => {
-        if (window.ModalManager) {
-            const searchModal = window.ModalManager.createCenterModal({
-                id: 'customer-search-modal',
-                title: 'Select Customer',
-                content: `<div class="p-4 text-center">
-                            <div class="animate-spin inline-block w-8 h-8 border-4 border-red-500 border-t-transparent rounded-full"></div>
-                            <p class="mt-2">Loading customer search...</p>
-                         </div>`,
-                size: 'md',
-                zIndex: 60, // Higher z-index for modal on top of another modal
-                onShown: (modalControl) => {
-                    // Create a temporary container to render the React component
-                    const tempDiv = document.createElement('div');
-                    const originalCustomerSearch = window.CustomerSearch || CustomerSearch;
-
-                    ReactDOM.render(
-                        React.createElement(originalCustomerSearch, {
-                            isOpen: true,
-                            onClose: () => modalControl.close(),
-                            onSelectCustomer: (selectedCustomer) => {
-                                handleSelectCustomer(selectedCustomer);
-                                modalControl.close();
-                            }
-                        }),
-                        tempDiv,
-                        () => {
-                            // Extract just the content part of the rendered component
-                            // This removes the outer modal shell created by CustomerSearch
-                            const contentDiv = tempDiv.querySelector('.p-4') || tempDiv;
-                            modalControl.setContent(contentDiv.innerHTML);
-                        }
-                    );
-                }
-            });
-        } else {
-            // Fallback - use the original CustomerSearch modal directly
-            setIsCustomerSearchOpen(true);
-        }
-    };
 
     React.useEffect(() => {
         modalControl.setTitle('Order Details');
@@ -697,16 +600,6 @@ function OrderDetailsContent({ order, modalControl, onAccept, onReject, onPrintB
                             </p>
                         </div>
                     </div>
-                    <button
-                        className="w-8 h-8 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            showCustomerSearch();
-                        }}
-                        title="Assign Customer"
-                    >
-                        <i className="ph ph-user-plus"></i>
-                    </button>
                 </div>
                 <div className="grid grid-cols-2 gap-3 mt-3">
                     <div className="bg-gradient-to-br from-gray-100 to-gray-50 p-2 rounded-lg">
@@ -847,15 +740,6 @@ function OrderDetailsContent({ order, modalControl, onAccept, onReject, onPrintB
                     <i className="ph ph-printer"></i>
                     <span>Print Bill</span>
                 </button>
-            )}
-
-            {/* Only show the direct CustomerSearch component when not using ModalManager */}
-            {isCustomerSearchOpen && !window.ModalManager && (
-                <CustomerSearch
-                    isOpen={isCustomerSearchOpen}
-                    onClose={() => setIsCustomerSearchOpen(false)}
-                    onSelectCustomer={handleSelectCustomer}
-                />
             )}
         </div>
     );

@@ -1409,6 +1409,84 @@ function OrderView({ order, tableId, variant }) {
         }
     };
 
+    const handlePrintBill = async () => {
+        try {
+            // Try Bluetooth printing first if available
+            if (window.BluetoothPrinting && window.BluetoothPrinting.isSupported()) {
+                try {
+                    showToast("Select your Bluetooth printer from the list", "info");
+                    await window.BluetoothPrinting.printBill(order.id);
+                    showToast("Bill printed successfully via Bluetooth, order completed 👍", "success");
+
+                    // Refresh the page after successful printing
+                    if (window.refreshOrders && typeof window.refreshOrders === 'function') {
+                        window.refreshOrders();
+                    } else if (window.refreshData && typeof window.refreshData === 'function') {
+                        window.refreshData();
+                    }
+
+                    return true; // Exit if Bluetooth printing succeeds
+                } catch (btError) {
+                    console.error("Bluetooth printing failed:", btError);
+
+                    // If it's a user cancellation error
+                    if (btError.message.includes("Device selection cancelled") ||
+                        btError.message.includes("No printer selected") ||
+                        btError.name === "NotFoundError") {
+                        showToast("Printer selection cancelled", "info");
+                        return false;
+                    }
+
+                    // If it's a connection error, show helpful message
+                    if (btError.message.includes("No suitable service") ||
+                        btError.message.includes("No services found")) {
+                        showToast("Could not connect to printer. Make sure it's turned on and in pairing mode.", "error");
+                        return false;
+                    }
+
+                    // If it's an unsupported device error
+                    if (btError.name === "NetworkError" && btError.message.includes("Unsupported device") ||
+                        btError.message.includes("cannot be used for printing") ||
+                        btError.message.includes("not supported as a printer")) {
+                        showToast("This device cannot be used as a printer. Please select a compatible Bluetooth printer.", "error");
+                        return false;
+                    }
+
+                    // Fall through to update order status for other errors
+                    showToast("Bluetooth printing failed, marking order as completed", "warning");
+                }
+            }
+
+            // Update order status to COMPLETED
+            const orderRef = window.sdk.collection("Orders").doc(order.id);
+            await orderRef.update({
+                status: window.firebase.firestore.FieldValue.arrayUnion({
+                    label: "COMPLETED",
+                    date: new Date()
+                }),
+                currentStatus: {
+                    label: "COMPLETED",
+                    date: new Date()
+                }
+            });
+
+            showToast("Order completed 👍", "success");
+
+            // Refresh the page after updating the order
+            if (window.refreshOrders && typeof window.refreshOrders === 'function') {
+                window.refreshOrders();
+            } else if (window.refreshData && typeof window.refreshData === 'function') {
+                window.refreshData();
+            }
+
+            return true;
+        } catch (err) {
+            console.error('Error printing bill or completing order:', err);
+            showToast(`Failed: ${err.message}`, 'error');
+            return false;
+        }
+    };
+
     const handleBluetoothPrint = async () => {
         try {
             // This function is no longer needed as we've integrated Bluetooth printing into handlePrintKOT
@@ -1427,64 +1505,72 @@ function OrderView({ order, tableId, variant }) {
             checkoutContainer.className = 'fixed inset-0 z-50';
             document.body.appendChild(checkoutContainer);
 
-            // Convert order items to cart format expected by CheckoutSheet
-            const cart = {};
+            try {
+                // Convert order items to cart format expected by CheckoutSheet
+                const cart = {};
 
-            // Make sure order and order.items exist before trying to loop
-            if (order && Array.isArray(order.items)) {
-                order.items.forEach(item => {
-                    // Make sure item has required properties
-                    if (item && item.pid) {
-                        cart[item.pid] = {
-                            product: {
-                                id: item.pid,
-                                title: item.title || 'Unknown Item',
-                                price: item.price || 0,
-                                mrp: item.mrp || item.price || 0,
-                                imgs: item.thumb ? [item.thumb] : [],
-                                charges: [], // Initialize with empty array to prevent undefined errors
-                                cat: item.cat || 'Other',
-                                veg: item.veg || false
-                            },
-                            quantity: item.quantity || item.qnt || 1
-                        };
-                    }
-                });
+                // Make sure order and order.items exist before trying to loop
+                if (order && Array.isArray(order.items)) {
+                    order.items.forEach(item => {
+                        // Make sure item has required properties
+                        if (item && item.pid) {
+                            cart[item.pid] = {
+                                product: {
+                                    id: item.pid,
+                                    title: item.title || 'Unknown Item',
+                                    price: item.price || 0,
+                                    mrp: item.mrp || item.price || 0,
+                                    imgs: item.thumb ? [item.thumb] : [],
+                                    charges: [], // Initialize with empty array to prevent undefined errors
+                                    cat: item.cat || 'Other',
+                                    veg: item.veg || false
+                                },
+                                quantity: item.quantity || item.qnt || 1
+                            };
+                        }
+                    });
+                }
+
+                // Create a root element for React 18
+                const root = ReactDOM.createRoot(checkoutContainer);
+
+                // Render the CheckoutSheet component
+                root.render(
+                    React.createElement(window.CheckoutSheet, {
+                        cart: cart,
+                        clearCallback: async () => {
+                            // Cleanup and close
+                            root.unmount();
+                            if (document.body.contains(checkoutContainer)) {
+                                document.body.removeChild(checkoutContainer);
+                            }
+                            // Refresh orders list or page
+                            if (window.refreshOrders && typeof window.refreshOrders === 'function') {
+                                window.refreshOrders();
+                            } else if (window.refreshData && typeof window.refreshData === 'function') {
+                                window.refreshData();
+                            }
+                        },
+                        tableId: tableId,
+                        checkout: true,
+                        orderId: order ? order.id : null,
+                        priceVariant: variant,
+                        onClose: () => {
+                            // Cleanup
+                            root.unmount();
+                            if (document.body.contains(checkoutContainer)) {
+                                document.body.removeChild(checkoutContainer);
+                            }
+                        }
+                    })
+                );
+            } catch (error) {
+                console.error("Error rendering CheckoutSheet:", error);
+                if (document.body.contains(checkoutContainer)) {
+                    document.body.removeChild(checkoutContainer);
+                }
+                throw error;
             }
-
-            // Create a root element for React 18
-            const root = ReactDOM.createRoot(checkoutContainer);
-
-            // Render the CheckoutSheet component
-            root.render(
-                React.createElement(window.CheckoutSheet, {
-                    cart: cart,
-                    clearCallback: () => {
-                        // Cleanup and close
-                        root.unmount();
-                        if (document.body.contains(checkoutContainer)) {
-                            document.body.removeChild(checkoutContainer);
-                        }
-                        // Refresh orders list or page
-                        if (window.refreshOrders && typeof window.refreshOrders === 'function') {
-                            window.refreshOrders();
-                        } else if (window.refreshData && typeof window.refreshData === 'function') {
-                            window.refreshData();
-                        }
-                    },
-                    tableId: tableId,
-                    checkout: true,
-                    orderId: order ? order.id : null,
-                    priceVariant: variant,
-                    onClose: () => {
-                        // Cleanup
-                        root.unmount();
-                        if (document.body.contains(checkoutContainer)) {
-                            document.body.removeChild(checkoutContainer);
-                        }
-                    }
-                })
-            );
         } catch (error) {
             console.error("Error opening checkout:", error);
             showToast("Failed to open checkout", "error");

@@ -309,6 +309,18 @@ function OrderView({ order, tableId, variant, onClose }) {
                                 } catch (btError) {
                                     console.error("Bluetooth printing failed:", btError);
 
+                                    // If it's a user cancellation error
+                                    if (btError.message.includes("Device selection cancelled") ||
+                                        btError.message.includes("No printer selected") ||
+                                        btError.name === "NotFoundError") {
+                                        if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                            window.ModalManager.showToast("Printer selection cancelled", { type: "info" });
+                                        } else {
+                                            showToast("Printer selection cancelled", "info");
+                                        }
+                                        return;
+                                    }
+
                                     // If it's a connection error, show helpful message
                                     if (btError.message.includes("No suitable service") ||
                                         btError.message.includes("No services found")) {
@@ -320,12 +332,14 @@ function OrderView({ order, tableId, variant, onClose }) {
                                         return;
                                     }
 
-                                    // If user cancelled device selection
-                                    if (btError.name === "NotFoundError") {
+                                    // If it's an unsupported device error
+                                    if (btError.name === "NetworkError" && btError.message.includes("Unsupported device") ||
+                                        btError.message.includes("cannot be used for printing") ||
+                                        btError.message.includes("not supported as a printer")) {
                                         if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                            window.ModalManager.showToast("Printer selection cancelled", { type: "info" });
+                                            window.ModalManager.showToast("This device cannot be used as a printer. Please select a compatible Bluetooth printer.", { type: "error" });
                                         } else {
-                                            showToast("Printer selection cancelled", "info");
+                                            showToast("This device cannot be used as a printer. Please select a compatible Bluetooth printer.", "error");
                                         }
                                         return;
                                     }
