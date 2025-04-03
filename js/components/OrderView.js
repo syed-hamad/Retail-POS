@@ -30,6 +30,18 @@ function OrderView({ order, tableId, variant, onClose }) {
         }
     }, [order]);
 
+    // Calculate total item count for header display
+    const totalItemCount = React.useMemo(() => {
+        if (!order || !order.items) return 0;
+        return order.items.reduce((sum, item) => sum + (item.quantity || item.qnt || 1), 0);
+    }, [order]);
+
+    // Calculate unserved items for the top bar
+    const servedItemCount = React.useMemo(() => {
+        if (!order || !order.items) return 0;
+        return order.items.filter(item => item.served).reduce((sum, item) => sum + (item.quantity || item.qnt || 1), 0);
+    }, [order]);
+
     // Handle item serve status change
     const handleServeStatusChange = async (item, served) => {
         try {
@@ -189,39 +201,62 @@ function OrderView({ order, tableId, variant, onClose }) {
 
     return (
         <div className="bg-white rounded-xl shadow-lg p-4 mb-4" style={{ backgroundColor: "#fff8f8", borderRadius: "16px" }}>
-            {/* Order Header */}
-            <div className="flex items-center justify-between mb-4">
-                <div>
-                    <div className="flex items-center">
-                        <span className="text-lg font-bold text-gray-800">
-                            Bill No: <span className="text-red-500">#{order.billNo}</span>
-                        </span>
-                        <span className="ml-2 px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                            Served
-                        </span>
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600 mt-1">
-                        <span>{order.date?.toLocaleString()}</span>
-                        <span className="mx-2">•</span>
-                        <span>{order.servedItems}/{order.totalItems} items</span>
-                    </div>
+            {/* Order Header with Restaurant Name and Close Button */}
+            <div className="flex items-center justify-between mb-3 pb-2 border-b">
+                <div className="flex items-center">
+                    <h3 className="text-xl font-bold text-gray-800">
+                        {order.sourceName || "zomato"}
+                    </h3>
                 </div>
-                <button
-                    onClick={handleAddNewItems}
-                    className="p-3 text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                    aria-label="Add new items"
-                >
-                    <i className="ph ph-plus-circle text-2xl" />
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        className="p-2 hover:bg-gray-100 rounded-full"
+                        aria-label="Refresh"
+                    >
+                        <i className="ph ph-arrows-clockwise text-gray-600"></i>
+                    </button>
+                    <button
+                        onClick={onClose}
+                        className="p-2 hover:bg-gray-100 rounded-full"
+                        aria-label="Close"
+                    >
+                        <i className="ph ph-x text-gray-600 text-xl"></i>
+                    </button>
+                </div>
             </div>
 
-            {/* Progress Bar */}
+            {/* Items Served Progress Bar */}
             <div className="mb-4">
-                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className="flex items-center justify-between mb-1">
+                    <span className="text-gray-700 text-sm font-medium">{servedItemCount}/{totalItemCount} items served</span>
+                    <span className="text-gray-700 text-sm font-medium">{Math.round((servedItemCount / totalItemCount) * 100)}% complete</span>
+                </div>
+                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                     <div
                         className="h-full bg-red-500 transition-all duration-300"
-                        style={{ width: `${(order.servedItems / order.totalItems) * 100}%` }}
+                        style={{ width: `${(servedItemCount / totalItemCount) * 100}%` }}
                     />
+                </div>
+            </div>
+
+            {/* Bill Info */}
+            <div className="mb-5">
+                <div className="flex items-center justify-between mb-1">
+                    <div>
+                        <h3 className="text-gray-800 text-lg font-medium">Bill No: <span className="text-red-500">#{order.billNo}</span></h3>
+                        <div className="flex items-center text-sm text-gray-500 mt-1">
+                            <span>Just now</span>
+                            <span className="mx-2">•</span>
+                            <span className="flex items-center"><i className="ph ph-circle-fill text-red-500 mr-1 text-xs"></i> {servedItemCount}/{totalItemCount} items</span>
+                        </div>
+                    </div>
+                    <button
+                        onClick={handleAddNewItems}
+                        className="p-2 bg-white rounded-full text-red-500 shadow-sm border"
+                        aria-label="Add items"
+                    >
+                        <i className="ph ph-plus text-xl"></i>
+                    </button>
                 </div>
             </div>
 
@@ -243,7 +278,7 @@ function OrderView({ order, tableId, variant, onClose }) {
                                 className="w-full h-full object-cover"
                                 onError={(e) => {
                                     e.target.onerror = null;
-                                    e.target.src = 'https://via.placeholder.com/150';
+                                    e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="%23ccc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>';
                                 }}
                             />
                         </div>
@@ -369,14 +404,14 @@ function OrderView({ order, tableId, variant, onClose }) {
                             }
                         }
                     }}
-                    className="flex-1 py-2.5 border border-red-500 text-red-500 rounded-lg font-medium hover:bg-red-50 transition-colors"
+                    className="flex-1 py-2.5 border border-red-500 text-red-500 rounded-lg font-medium hover:bg-red-50 transition-colors flex items-center justify-center"
                 >
                     <i className="ph ph-printer mr-2"></i>
                     Print KOT
                 </button>
                 <button
                     onClick={openCheckoutSheet}
-                    className="flex-1 py-2.5 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition-colors"
+                    className="flex-1 py-2.5 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition-colors flex items-center justify-center"
                 >
                     <i className="ph ph-credit-card mr-2"></i>
                     Checkout
