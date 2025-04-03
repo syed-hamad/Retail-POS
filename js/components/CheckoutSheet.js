@@ -633,17 +633,28 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                 // After checkout is complete, automatically print the bill
                 if (window.BluetoothPrinting && window.BluetoothPrinting.isSupported()) {
                     try {
-                        // Show toast about printer selection
+                        // Check if we already have a printer connected
+                        const printerAlreadyConnected = !!window.BluetoothPrinting.characteristic;
+
+                        // Show appropriate toast message
                         if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                            window.ModalManager.showToast("Select your Bluetooth printer to print bill", { type: "info" });
+                            if (!printerAlreadyConnected) {
+                                window.ModalManager.showToast("Select your Bluetooth printer to print bill", { type: "info" });
+                            } else {
+                                window.ModalManager.showToast("Printing bill using connected printer...", { type: "info" });
+                            }
                         } else {
-                            showToast("Select your Bluetooth printer to print bill", "info");
+                            if (!printerAlreadyConnected) {
+                                showToast("Select your Bluetooth printer to print bill", "info");
+                            } else {
+                                showToast("Printing bill using connected printer...", "info");
+                            }
                         }
 
                         // Print the bill
                         await window.BluetoothPrinting.printBill(targetOrderId);
 
-                        // Show success message
+            // Show success message
                         if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
                             window.ModalManager.showToast("Bill printed successfully", { type: "success" });
                         } else {
@@ -1404,7 +1415,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
             {/* The rest of the modals remain unchanged */}
             {/* Discount Modal, Instructions Modal, Customer Selection Modal */}
             {/* ... existing modal code ... */}
-        </div>
+                        </div>
     );
 }
 

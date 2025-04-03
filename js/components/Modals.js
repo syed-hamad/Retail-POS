@@ -806,6 +806,10 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
     // Get orders directly from context without maintaining separate state
     const orders = getOrdersForSource(tableId, variant, orderStatus);
 
+    // State to track printer connection status
+    const [printerConnected, setPrinterConnected] = React.useState(false);
+    const [connectingPrinter, setConnectingPrinter] = React.useState(false);
+
     // Debug logging
     React.useEffect(() => {
         console.log(`[OrderRoom] Component mounted/updated for ${tableId ? `Table ${tableId}` : variant || 'Default'}`);
@@ -822,6 +826,78 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
             console.log(`[OrderRoom] No orders found. This might indicate a problem with filtering or data.`);
         }
     }, [orders, tableId, variant, orderStatus]);
+
+    // Attempt to connect to printer when the room is opened
+    React.useEffect(() => {
+        // Only attempt to connect if the modal is open, BluetoothPrinting is available, 
+        // and we're not already connected or in the process of connecting
+        if (isOpen &&
+            window.BluetoothPrinting &&
+            window.BluetoothPrinting.isSupported() &&
+            !printerConnected &&
+            !connectingPrinter) {
+
+            const connectToPrinter = async () => {
+                try {
+                    setConnectingPrinter(true);
+
+                    if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                        window.ModalManager.showToast("Select your Bluetooth printer", { type: "info" });
+                    } else {
+                        showToast("Select your Bluetooth printer", "info");
+                    }
+
+                    await window.BluetoothPrinting.connect();
+                    setPrinterConnected(true);
+
+                    if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                        window.ModalManager.showToast("Printer connected successfully", { type: "success" });
+                    } else {
+                        showToast("Printer connected successfully", "success");
+                    }
+                } catch (error) {
+                    console.error("Error connecting to printer:", error);
+
+                    // Don't show error for user cancellation
+                    if (error.name === "NotFoundError" ||
+                        error.message.includes("Device selection cancelled") ||
+                        error.message.includes("No printer selected")) {
+                        console.log("User cancelled printer selection");
+                    }
+                    // Show message for unsupported device
+                    else if (error.name === 'NetworkError' ||
+                        error.message.includes('not supported as a printer') ||
+                        error.message.includes('Unsupported device') ||
+                        error.message.includes('cannot be used for printing')) {
+                        if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                            window.ModalManager.showToast("The selected device is not a compatible printer", { type: "error" });
+                        } else {
+                            showToast("The selected device is not a compatible printer", "error");
+                        }
+                    }
+                    // Don't display any toast for user cancellation
+                } finally {
+                    setConnectingPrinter(false);
+                }
+            };
+
+            connectToPrinter();
+        }
+    }, [isOpen, printerConnected, connectingPrinter]);
+
+    // Disconnect printer when closing the room
+    React.useEffect(() => {
+        if (!isOpen && printerConnected && window.BluetoothPrinting) {
+            window.BluetoothPrinting.disconnect()
+                .then(() => {
+                    setPrinterConnected(false);
+                    console.log("Printer disconnected");
+                })
+                .catch(err => {
+                    console.error("Error disconnecting printer:", err);
+                });
+        }
+    }, [isOpen, printerConnected]);
 
     // Calculate totals for progress bar
     const totalItems = React.useMemo(() => {
@@ -1034,6 +1110,61 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
                 className="absolute right-0 top-12 w-52 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden z-50"
             >
                 <div className="py-1">
+                    {window.BluetoothPrinting && window.BluetoothPrinting.isSupported() && (
+                        <button
+                            className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                            onClick={() => {
+                                setIsMenuOpen(false);
+                                if (printerConnected) {
+                                    // Disconnect printer
+                                    window.BluetoothPrinting.disconnect()
+                                        .then(() => {
+                                            setPrinterConnected(false);
+                                            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                                window.ModalManager.showToast("Printer disconnected", { type: "info" });
+                                            } else {
+                                                showToast("Printer disconnected", "info");
+                                            }
+                                        })
+                                        .catch(err => {
+                                            console.error("Error disconnecting printer:", err);
+                                        });
+                                } else {
+                                    // Connect to printer
+                                    setConnectingPrinter(true);
+                                    window.BluetoothPrinting.connect()
+                                        .then(() => {
+                                            setPrinterConnected(true);
+                                            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                                window.ModalManager.showToast("Printer connected successfully", { type: "success" });
+                                            } else {
+                                                showToast("Printer connected successfully", "success");
+                                            }
+                                        })
+                                        .catch(error => {
+                                            console.error("Error connecting to printer:", error);
+                                            // Only show error messages for non-cancellation errors
+                                            if (!error.name === "NotFoundError" &&
+                                                !error.message.includes("Device selection cancelled") &&
+                                                !error.message.includes("No printer selected")) {
+                                                if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                                    window.ModalManager.showToast("Error connecting to printer", { type: "error" });
+                                                } else {
+                                                    showToast("Error connecting to printer", "error");
+                                                }
+                                            }
+                                        })
+                                        .finally(() => {
+                                            setConnectingPrinter(false);
+                                        });
+                                }
+                            }}
+                        >
+                            <i className={`ph ph-printer ${printerConnected ? 'text-green-500' : 'text-red-500'}`}></i>
+                            <span>{printerConnected ? 'Disconnect Printer' : 'Connect Printer'}</span>
+                        </button>
+                    )}
+
                     <button
                         className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3"
                         onClick={() => {
@@ -1111,6 +1242,17 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
                     <div className="p-4 flex items-center justify-between">
                         <h2 className="text-xl font-semibold">{variant || `Table ${tableId}`}</h2>
                         <div className="flex items-center gap-3">
+                            {window.BluetoothPrinting && window.BluetoothPrinting.isSupported() && (
+                                <div
+                                    className={`flex items-center ${printerConnected ? 'text-green-600' : 'text-gray-400'}`}
+                                    title={printerConnected ? 'Printer connected' : 'Printer not connected'}
+                                >
+                                    <i className="ph ph-printer text-xl"></i>
+                                    {connectingPrinter && (
+                                        <div className="ml-1 w-3 h-3 border-2 border-t-transparent border-gray-400 rounded-full animate-spin"></div>
+                                    )}
+                                </div>
+                            )}
                             <button
                                 className="p-2 hover:bg-gray-100 rounded-full"
                                 onClick={() => refreshCompletedOrders(true)}
@@ -3355,6 +3497,61 @@ const renderContextMenu = () => {
             className="absolute right-0 top-12 w-52 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden z-50"
         >
             <div className="py-1">
+                {window.BluetoothPrinting && window.BluetoothPrinting.isSupported() && (
+                    <button
+                        className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                        onClick={() => {
+                            setIsMenuOpen(false);
+                            if (printerConnected) {
+                                // Disconnect printer
+                                window.BluetoothPrinting.disconnect()
+                                    .then(() => {
+                                        setPrinterConnected(false);
+                                        if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                            window.ModalManager.showToast("Printer disconnected", { type: "info" });
+                                        } else {
+                                            showToast("Printer disconnected", "info");
+                                        }
+                                    })
+                                    .catch(err => {
+                                        console.error("Error disconnecting printer:", err);
+                                    });
+                            } else {
+                                // Connect to printer
+                                setConnectingPrinter(true);
+                                window.BluetoothPrinting.connect()
+                                    .then(() => {
+                                        setPrinterConnected(true);
+                                        if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                            window.ModalManager.showToast("Printer connected successfully", { type: "success" });
+                                        } else {
+                                            showToast("Printer connected successfully", "success");
+                                        }
+                                    })
+                                    .catch(error => {
+                                        console.error("Error connecting to printer:", error);
+                                        // Only show error messages for non-cancellation errors
+                                        if (!error.name === "NotFoundError" &&
+                                            !error.message.includes("Device selection cancelled") &&
+                                            !error.message.includes("No printer selected")) {
+                                            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                                window.ModalManager.showToast("Error connecting to printer", { type: "error" });
+                                            } else {
+                                                showToast("Error connecting to printer", "error");
+                                            }
+                                        }
+                                    })
+                                    .finally(() => {
+                                        setConnectingPrinter(false);
+                                    });
+                            }
+                        }}
+                    >
+                        <i className={`ph ph-printer ${printerConnected ? 'text-green-500' : 'text-red-500'}`}></i>
+                        <span>{printerConnected ? 'Disconnect Printer' : 'Connect Printer'}</span>
+                    </button>
+                )}
+
                 <button
                     className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3"
                     onClick={() => {

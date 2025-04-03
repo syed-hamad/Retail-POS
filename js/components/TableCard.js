@@ -363,6 +363,18 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onPrintBill }) 
     const isCompletedOrder = order.currentStatus?.label === "COMPLETED" || order.paid === true;
     const isProcessingOrder = order.currentStatus?.label === "KITCHEN";
 
+    // Get payment mode display name
+    const getPaymentModeDisplay = (payMode) => {
+        if (!payMode) return "Not Paid";
+
+        switch (payMode.toUpperCase()) {
+            case 'CASH': return 'Cash Payment';
+            case 'DIGITAL': return 'Digital Payment';
+            case 'CREDIT': return 'Credit Payment';
+            default: return payMode;
+        }
+    };
+
     return (
         <div
             className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-end"
@@ -473,6 +485,18 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onPrintBill }) 
                                 <span className="font-medium">Grand Total</span>
                                 <span className="font-semibold text-red-600">₹{finalAmount.toFixed(2)}</span>
                             </div>
+                            {order.payMode && (
+                                <div className="flex justify-between items-center pt-1 text-xs">
+                                    <span className="text-gray-600">Payment Method</span>
+                                    <span className={`font-medium px-2 py-0.5 rounded-full ${order.payMode === 'CASH' ? 'bg-green-50 text-green-600' :
+                                        order.payMode === 'DIGITAL' ? 'bg-blue-50 text-blue-600' :
+                                            order.payMode === 'CREDIT' ? 'bg-orange-50 text-orange-600' :
+                                                'bg-gray-50 text-gray-600'
+                                        }`}>
+                                        {getPaymentModeDisplay(order.payMode)}
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -537,9 +561,9 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onPrintBill }) 
                                         onPrintBill && onPrintBill();
                                         onClose();
                                     }}
-                                    className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg flex items-center justify-center gap-1.5 hover:from-blue-700 hover:to-blue-600 transition-colors text-sm font-medium shadow-sm"
+                                    className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg flex items-center justify-center gap-2 hover:from-blue-700 hover:to-blue-600 transition-colors text-sm font-medium shadow-sm"
                                 >
-                                    <i className="ph ph-printer"></i>
+                                    <i className="ph ph-printer text-lg"></i>
                                     <span>Print Kitchen Order</span>
                                 </button>
                             </div>
@@ -553,9 +577,9 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onPrintBill }) 
                                         onPrintBill && onPrintBill();
                                         onClose();
                                     }}
-                                    className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg flex items-center justify-center gap-1.5 hover:from-blue-700 hover:to-blue-600 transition-colors text-sm font-medium shadow-sm"
+                                    className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg flex items-center justify-center gap-2 hover:from-blue-700 hover:to-blue-600 transition-colors text-sm font-medium shadow-sm"
                                 >
-                                    <i className="ph ph-printer"></i>
+                                    <i className="ph ph-printer text-lg"></i>
                                     <span>Print Bill</span>
                                 </button>
                             </div>
@@ -568,7 +592,7 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onPrintBill }) 
 }
 
 // Order Details Content Component for use with ModalManager
-function OrderDetailsContent({ order, modalControl, onAccept, onReject, onPrintBill }) {
+function OrderDetailsContent({ order, modalControl }) {
     const totalAmount = order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || item.qnt || 1)), 0) || 0;
     const taxAmount = totalAmount * 0.18; // Assuming 18% tax
     const finalAmount = totalAmount + taxAmount;
@@ -577,6 +601,18 @@ function OrderDetailsContent({ order, modalControl, onAccept, onReject, onPrintB
     const isNewOrder = order.currentStatus?.label === "PLACED";
     const isCompletedOrder = order.currentStatus?.label === "COMPLETED" || order.paid === true;
     const isProcessingOrder = order.currentStatus?.label === "KITCHEN";
+
+    // Get payment mode display name
+    const getPaymentModeDisplay = (payMode) => {
+        if (!payMode) return "Not Paid";
+
+        switch (payMode.toUpperCase()) {
+            case 'CASH': return 'Cash Payment';
+            case 'DIGITAL': return 'Digital Payment';
+            case 'CREDIT': return 'Credit Payment';
+            default: return payMode;
+        }
+    };
 
     React.useEffect(() => {
         modalControl.setTitle('Order Details');
@@ -674,6 +710,18 @@ function OrderDetailsContent({ order, modalControl, onAccept, onReject, onPrintB
                         <span className="font-medium">Grand Total</span>
                         <span className="font-semibold text-red-600">₹{finalAmount.toFixed(2)}</span>
                     </div>
+                    {order.payMode && (
+                        <div className="flex justify-between items-center pt-1 text-xs">
+                            <span className="text-gray-600">Payment Method</span>
+                            <span className={`font-medium px-2 py-0.5 rounded-full ${order.payMode === 'CASH' ? 'bg-green-50 text-green-600' :
+                                    order.payMode === 'DIGITAL' ? 'bg-blue-50 text-blue-600' :
+                                        order.payMode === 'CREDIT' ? 'bg-orange-50 text-orange-600' :
+                                            'bg-gray-50 text-gray-600'
+                                }`}>
+                                {getPaymentModeDisplay(order.payMode)}
+                            </span>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -706,8 +754,8 @@ function OrderDetailsContent({ order, modalControl, onAccept, onReject, onPrintB
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                onAccept && onAccept();
                                 modalControl.close();
+                                modalControl.acceptOrder && modalControl.acceptOrder();
                             }}
                             className="flex-1 py-2.5 bg-gradient-to-r from-green-600 to-green-500 text-white rounded-lg flex items-center justify-center gap-1.5 hover:from-green-700 hover:to-green-600 transition-colors text-sm font-medium shadow-sm"
                         >
@@ -717,8 +765,8 @@ function OrderDetailsContent({ order, modalControl, onAccept, onReject, onPrintB
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                onReject && onReject();
                                 modalControl.close();
+                                modalControl.rejectOrder && modalControl.rejectOrder();
                             }}
                             className="flex-1 py-2.5 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg flex items-center justify-center gap-1.5 hover:from-red-700 hover:to-red-600 transition-colors text-sm font-medium shadow-sm"
                         >
@@ -729,15 +777,30 @@ function OrderDetailsContent({ order, modalControl, onAccept, onReject, onPrintB
                 </div>
             )}
 
+            {isProcessingOrder && (
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        modalControl.close();
+                        modalControl.printKOT && modalControl.printKOT();
+                    }}
+                    className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg flex items-center justify-center gap-2 hover:from-blue-700 hover:to-blue-600 transition-colors text-sm font-medium shadow-sm mt-2"
+                >
+                    <i className="ph ph-printer text-lg"></i>
+                    <span>Print Kitchen Order</span>
+                </button>
+            )}
+
             {isCompletedOrder && (
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
-                        onPrintBill && onPrintBill();
+                        modalControl.close();
+                        modalControl.printBill && modalControl.printBill();
                     }}
-                    className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg flex items-center justify-center gap-1.5 hover:from-blue-700 hover:to-blue-600 transition-colors text-sm font-medium shadow-sm mt-2"
+                    className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg flex items-center justify-center gap-2 hover:from-blue-700 hover:to-blue-600 transition-colors text-sm font-medium shadow-sm mt-2"
                 >
-                    <i className="ph ph-printer"></i>
+                    <i className="ph ph-printer text-lg"></i>
                     <span>Print Bill</span>
                 </button>
             )}
