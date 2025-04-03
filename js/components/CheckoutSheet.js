@@ -662,23 +662,16 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                                 showToast("Printer selection cancelled", "info");
                             }
                         }
-                        // If it's a connection error, show helpful message
+                        // If it's a connection error or unsupported device, show helpful message
                         else if (btError.message.includes("No suitable service") ||
-                            btError.message.includes("No services found")) {
-                            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                window.ModalManager.showToast("Could not connect to printer. Make sure it's turned on and in pairing mode.", { type: "error" });
-                            } else {
-                                showToast("Could not connect to printer. Make sure it's turned on and in pairing mode.", "error");
-                            }
-                        }
-                        // If it's an unsupported device error
-                        else if (btError.name === "NetworkError" && btError.message.includes("Unsupported device") ||
+                            btError.message.includes("No services found") ||
+                            btError.message.includes("not supported as a printer") ||
                             btError.message.includes("cannot be used for printing") ||
-                            btError.message.includes("not supported as a printer")) {
+                            (btError.name === 'NetworkError' && btError.message.includes("Unsupported device"))) {
                             if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                window.ModalManager.showToast("This device cannot be used as a printer. Please select a compatible Bluetooth printer.", { type: "error" });
+                                window.ModalManager.showToast("Could not connect to printer. Please select a compatible thermal printer.", { type: "error" });
                             } else {
-                                showToast("This device cannot be used as a printer. Please select a compatible Bluetooth printer.", "error");
+                                showToast("Could not connect to printer. Please select a compatible thermal printer.", "error");
                             }
                         }
                     }

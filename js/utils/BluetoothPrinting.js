@@ -65,63 +65,71 @@ class BluetoothPrinting {
 
             console.log('Device selected:', this.device.name || 'Unknown device');
 
-            // Connect to GATT server
+            // Connect to GATT server and retrieve services
+            let server;
+            let services;
+
             try {
-                const server = await this.device.gatt.connect();
+                // Connect to GATT server
+                server = await this.device.gatt.connect();
                 console.log('Connected to GATT server');
 
                 // Get all available services
-                const services = await server.getPrimaryServices();
+                services = await server.getPrimaryServices();
                 console.log('Available services:', services.map(s => s.uuid));
 
                 if (services.length === 0) {
                     throw new Error('No services found on the device');
                 }
+            } catch (connectionError) {
+                console.error('Network or connection error:', connectionError);
 
-                // Try to find a service we can use for printing
-                let service = null;
-                let characteristic = null;
-
-                // Try each service to find a writable characteristic
-                for (const s of services) {
-                    try {
-                        console.log(`Exploring service ${s.uuid}...`);
-                        const chars = await s.getCharacteristics();
-                        console.log(`Found ${chars.length} characteristics in service ${s.uuid}`);
-
-                        // Find a writable characteristic
-                        const writableChar = chars.find(c =>
-                            c.properties.write || c.properties.writeWithoutResponse
-                        );
-
-                        if (writableChar) {
-                            service = s;
-                            characteristic = writableChar;
-                            break;
-                        }
-                    } catch (e) {
-                        console.log(`Error exploring service ${s.uuid}:`, e);
-                    }
+                // Handle specific error types with more helpful messages
+                if (connectionError.name === 'NetworkError' ||
+                    connectionError.message.includes('Unsupported device')) {
+                    throw new Error('This device is not supported as a printer. Please select a compatible Bluetooth printer.');
                 }
 
-                if (!service || !characteristic) {
-                    throw new Error('No suitable service or characteristic found for printing. Make sure your printer is turned on and in pairing mode.');
-                }
-
-                console.log('Using service:', service.uuid);
-                console.log('Using characteristic:', characteristic.uuid);
-
-                this.characteristic = characteristic;
-                this.connected = true;
-                return true;
-            } catch (gattError) {
-                // Handle the "Unsupported device" error
-                if (gattError.name === "NetworkError" && gattError.message.includes("Unsupported device")) {
-                    console.error("Network Error: Unsupported device");
-                    throw new Error("This device is not supported as a printer. Please select a compatible Bluetooth printer.");
-                }
-                throw gattError;
+                // Re-throw the error if it doesn't match specific cases
+                throw connectionError;
             }
+
+            // Try to find a service we can use for printing
+            let service = null;
+            let characteristic = null;
+
+            // Try each service to find a writable characteristic
+            for (const s of services) {
+                try {
+                    console.log(`Exploring service ${s.uuid}...`);
+                    const chars = await s.getCharacteristics();
+                    console.log(`Found ${chars.length} characteristics in service ${s.uuid}`);
+
+                    // Find a writable characteristic
+                    const writableChar = chars.find(c =>
+                        c.properties.write || c.properties.writeWithoutResponse
+                    );
+
+                    if (writableChar) {
+                        service = s;
+                        characteristic = writableChar;
+                        break;
+                    }
+                } catch (e) {
+                    console.log(`Error exploring service ${s.uuid}:`, e);
+                }
+            }
+
+            if (!service || !characteristic) {
+                throw new Error('No suitable service or characteristic found for printing. Make sure your printer is turned on and in pairing mode.');
+            }
+
+            console.log('Using service:', service.uuid);
+            console.log('Using characteristic:', characteristic.uuid);
+
+            this.characteristic = characteristic;
+            this.connected = true;
+            return true;
         } catch (error) {
             console.error('Error connecting to printer:', error);
             this.connected = false;
@@ -193,9 +201,10 @@ class BluetoothPrinting {
                     if (connectError.message.includes("Device selection cancelled")) {
                         throw new Error("Printing cancelled: No printer selected");
                     }
-                    // Handle unsupported device error
-                    if (connectError.name === "NetworkError" && connectError.message.includes("Unsupported device") ||
-                        connectError.message.includes("not supported as a printer")) {
+                    // Handle unsupported device errors with a friendly message
+                    if (connectError.name === 'NetworkError' ||
+                        connectError.message.includes('not supported as a printer') ||
+                        connectError.message.includes('Unsupported device')) {
                         throw new Error("This device cannot be used for printing. Please select a compatible Bluetooth printer.");
                     }
                     throw connectError;
@@ -238,9 +247,10 @@ class BluetoothPrinting {
                     if (connectError.message.includes("Device selection cancelled")) {
                         throw new Error("Printing cancelled: No printer selected");
                     }
-                    // Handle unsupported device error
-                    if (connectError.name === "NetworkError" && connectError.message.includes("Unsupported device") ||
-                        connectError.message.includes("not supported as a printer")) {
+                    // Handle unsupported device errors with a friendly message
+                    if (connectError.name === 'NetworkError' ||
+                        connectError.message.includes('not supported as a printer') ||
+                        connectError.message.includes('Unsupported device')) {
                         throw new Error("This device cannot be used for printing. Please select a compatible Bluetooth printer.");
                     }
                     throw connectError;

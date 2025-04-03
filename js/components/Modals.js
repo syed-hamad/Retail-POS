@@ -1377,16 +1377,21 @@ function OrderView({ order, tableId, variant }) {
                 } catch (btError) {
                     console.error("Bluetooth printing failed:", btError);
 
-                    // If it's a connection error, show helpful message
-                    if (btError.message.includes("No suitable service") ||
-                        btError.message.includes("No services found")) {
-                        showToast("Could not connect to printer. Make sure it's turned on and in pairing mode.", "error");
+                    // If it's a user cancellation error
+                    if (btError.message.includes("Device selection cancelled") ||
+                        btError.message.includes("No printer selected") ||
+                        btError.name === "NotFoundError") {
+                        showToast("Printer selection cancelled", "info");
                         return;
                     }
 
-                    // If user cancelled device selection
-                    if (btError.name === "NotFoundError") {
-                        showToast("Printer selection cancelled", "info");
+                    // If it's a connection error or unsupported device, show helpful message
+                    if (btError.message.includes("No suitable service") ||
+                        btError.message.includes("No services found") ||
+                        btError.message.includes("not supported as a printer") ||
+                        btError.message.includes("cannot be used for printing") ||
+                        (btError.name === 'NetworkError' && btError.message.includes("Unsupported device"))) {
+                        showToast("Could not connect to printer. Please select a compatible thermal printer.", "error");
                         return;
                     }
 
@@ -1437,18 +1442,13 @@ function OrderView({ order, tableId, variant }) {
                         return false;
                     }
 
-                    // If it's a connection error, show helpful message
+                    // If it's a connection error or unsupported device, show helpful message
                     if (btError.message.includes("No suitable service") ||
-                        btError.message.includes("No services found")) {
-                        showToast("Could not connect to printer. Make sure it's turned on and in pairing mode.", "error");
-                        return false;
-                    }
-
-                    // If it's an unsupported device error
-                    if (btError.name === "NetworkError" && btError.message.includes("Unsupported device") ||
+                        btError.message.includes("No services found") ||
+                        btError.message.includes("not supported as a printer") ||
                         btError.message.includes("cannot be used for printing") ||
-                        btError.message.includes("not supported as a printer")) {
-                        showToast("This device cannot be used as a printer. Please select a compatible Bluetooth printer.", "error");
+                        (btError.name === 'NetworkError' && btError.message.includes("Unsupported device"))) {
+                        showToast("Could not connect to printer. Please select a compatible thermal printer.", "error");
                         return false;
                     }
 
