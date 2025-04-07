@@ -16,8 +16,8 @@ function SidebarNav({ tabs, activeTab, setActiveTab }) {
                         )}
                     </div>
                     <div className="ml-3">
-                        <h2 className="text-xl font-bold text-gray-800">{window.sdk?.profile?.businessName || window.useProfile?.()?.businessName || "Liquid POS"}</h2>
-                        <p className="text-sm text-gray-500">{window.sdk?.profile?.email || window.useProfile?.()?.email || "Restaurant Management"}</p>
+                        <h2 className="text-xl font-bold text-gray-800">{window.useProfile?.()?.businessName || "Liquid POS"}</h2>
+                        <p className="text-sm text-gray-500">{window.useProfile?.()?.phone || "Restaurant Management"}</p>
                     </div>
                 </div>
                 <div className="flex flex-col space-y-2">

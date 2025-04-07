@@ -1351,6 +1351,1099 @@ function Dashboard() {
         }
     };
 
+    // Handle access role management
+    const handleAccessRoleManagement = () => {
+        if (!window.ModalManager || !window.sdk) {
+            showToast("System components not loaded. Please try again later.");
+            return;
+        }
+
+        // Create modal
+        const modal = window.ModalManager.createCenterModal({
+            id: 'access-role-modal',
+            title: "Access Roles",
+            content: `
+                <div class="p-4">
+                    <div id="access-role-error-container" class="mb-4 hidden p-3 bg-red-50 text-red-700 rounded-md"></div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 mb-2" for="email-input">
+                            Email
+                        </label>
+                        <input
+                            type="email" 
+                            id="email-input"
+                            class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                            placeholder="Enter staff email address"
+                        />
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 mb-2" for="role-select">
+                            Role
+                        </label>
+                        <select
+                            id="role-select"
+                            class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        >
+                            <option value="">Select a role</option>
+                            <option value="Manager">Manager</option>
+                            <option value="Cashier">Cashier</option>
+                            <option value="Waiter">Waiter</option>
+                            <option value="Custom">Custom Role</option>
+                        </select>
+                    </div>
+                    <div id="permissions-container" class="border-t pt-4 mt-4 hidden">
+                        <h3 class="font-medium text-gray-800 mb-3">Permissions</h3>
+                        <div class="space-y-4" id="permissions-list">
+                            <!-- Permissions will be dynamically inserted here -->
+                        </div>
+                    </div>
+                </div>
+            `,
+            actions: `
+                <div class="flex justify-end p-4 space-x-3">
+                    <button id="cancel-access-role-btn" class="px-4 py-2 border rounded-md hover:bg-gray-50">Cancel</button>
+                    <button id="save-access-role-btn" class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600">Save</button>
+                </div>
+            `,
+            size: 'lg',
+            onShown: (modalControl) => {
+                const emailInput = document.getElementById('email-input');
+                const roleSelect = document.getElementById('role-select');
+                const permissionsContainer = document.getElementById('permissions-container');
+                const permissionsList = document.getElementById('permissions-list');
+                const errorContainer = document.getElementById('access-role-error-container');
+                const cancelButton = document.getElementById('cancel-access-role-btn');
+                const saveButton = document.getElementById('save-access-role-btn');
+
+                // Module permissions definition
+                const modulePermissions = {
+                    'Passbook': ['View', 'Edit'],
+                    'Analytics': ['View', 'Edit'],
+                    'Orders': ['Create', 'Edit', 'Delete'],
+                    'Profile': ['Edit'],
+                    'Product': ['Edit', 'Delete'],
+                    'Inventory': ['Edit'],
+                    'CRM': ['Edit'],
+                };
+
+                // Predefined role templates
+                const roleTemplates = {
+                    'Manager': {
+                        permissions: [
+                            { module: 'Product', actions: ['Edit', 'Delete'] },
+                            { module: 'Inventory', actions: ['Edit'] },
+                            { module: 'CRM', actions: ['Edit'] },
+                            { module: 'Passbook', actions: ['View', 'Edit'] },
+                            { module: 'Analytics', actions: ['View', 'Edit'] },
+                        ]
+                    },
+                    'Cashier': {
+                        permissions: [
+                            { module: 'Passbook', actions: ['View', 'Edit'] },
+                            { module: 'Orders', actions: ['Create', 'Edit'] },
+                        ]
+                    },
+                    'Waiter': {
+                        permissions: [
+                            { module: 'Orders', actions: ['Create'] },
+                        ]
+                    }
+                };
+
+                // Helper functions
+                const validateEmail = (email) => {
+                    const re = /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+                    return re.test(String(email).toLowerCase());
+                };
+
+                const renderPermissions = () => {
+                    permissionsList.innerHTML = '';
+
+                    Object.entries(modulePermissions).forEach(([module, actions]) => {
+                        const moduleDiv = document.createElement('div');
+                        moduleDiv.className = 'mb-4';
+
+                        const moduleTitle = document.createElement('div');
+                        moduleTitle.className = 'font-medium mb-2';
+                        moduleTitle.textContent = module;
+
+                        const actionsDiv = document.createElement('div');
+                        actionsDiv.className = 'flex flex-wrap gap-2';
+
+                        actions.forEach(action => {
+                            const actionChip = document.createElement('div');
+                            actionChip.className = 'px-3 py-1 border rounded-md cursor-pointer action-chip';
+                            actionChip.dataset.module = module;
+                            actionChip.dataset.action = action;
+                            actionChip.textContent = action;
+
+                            // Set initial state if role is selected
+                            const selectedRole = roleSelect.value;
+                            if (selectedRole && roleTemplates[selectedRole]) {
+                                const template = roleTemplates[selectedRole];
+                                const modulePermission = template.permissions.find(p => p.module === module);
+                                if (modulePermission && modulePermission.actions.includes(action)) {
+                                    actionChip.classList.add('bg-red-500', 'text-white');
+                                    actionChip.dataset.selected = 'true';
+                                }
+                            }
+
+                            actionChip.addEventListener('click', () => {
+                                if (actionChip.dataset.selected === 'true') {
+                                    actionChip.dataset.selected = 'false';
+                                    actionChip.classList.remove('bg-red-500', 'text-white');
+                                } else {
+                                    actionChip.dataset.selected = 'true';
+                                    actionChip.classList.add('bg-red-500', 'text-white');
+                                }
+                            });
+
+                            actionsDiv.appendChild(actionChip);
+                        });
+
+                        moduleDiv.appendChild(moduleTitle);
+                        moduleDiv.appendChild(actionsDiv);
+                        permissionsList.appendChild(moduleDiv);
+                    });
+
+                    permissionsContainer.classList.remove('hidden');
+                };
+
+                // Event handlers
+                roleSelect.addEventListener('change', () => {
+                    const selectedRole = roleSelect.value;
+                    if (selectedRole) {
+                        renderPermissions();
+                    } else {
+                        permissionsContainer.classList.add('hidden');
+                    }
+                });
+
+                cancelButton.addEventListener('click', () => {
+                    modalControl.close();
+                });
+
+                saveButton.addEventListener('click', async () => {
+                    const email = emailInput.value.trim();
+                    const selectedRole = roleSelect.value;
+
+                    // Validate inputs
+                    if (!email) {
+                        errorContainer.textContent = 'Please enter an email address';
+                        errorContainer.classList.remove('hidden');
+                        return;
+                    }
+
+                    if (!validateEmail(email)) {
+                        errorContainer.textContent = 'Please enter a valid email address';
+                        errorContainer.classList.remove('hidden');
+                        return;
+                    }
+
+                    if (!selectedRole) {
+                        errorContainer.textContent = 'Please select a role';
+                        errorContainer.classList.remove('hidden');
+                        return;
+                    }
+
+                    // Collect permissions
+                    const permissions = [];
+                    const actionChips = document.querySelectorAll('.action-chip[data-selected="true"]');
+
+                    actionChips.forEach(chip => {
+                        const module = chip.dataset.module;
+                        const action = chip.dataset.action;
+
+                        let modulePermission = permissions.find(p => p.module === module);
+                        if (!modulePermission) {
+                            modulePermission = { module, actions: [] };
+                            permissions.push(modulePermission);
+                        }
+
+                        if (!modulePermission.actions.includes(action)) {
+                            modulePermission.actions.push(action);
+                        }
+                    });
+
+                    try {
+                        // Get current roles from seller
+                        const currentRoles = seller?.roles || [];
+
+                        // Remove existing role for this email
+                        const updatedRoles = currentRoles.filter(role => role.email !== email);
+
+                        // Add the new role
+                        updatedRoles.push({
+                            email,
+                            roleName: selectedRole,
+                            permissions
+                        });
+
+                        // Get current access list and ensure email is included
+                        let accessList = seller?.access || [];
+                        if (!accessList.includes(email)) {
+                            accessList = [...accessList, email];
+                        }
+
+                        // Update Firestore
+                        await sdk.profile.update({
+                            roles: updatedRoles,
+                            access: accessList
+                        });
+
+                        window.ModalManager.showToast('Access role updated successfully');
+                        modalControl.close();
+                    } catch (error) {
+                        console.error('Error updating access role:', error);
+                        errorContainer.textContent = 'Failed to update access role. Please try again.';
+                        errorContainer.classList.remove('hidden');
+                    }
+                });
+            }
+        });
+    };
+
+    // Handle print template management
+    const handlePrintTemplateManagement = () => {
+        if (!window.ModalManager || !window.sdk) {
+            showToast("System components not loaded. Please try again later.");
+            return;
+        }
+
+        // Create modal
+        const modal = window.ModalManager.createCenterModal({
+            id: 'print-template-modal',
+            title: "Print Template",
+            content: `
+                <div class="p-4">
+                    <div id="print-template-error-container" class="mb-4 hidden p-3 bg-red-50 text-red-700 rounded-md"></div>
+                    <div class="mb-6">
+                        <div class="flex space-x-2 mb-4">
+                            <button id="bill-tab" class="px-4 py-2 bg-red-500 text-white rounded-lg">Bill</button>
+                            <button id="kot-tab" class="px-4 py-2 border border-gray-200 text-gray-700 rounded-lg">KOT</button>
+                        </div>
+                        <div id="template-sections" class="space-y-4">
+                            <!-- Template sections will be dynamically inserted here -->
+                        </div>
+                        <button id="add-section-btn" class="mt-4 px-4 py-2 border border-dashed border-gray-300 text-gray-600 rounded-lg w-full flex items-center justify-center">
+                            <i class="ph ph-plus mr-2"></i> Add New Section
+                        </button>
+                    </div>
+                </div>
+            `,
+            actions: `
+                <div class="flex justify-between p-4">
+                    <button id="preview-template-btn" class="px-4 py-2 border rounded-md hover:bg-gray-50">Preview</button>
+                    <div class="space-x-3">
+                        <button id="reset-template-btn" class="px-4 py-2 border text-red-500 rounded-md hover:bg-red-50">Reset</button>
+                        <button id="save-template-btn" class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600">Save</button>
+                    </div>
+                </div>
+            `,
+            size: 'lg',
+            onShown: (modalControl) => {
+                const billTab = document.getElementById('bill-tab');
+                const kotTab = document.getElementById('kot-tab');
+                const templateSections = document.getElementById('template-sections');
+                const addSectionBtn = document.getElementById('add-section-btn');
+                const previewBtn = document.getElementById('preview-template-btn');
+                const resetBtn = document.getElementById('reset-template-btn');
+                const saveBtn = document.getElementById('save-template-btn');
+                const errorContainer = document.getElementById('print-template-error-container');
+
+                let currentTemplateType = 'bill';
+                let templates = seller?.printTemplate || {
+                    'bill': getDefaultBillTemplate(),
+                    'kot': getDefaultKOTTemplate()
+                };
+
+                // Bill variable definitions (matches the Flutter implementation)
+                const billVariables = [
+                    { name: 'logo', label: 'Business Logo' },
+                    { name: 'businessName', label: 'Business Name' },
+                    { name: 'phone', label: 'Phone' },
+                    { name: 'address', label: 'Address' },
+                    { name: 'storeLink', label: 'Website' },
+                    { name: 'gstIN', label: 'GST Number' },
+                    { name: 'billNo', label: 'Bill Number' },
+                    { name: 'orderSource', label: 'Order Source' },
+                    { name: 'itemsList', label: 'Items List' },
+                    { name: 'subtotal', label: 'Subtotal' },
+                    { name: 'discount', label: 'Discount' },
+                    { name: 'charges', label: 'Charges' },
+                    { name: 'total', label: 'Total' },
+                    { name: 'payMode', label: 'Payment Mode' },
+                    { name: 'upiQR', label: 'UPI QR Code' },
+                    { name: 'timestamp', label: 'Timestamp' },
+                    { name: 'cut', label: 'Cut Paper' }
+                ];
+
+                // Get default templates
+                function getDefaultBillTemplate() {
+                    return {
+                        type: 'bill',
+                        sections: [
+                            {
+                                template: '#logo\n#businessName',
+                                fontSize: 24,
+                                alignment: 'TextAlign.center',
+                                isBold: true,
+                                isUnderlined: false
+                            },
+                            {
+                                template: 'Phone: #phone\nAddress: #address\nWeb: #storeLink\nGST: #gstIN',
+                                fontSize: 24,
+                                alignment: 'TextAlign.center',
+                                isBold: false,
+                                isUnderlined: false
+                            },
+                            {
+                                template: 'Bill No: ##billNo\nOrder from: #orderSource \n',
+                                fontSize: 24,
+                                alignment: 'TextAlign.left',
+                                isBold: false,
+                                isUnderlined: false
+                            },
+                            {
+                                template: '#itemsList \n',
+                                fontSize: 24,
+                                alignment: 'TextAlign.left',
+                                isBold: false,
+                                isUnderlined: false
+                            },
+                            {
+                                template: 'Sub Total: #subtotal\nDiscount: #discount\n#charges',
+                                fontSize: 24,
+                                alignment: 'TextAlign.right',
+                                isBold: false,
+                                isUnderlined: false
+                            },
+                            {
+                                template: 'TOTAL: #total\n',
+                                fontSize: 24,
+                                alignment: 'TextAlign.right',
+                                isBold: true,
+                                isUnderlined: false
+                            },
+                            {
+                                template: 'Payment mode: #payMode\n',
+                                fontSize: 24,
+                                alignment: 'TextAlign.right',
+                                isBold: false,
+                                isUnderlined: false
+                            },
+                            {
+                                template: '#upiQR \n',
+                                fontSize: 24,
+                                alignment: 'TextAlign.center',
+                                isBold: false,
+                                isUnderlined: false
+                            },
+                            {
+                                template: 'Thank you!\n#timestamp',
+                                fontSize: 24,
+                                alignment: 'TextAlign.center',
+                                isBold: false,
+                                isUnderlined: false
+                            }
+                        ]
+                    };
+                }
+
+                function getDefaultKOTTemplate() {
+                    return {
+                        type: 'kot',
+                        sections: [
+                            {
+                                template: '#logo\n#businessName',
+                                fontSize: 24,
+                                alignment: 'TextAlign.center',
+                                isBold: true,
+                                isUnderlined: false
+                            },
+                            {
+                                template: 'Bill No: ##billNo\nOrder from: #orderSource\n',
+                                fontSize: 24,
+                                alignment: 'TextAlign.center',
+                                isBold: false,
+                                isUnderlined: false
+                            },
+                            {
+                                template: 'KITCHEN ORDER TICKET',
+                                fontSize: 24,
+                                alignment: 'TextAlign.center',
+                                isBold: false,
+                                isUnderlined: false
+                            },
+                            {
+                                template: '#itemsList',
+                                fontSize: 24,
+                                alignment: 'TextAlign.left',
+                                isBold: false,
+                                isUnderlined: false
+                            },
+                            {
+                                template: '#timestamp',
+                                fontSize: 24,
+                                alignment: 'TextAlign.center',
+                                isBold: false,
+                                isUnderlined: false
+                            }
+                        ]
+                    };
+                }
+
+                // Render template sections
+                function renderTemplateSections() {
+                    templateSections.innerHTML = '';
+
+                    const currentTemplate = templates[currentTemplateType];
+                    if (!currentTemplate || !currentTemplate.sections) return;
+
+                    currentTemplate.sections.forEach((section, index) => {
+                        const sectionCard = document.createElement('div');
+                        sectionCard.className = 'border rounded-lg p-4 bg-white shadow-sm';
+                        sectionCard.dataset.index = index;
+
+                        // Get text alignment class
+                        let alignmentClass = 'text-left';
+                        if (section.alignment === 'TextAlign.center') alignmentClass = 'text-center';
+                        if (section.alignment === 'TextAlign.right') alignmentClass = 'text-right';
+
+                        // Format toolbar
+                        const toolbar = document.createElement('div');
+                        toolbar.className = 'flex justify-between items-center mb-3';
+
+                        const formatControls = document.createElement('div');
+                        formatControls.className = 'flex space-x-2';
+
+                        // Font size selector
+                        const fontSizeSelect = document.createElement('select');
+                        fontSizeSelect.className = 'px-2 py-1 border rounded text-sm';
+                        fontSizeSelect.innerHTML = `
+                            <option value="18" ${section.fontSize === 18 ? 'selected' : ''}>Size 18</option>
+                            <option value="20" ${section.fontSize === 20 ? 'selected' : ''}>Size 20</option>
+                            <option value="22" ${section.fontSize === 22 ? 'selected' : ''}>Size 22</option>
+                            <option value="24" ${section.fontSize === 24 ? 'selected' : ''}>Size 24</option>
+                            <option value="28" ${section.fontSize === 28 ? 'selected' : ''}>Size 28</option>
+                            <option value="32" ${section.fontSize === 32 ? 'selected' : ''}>Size 32</option>
+                        `;
+                        fontSizeSelect.addEventListener('change', (e) => {
+                            templates[currentTemplateType].sections[index].fontSize = parseInt(e.target.value);
+                        });
+
+                        // Alignment selector
+                        const alignmentSelect = document.createElement('select');
+                        alignmentSelect.className = 'px-2 py-1 border rounded text-sm ml-2';
+                        alignmentSelect.innerHTML = `
+                            <option value="TextAlign.left" ${section.alignment === 'TextAlign.left' ? 'selected' : ''}>Left</option>
+                            <option value="TextAlign.center" ${section.alignment === 'TextAlign.center' ? 'selected' : ''}>Center</option>
+                            <option value="TextAlign.right" ${section.alignment === 'TextAlign.right' ? 'selected' : ''}>Right</option>
+                        `;
+                        alignmentSelect.addEventListener('change', (e) => {
+                            templates[currentTemplateType].sections[index].alignment = e.target.value;
+                            // Update display alignment
+                            const textArea = sectionCard.querySelector('textarea');
+                            if (textArea) {
+                                textArea.className = textArea.className.replace(/text-(left|center|right)/, '');
+                                textArea.classList.add(
+                                    e.target.value === 'TextAlign.center' ? 'text-center' :
+                                        e.target.value === 'TextAlign.right' ? 'text-right' :
+                                            'text-left'
+                                );
+                            }
+                        });
+
+                        formatControls.appendChild(fontSizeSelect);
+                        formatControls.appendChild(alignmentSelect);
+
+                        // Bold and underline buttons
+                        const styleBtns = document.createElement('div');
+                        styleBtns.className = 'flex';
+
+                        const boldBtn = document.createElement('button');
+                        boldBtn.className = `p-1 rounded ${section.isBold ? 'bg-red-100 text-red-500' : 'text-gray-500'}`;
+                        boldBtn.innerHTML = '<i class="ph ph-text-b"></i>';
+                        boldBtn.addEventListener('click', () => {
+                            templates[currentTemplateType].sections[index].isBold = !templates[currentTemplateType].sections[index].isBold;
+                            boldBtn.classList.toggle('bg-red-100');
+                            boldBtn.classList.toggle('text-red-500');
+                            const textArea = sectionCard.querySelector('textarea');
+                            if (textArea) {
+                                textArea.classList.toggle('font-bold');
+                            }
+                        });
+
+                        const underlineBtn = document.createElement('button');
+                        underlineBtn.className = `p-1 rounded ml-1 ${section.isUnderlined ? 'bg-red-100 text-red-500' : 'text-gray-500'}`;
+                        underlineBtn.innerHTML = '<i class="ph ph-text-underline"></i>';
+                        underlineBtn.addEventListener('click', () => {
+                            templates[currentTemplateType].sections[index].isUnderlined = !templates[currentTemplateType].sections[index].isUnderlined;
+                            underlineBtn.classList.toggle('bg-red-100');
+                            underlineBtn.classList.toggle('text-red-500');
+                            const textArea = sectionCard.querySelector('textarea');
+                            if (textArea) {
+                                textArea.classList.toggle('underline');
+                            }
+                        });
+
+                        styleBtns.appendChild(boldBtn);
+                        styleBtns.appendChild(underlineBtn);
+
+                        formatControls.appendChild(styleBtns);
+
+                        // Delete button
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.className = 'p-1 text-gray-500 hover:text-red-500';
+                        deleteBtn.innerHTML = '<i class="ph ph-trash"></i>';
+                        deleteBtn.addEventListener('click', () => {
+                            templates[currentTemplateType].sections.splice(index, 1);
+                            renderTemplateSections();
+                        });
+
+                        toolbar.appendChild(formatControls);
+                        toolbar.appendChild(deleteBtn);
+
+                        // Text area for template
+                        const textArea = document.createElement('textarea');
+                        textArea.className = `w-full p-2 border rounded ${alignmentClass} ${section.isBold ? 'font-bold' : ''} ${section.isUnderlined ? 'underline' : ''}`;
+                        textArea.style.minHeight = '80px';
+                        textArea.value = section.template;
+                        textArea.addEventListener('input', (e) => {
+                            templates[currentTemplateType].sections[index].template = e.target.value;
+                        });
+                        textArea.addEventListener('focus', () => {
+                            showVariablesList(textArea);
+                        });
+
+                        // Create variable helper
+                        const variableHelper = document.createElement('div');
+                        variableHelper.className = 'text-sm text-gray-500 mt-2';
+                        variableHelper.innerHTML = 'Type # to insert a variable';
+
+                        sectionCard.appendChild(toolbar);
+                        sectionCard.appendChild(textArea);
+                        sectionCard.appendChild(variableHelper);
+
+                        templateSections.appendChild(sectionCard);
+                    });
+                }
+
+                // Show variables list
+                function showVariablesList(textArea) {
+                    // Create dropdown for variables if it doesn't exist
+                    let variablesDropdown = document.getElementById('variables-dropdown');
+                    if (!variablesDropdown) {
+                        variablesDropdown = document.createElement('div');
+                        variablesDropdown.id = 'variables-dropdown';
+                        variablesDropdown.className = 'absolute z-10 bg-white border rounded-md shadow-lg p-2 max-h-60 overflow-y-auto';
+                        variablesDropdown.style.width = '250px';
+                        variablesDropdown.style.display = 'none';
+                        document.body.appendChild(variablesDropdown);
+                    }
+
+                    // Populate dropdown with variables
+                    variablesDropdown.innerHTML = `
+                        <div class="text-sm font-medium text-gray-700 mb-2">Insert Variable</div>
+                        <div class="space-y-1">
+                            ${billVariables.map(variable => `
+                                <div class="variable-item p-1 hover:bg-gray-100 rounded cursor-pointer" data-variable="${variable.name}">
+                                    <span class="text-red-500">#${variable.name}</span> - ${variable.label}
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+
+                    // Position dropdown near text area
+                    const textAreaRect = textArea.getBoundingClientRect();
+                    variablesDropdown.style.top = `${textAreaRect.bottom + window.scrollY}px`;
+                    variablesDropdown.style.left = `${textAreaRect.left + window.scrollX}px`;
+                    variablesDropdown.style.display = 'block';
+
+                    // Handle variable click
+                    const variableItems = variablesDropdown.querySelectorAll('.variable-item');
+                    variableItems.forEach(item => {
+                        item.addEventListener('click', () => {
+                            const variable = item.dataset.variable;
+                            const currentPos = textArea.selectionStart;
+                            const text = textArea.value;
+                            const newText = text.substring(0, currentPos) + `#${variable}` + text.substring(currentPos);
+                            textArea.value = newText;
+
+                            // Update the section template
+                            const sectionIndex = parseInt(textArea.closest('[data-index]').dataset.index);
+                            templates[currentTemplateType].sections[sectionIndex].template = newText;
+
+                            // Hide dropdown
+                            variablesDropdown.style.display = 'none';
+                        });
+                    });
+
+                    // Hide dropdown when clicking elsewhere
+                    document.addEventListener('click', (e) => {
+                        if (!variablesDropdown.contains(e.target) && e.target !== textArea) {
+                            variablesDropdown.style.display = 'none';
+                        }
+                    });
+                }
+
+                // Add new section
+                function addNewSection() {
+                    templates[currentTemplateType].sections.push({
+                        template: '',
+                        fontSize: 24,
+                        alignment: 'TextAlign.left',
+                        isBold: false,
+                        isUnderlined: false
+                    });
+                    renderTemplateSections();
+                }
+
+                // Reset to default
+                function resetToDefault() {
+                    if (currentTemplateType === 'bill') {
+                        templates.bill = getDefaultBillTemplate();
+                    } else {
+                        templates.kot = getDefaultKOTTemplate();
+                    }
+                    renderTemplateSections();
+                    window.ModalManager.showToast(`${currentTemplateType.toUpperCase()} template reset to default`);
+                }
+
+                // Preview template
+                function previewTemplate() {
+                    window.ModalManager.createCenterModal({
+                        id: 'preview-modal',
+                        title: `Preview: ${currentTemplateType.toUpperCase()} Template`,
+                        content: `
+                            <div class="p-4 bg-white">
+                                <div class="border-2 border-dashed border-gray-300 p-4 rounded-lg">
+                                    <div class="text-center">
+                                        <div class="w-20 h-20 mx-auto bg-red-100 rounded-full flex items-center justify-center mb-2">
+                                            <i class="ph ph-storefront text-red-500 text-2xl"></i>
+                                        </div>
+                                        <h2 class="text-xl font-bold">${seller?.businessName || 'Your Business Name'}</h2>
+                                    </div>
+                                    <div class="text-center text-sm text-gray-600 mt-2">
+                                        <p>Phone: ${seller?.phone || '1234567890'}</p>
+                                        <p>Address: ${seller?.address || '123 Main St'}</p>
+                                        <p>Web: ${seller?.storeLink || 'www.yourbusiness.com'}</p>
+                                        <p>GST: ${seller?.gstIN || 'GSTIN12345'}</p>
+                                    </div>
+                                    <div class="mt-4">
+                                        <p>Bill No: #12345</p>
+                                        <p>Order from: Dine-in</p>
+                                    </div>
+                                    <div class="mt-4 border-t border-b py-2">
+                                        <table class="w-full">
+                                            <thead>
+                                                <tr class="text-left">
+                                                    <th class="py-1 px-2">Qt</th>
+                                                    <th class="py-1">Item</th>
+                                                    <th class="py-1 text-right">Price</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td class="py-1 px-2">2</td>
+                                                    <td class="py-1">Butter Chicken</td>
+                                                    <td class="py-1 text-right">₹599</td>
+                                                </tr>
+                                                <tr>
+                                                    <td class="py-1 px-2">1</td>
+                                                    <td class="py-1">Jeera Rice</td>
+                                                    <td class="py-1 text-right">₹149</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="mt-4 text-right">
+                                        <p>Sub Total: ₹748</p>
+                                        <p>Discount: -₹50</p>
+                                        <p>GST: ₹35</p>
+                                        <p class="font-bold mt-2">TOTAL: ₹733</p>
+                                    </div>
+                                    <div class="mt-4 text-right">
+                                        <p>Payment mode: Cash</p>
+                                    </div>
+                                    ${currentTemplateType === 'bill' ? `
+                                        <div class="mt-4 flex justify-center">
+                                            <div class="w-32 h-32 bg-gray-200 flex items-center justify-center">
+                                                <i class="ph ph-qr-code text-4xl"></i>
+                                            </div>
+                                        </div>
+                                    ` : ''}
+                                    <div class="mt-4 text-center text-sm">
+                                        <p>Thank you!</p>
+                                        <p>${new Date().toLocaleString()}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        `,
+                        actions: `
+                            <div class="flex justify-end p-4">
+                                <button id="close-preview-btn" class="px-4 py-2 bg-red-500 text-white rounded-md">Close</button>
+                            </div>
+                        `,
+                        onShown: (previewModalControl) => {
+                            document.getElementById('close-preview-btn').addEventListener('click', () => {
+                                previewModalControl.close();
+                            });
+                        }
+                    });
+                }
+
+                // Save template
+                async function saveTemplate() {
+                    try {
+                        await sdk.profile.update({
+                            printTemplate: templates
+                        });
+                        window.ModalManager.showToast('Print template saved successfully');
+                        modalControl.close();
+                    } catch (error) {
+                        console.error('Error saving print template:', error);
+                        errorContainer.textContent = 'Failed to save template. Please try again.';
+                        errorContainer.classList.remove('hidden');
+                    }
+                }
+
+                // Initialize the modal
+                billTab.addEventListener('click', () => {
+                    currentTemplateType = 'bill';
+                    billTab.classList.add('bg-red-500', 'text-white');
+                    billTab.classList.remove('border', 'border-gray-200', 'text-gray-700');
+                    kotTab.classList.remove('bg-red-500', 'text-white');
+                    kotTab.classList.add('border', 'border-gray-200', 'text-gray-700');
+                    renderTemplateSections();
+                });
+
+                kotTab.addEventListener('click', () => {
+                    currentTemplateType = 'kot';
+                    kotTab.classList.add('bg-red-500', 'text-white');
+                    kotTab.classList.remove('border', 'border-gray-200', 'text-gray-700');
+                    billTab.classList.remove('bg-red-500', 'text-white');
+                    billTab.classList.add('border', 'border-gray-200', 'text-gray-700');
+                    renderTemplateSections();
+                });
+
+                addSectionBtn.addEventListener('click', addNewSection);
+                previewBtn.addEventListener('click', previewTemplate);
+                resetBtn.addEventListener('click', resetToDefault);
+                saveBtn.addEventListener('click', saveTemplate);
+
+                // Initial render
+                renderTemplateSections();
+            }
+        });
+    };
+
+    // Handle bulk tax update management
+    // ... existing code ...
+
+    // Handle bulk tax update
+    const handleBulkTaxUpdate = () => {
+        if (!window.ModalManager || !window.sdk) {
+            showToast("System components not loaded. Please try again later.");
+            return;
+        }
+
+        // Create modal
+        const modal = window.ModalManager.createCenterModal({
+            id: 'bulk-tax-update-modal',
+            title: "Bulk Tax Update",
+            content: `
+                <div class="p-4">
+                    <div id="tax-update-error-container" class="mb-4 hidden p-3 bg-red-50 text-red-700 rounded-md"></div>
+                    
+                    <div class="mb-4">
+                        <p class="text-sm text-gray-600 mb-4">
+                            Update tax rates for all products at once. This will replace existing tax configurations for all products.
+                        </p>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <div class="bg-amber-50 border border-amber-200 rounded-md p-3 mb-4">
+                            <div class="flex items-start">
+                                <i class="ph ph-warning-circle text-amber-500 mt-0.5 mr-2 text-lg"></i>
+                                <p class="text-sm text-amber-700">
+                                    This action will update tax settings for <strong>all products</strong> in your inventory. 
+                                    Individual product tax configurations will be overwritten.
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <div id="tax-config-container" class="space-y-4">
+                            <div class="tax-item border rounded-md p-3">
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="font-medium">Tax Configuration</div>
+                                    <button id="remove-tax-btn" class="text-gray-400 hover:text-red-500 hidden">
+                                        <i class="ph ph-trash"></i>
+                                    </button>
+                                </div>
+                                
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">Tax Name</label>
+                                        <input 
+                                            type="text" 
+                                            id="tax-name-input" 
+                                            class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-red-500" 
+                                            placeholder="e.g. GST" 
+                                            value="GST"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">Tax Value (%)</label>
+                                        <input 
+                                            type="number" 
+                                            id="tax-value-input" 
+                                            class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-red-500" 
+                                            placeholder="e.g. 18" 
+                                            min="0" 
+                                            max="100" 
+                                            value="18"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">Type</label>
+                                        <select 
+                                            id="tax-type-input" 
+                                            class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                                        >
+                                            <option value="percentage" selected>Percentage (%)</option>
+                                            <option value="fixed">Fixed Amount (₹)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `,
+            actions: `
+                <div class="flex justify-end p-4 space-x-3">
+                    <button id="cancel-tax-update-btn" class="px-4 py-2 border rounded-md hover:bg-gray-50">Cancel</button>
+                    <button id="save-tax-update-btn" class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600">Update All Products</button>
+                </div>
+            `,
+            size: 'md',
+            onShown: (modalControl) => {
+                const taxNameInput = document.getElementById('tax-name-input');
+                const taxValueInput = document.getElementById('tax-value-input');
+                const taxTypeInput = document.getElementById('tax-type-input');
+                const errorContainer = document.getElementById('tax-update-error-container');
+                const cancelButton = document.getElementById('cancel-tax-update-btn');
+                const saveButton = document.getElementById('save-tax-update-btn');
+
+                // Validation function
+                const validateForm = () => {
+                    if (!taxNameInput.value.trim()) {
+                        errorContainer.textContent = 'Tax name is required';
+                        errorContainer.classList.remove('hidden');
+                        return false;
+                    }
+
+                    const taxValue = parseFloat(taxValueInput.value);
+                    if (isNaN(taxValue) || taxValue < 0 || taxValue > 100) {
+                        errorContainer.textContent = 'Please enter a valid tax value between 0 and 100';
+                        errorContainer.classList.remove('hidden');
+                        return false;
+                    }
+
+                    return true;
+                };
+
+                // Event handlers
+                cancelButton.addEventListener('click', () => {
+                    modalControl.close();
+                });
+
+                saveButton.addEventListener('click', async () => {
+                    if (!validateForm()) return;
+
+                    try {
+                        // Show loading state
+                        saveButton.disabled = true;
+                        saveButton.innerHTML = `
+                            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Updating...
+                        `;
+
+                        // Prepare tax data
+                        const taxCharge = {
+                            name: taxNameInput.value.trim(),
+                            value: parseFloat(taxValueInput.value),
+                            type: taxTypeInput.value
+                        };
+
+                        // Get all products for this seller
+                        const productsSnapshot = await window.sdk.collection("Product")
+                            .where("sellerId", "==", seller.id)
+                            .get();
+
+                        let successCount = 0;
+                        const totalProducts = productsSnapshot.size;
+
+                        // Update each product with the new tax configuration
+                        const batch = window.sdk.batch();
+
+                        productsSnapshot.forEach(doc => {
+                            const productData = doc.data();
+
+                            // Replace existing tax charges with the new one
+                            productData.charges = [taxCharge];
+
+                            // Update the product in the batch
+                            batch.update(doc.ref, { charges: productData.charges });
+                            successCount++;
+                        });
+
+                        // Commit all updates
+                        await batch.commit();
+
+                        window.ModalManager.showToast(`Successfully updated tax for ${successCount} products`);
+                        modalControl.close();
+                    } catch (error) {
+                        console.error('Error updating product taxes:', error);
+                        errorContainer.textContent = 'Failed to update product taxes. Please try again.';
+                        errorContainer.classList.remove('hidden');
+
+                        // Reset button
+                        saveButton.disabled = false;
+                        saveButton.textContent = 'Update All Products';
+                    }
+                });
+            }
+        });
+    };
+
+    // Handle product import
+    const handleProductImport = () => {
+        if (!window.ModalManager || !window.sdk) {
+            showToast("System components not loaded. Please try again later.");
+            return;
+        }
+
+        // Create modal
+        const modal = window.ModalManager.createCenterModal({
+            id: 'import-products-modal',
+            title: "Bulk Import Products",
+            content: `
+                <div class="p-4 text-center">
+                    <div class="mb-6">
+                        <p class="font-medium text-gray-700">Step 1</p>
+                        <div class="flex justify-center items-center mt-2">
+                            <span class="text-gray-700 mr-2">Download template file:</span>
+                            <a href="https://firebasestorage.googleapis.com/v0/b/frihbi-app.appspot.com/o/assets%2FImport%20Product%20Sample%20sheet.xlsx?alt=media" class="text-red-500 font-medium hover:underline" download>Sample.xlsx</a>
+                        </div>
+                    </div>
+                    <div class="mb-6">
+                        <p class="font-medium text-gray-700">Step 2</p>
+                        <div id="file-upload-area" class="mt-2 border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:bg-gray-50">
+                            <i class="ph ph-upload text-gray-400 text-4xl"></i>
+                            <p class="mt-2 font-medium">Upload .csv / .xlsx</p>
+                            <p class="text-sm text-gray-500">Max file size 20mb and 100 products</p>
+                            <input type="file" id="import-file" class="hidden" accept=".csv, .xlsx" />
+                        </div>
+                    </div>
+                </div>
+            `,
+            actions: `
+                <div class="flex justify-center p-4">
+                    <button id="start-import-btn" class="px-8 py-3 bg-red-500 text-white rounded-md font-medium">Start</button>
+                </div>
+            `,
+            size: 'md',
+            onShown: (modalControl) => {
+                const fileUploadArea = document.getElementById('file-upload-area');
+                const importFileInput = document.getElementById('import-file');
+                const startImportBtn = document.getElementById('start-import-btn');
+
+                let selectedFile = null;
+
+                // Handle file upload area click
+                fileUploadArea.addEventListener('click', () => {
+                    importFileInput.click();
+                });
+
+                // Handle file selection
+                importFileInput.addEventListener('change', (e) => {
+                    if (e.target.files.length > 0) {
+                        selectedFile = e.target.files[0];
+
+                        // Update the upload area UI to show selected file
+                        fileUploadArea.innerHTML = `
+                            <i class="ph ph-check-circle text-green-500 text-4xl"></i>
+                            <p class="mt-2 font-medium">${selectedFile.name}</p>
+                            <p class="text-sm text-gray-500">${Math.round(selectedFile.size / 1024)} KB</p>
+                            <input type="file" id="import-file" class="hidden" accept=".csv, .xlsx" />
+                        `;
+                    }
+                });
+
+                // Handle import start
+                startImportBtn.addEventListener('click', async () => {
+                    if (!selectedFile) {
+                        window.ModalManager.showToast('Please select a file to import');
+                        return;
+                    }
+
+                    try {
+                        // Show loading state
+                        startImportBtn.disabled = true;
+                        startImportBtn.innerHTML = `
+                            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Uploading...
+                        `;
+
+                        // Read file as array buffer for Firebase Storage
+                        const fileReader = new FileReader();
+                        fileReader.onload = async (event) => {
+                            try {
+                                const fileData = event.target.result;
+
+                                // Generate a unique storage path
+                                const storagePath = `seller/${seller.id}/import_product_${Date.now()}.xlsx`;
+
+                                // Get a reference to the storage location
+                                const storageRef = window.sdk.storage.ref(storagePath);
+
+                                // Upload the file
+                                await storageRef.put(new Uint8Array(fileData));
+
+                                window.ModalManager.showToast('File uploaded successfully. Products will be imported in the background.');
+                                modalControl.close();
+                            } catch (error) {
+                                console.error('Error uploading file:', error);
+                                window.ModalManager.showToast('Failed to upload file. Please try again.');
+
+                                // Reset button
+                                startImportBtn.disabled = false;
+                                startImportBtn.textContent = 'Start';
+                            }
+                        };
+
+                        fileReader.readAsArrayBuffer(selectedFile);
+                    } catch (error) {
+                        console.error('Error starting import:', error);
+                        window.ModalManager.showToast('Failed to start import. Please try again.');
+
+                        // Reset button
+                        startImportBtn.disabled = false;
+                        startImportBtn.textContent = 'Start';
+                    }
+                });
+            }
+        });
+    };
+
     // Render the dashboard
     return (
         <div className="pb-24 md:pb-4 px-4 mt-4">
@@ -1828,8 +2921,8 @@ function Dashboard() {
             {activeView === 'settings' && (
                 <div className="space-y-6">
                     {/* Store Settings */}
-                    <div className="bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
-                        <div className="px-3 py-3 border-b border-gray-200 flex items-center">
+                    <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200">
+                        <div className="px-4 py-3 border-b border-gray-100 flex items-center">
                             <i className="ph ph-storefront text-red-500 text-xl mr-2"></i>
                             <h2 className="text-lg font-semibold text-gray-800">Store Settings</h2>
                         </div>
@@ -1841,7 +2934,6 @@ function Dashboard() {
                                 </div>
                             ) : (
                                 <>
-
                                     <div className="flex flex-col sm:flex-row sm:items-center gap-4 pb-4 border-b border-gray-100">
                                         <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-red-50 to-white flex items-center justify-center border border-gray-200 shadow-sm">
                                             {seller.logo ? (
@@ -1852,9 +2944,161 @@ function Dashboard() {
                                         </div>
                                         <div className="flex-1">
                                             <h3 className="text-lg font-semibold text-gray-800">{seller.businessName || 'Your Store'}</h3>
-                                            <p className="text-gray-500">{seller.email || 'Retail Store'}</p>
+                                            <p className="text-gray-500">{seller.phone || 'Retail Store'}</p>
                                         </div>
-                                        <button className="px-3 py-1.5 bg-gradient-to-r from-white to-gray-50 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5 text-sm shadow-sm self-start sm:self-center">
+                                        <button
+                                            onClick={() => {
+                                                window.ModalManager?.createCenterModal({
+                                                    id: 'edit-profile-modal',
+                                                    title: "Edit Store Profile",
+                                                    content: `
+                                                    <div class="p-4">
+                                                        <div id="profile-error-container" class="mb-4 hidden p-3 bg-red-50 text-red-700 rounded-md"></div>
+                                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                            <div>
+                                                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                                                    Business Name
+                                                                </label>
+                                                                <input
+                                                                    type="text"
+                                                                    id="business-name-input"
+                                                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                                                    value="${seller.businessName || ''}"
+                                                                    required
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                                                    Phone
+                                                                </label>
+                                                                <input
+                                                                    type="tel"
+                                                                    id="phone-input"
+                                                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                                                    value="${seller.phone || ''}"
+                                                                />
+                                                            </div>
+                                                            <div class="md:col-span-2">
+                                                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                                                    Address
+                                                                </label>
+                                                                <textarea
+                                                                    id="address-input"
+                                                                    rows="3"
+                                                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                                                >${seller.address || ''}</textarea>
+                                                            </div>
+                                                            <div>
+                                                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                                                    GST Number
+                                                                </label>
+                                                                <input
+                                                                    type="text"
+                                                                    id="gst-input"
+                                                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                                                    value="${seller.gstNo || ''}"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                                                    UPI ID
+                                                                </label>
+                                                                <input
+                                                                    type="text"
+                                                                    id="upi-input"
+                                                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                                                    value="${seller.upiId || ''}"
+                                                                />
+                                                            </div>
+                                                            <div class="md:col-span-2">
+                                                                <label class="flex items-center">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        id="kot-enabled-input"
+                                                                        class="w-5 h-5 text-red-600 rounded focus:ring-red-500"
+                                                                        ${seller.kotEnabled !== false ? 'checked' : ''}
+                                                                    />
+                                                                    <span class="ml-2 text-gray-700">Enable KOT (Kitchen Order Ticket)</span>
+                                                                </label>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    `,
+                                                    actions: `
+                                                    <div class="flex justify-end p-4 space-x-3">
+                                                        <button id="cancel-profile-btn" class="px-4 py-2 border rounded-md hover:bg-gray-50">Cancel</button>
+                                                        <button id="save-profile-btn" class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600">Save Changes</button>
+                                                    </div>
+                                                    `,
+                                                    size: 'lg',
+                                                    onShown: (modalControl) => {
+                                                        const businessNameInput = document.getElementById('business-name-input');
+                                                        const phoneInput = document.getElementById('phone-input');
+                                                        const addressInput = document.getElementById('address-input');
+                                                        const gstInput = document.getElementById('gst-input');
+                                                        const upiInput = document.getElementById('upi-input');
+                                                        const kotEnabledInput = document.getElementById('kot-enabled-input');
+                                                        const errorContainer = document.getElementById('profile-error-container');
+                                                        const cancelButton = document.getElementById('cancel-profile-btn');
+                                                        const saveButton = document.getElementById('save-profile-btn');
+
+                                                        // Basic validation
+                                                        const validateForm = () => {
+                                                            if (!businessNameInput.value.trim()) {
+                                                                errorContainer.textContent = 'Business name is required';
+                                                                errorContainer.classList.remove('hidden');
+                                                                return false;
+                                                            }
+
+                                                            if (gstInput.value.trim() && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstInput.value.trim())) {
+                                                                errorContainer.textContent = 'Please enter a valid GST number';
+                                                                errorContainer.classList.remove('hidden');
+                                                                return false;
+                                                            }
+
+                                                            return true;
+                                                        };
+
+                                                        // Event handlers
+                                                        cancelButton.addEventListener('click', () => {
+                                                            modalControl.close();
+                                                        });
+
+                                                        saveButton.addEventListener('click', async () => {
+                                                            if (!validateForm()) return;
+
+                                                            try {
+                                                                // Prepare update data
+                                                                const updateData = {
+                                                                    businessName: businessNameInput.value.trim(),
+                                                                    phone: phoneInput.value.trim(),
+                                                                    address: addressInput.value.trim(),
+                                                                    gstNo: gstInput.value.trim(),
+                                                                    upiId: upiInput.value.trim(),
+                                                                    kotEnabled: kotEnabledInput.checked
+                                                                };
+
+                                                                // Update Firestore
+                                                                await window.sdk.profile.update(updateData);
+
+                                                                window.ModalManager.showToast('Store profile updated successfully');
+                                                                modalControl.close();
+
+                                                                // Refresh the page to reflect changes
+                                                                setTimeout(() => {
+                                                                    window.location.reload();
+                                                                }, 1000);
+                                                            } catch (error) {
+                                                                console.error('Error updating store profile:', error);
+                                                                errorContainer.textContent = 'Failed to update profile. Please try again.';
+                                                                errorContainer.classList.remove('hidden');
+                                                            }
+                                                        });
+                                                    }
+                                                });
+                                            }}
+                                            className="px-3 py-1.5 bg-gradient-to-r from-white to-gray-50 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5 text-sm shadow-sm self-start sm:self-center"
+                                        >
                                             <i className="ph ph-pencil"></i>
                                             <span>Edit</span>
                                         </button>
@@ -1900,14 +3144,7 @@ function Dashboard() {
                                                 className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg transition-colors"
                                                 onClick={() => {
                                                     // Open Access Role management
-                                                    window.ModalManager?.createCenterModal({
-                                                        id: 'access-role-modal',
-                                                        title: "Access Roles",
-                                                        content: `<div class="p-4">
-                                                            <p class="text-gray-600">Manage access roles for your team</p>
-                                                        </div>`,
-                                                        size: 'lg'
-                                                    });
+                                                    handleAccessRoleManagement();
                                                 }}>
                                                 <div className="flex items-center">
                                                     <div className="p-2 bg-gradient-to-br from-red-50 to-white rounded-lg mr-3 flex-shrink-0">
@@ -1930,14 +3167,7 @@ function Dashboard() {
                                                 className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg transition-colors"
                                                 onClick={() => {
                                                     // Open Print Template management
-                                                    window.ModalManager?.createCenterModal({
-                                                        id: 'print-template-modal',
-                                                        title: "Print Template",
-                                                        content: `<div class="p-4">
-                                                            <p class="text-gray-600">Manage KOT & Bill template</p>
-                                                        </div>`,
-                                                        size: 'lg'
-                                                    });
+                                                    handlePrintTemplateManagement();
                                                 }}>
                                                 <div className="flex items-center">
                                                     <div className="p-2 bg-gradient-to-br from-red-50 to-white rounded-lg mr-3 flex-shrink-0">
@@ -1960,23 +3190,7 @@ function Dashboard() {
                                                 className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg transition-colors"
                                                 onClick={() => {
                                                     // Open Bulk Tax Update management
-                                                    window.ModalManager?.createCenterModal({
-                                                        id: 'bulk-tax-modal',
-                                                        title: "Bulk Tax Update",
-                                                        content: `<div class="p-4">
-                                                            <p class="text-gray-600">Update tax for all products</p>
-                                                            <div class="mt-4 flex items-center text-red-500">
-                                                                <i class="ph ph-warning-circle mr-2"></i>
-                                                                <p class="text-sm">Please be careful, this will update and override all the taxes for all products.</p>
-                                                            </div>
-                                                        </div>`,
-                                                        actions: `
-                                                            <div class="flex justify-end p-4">
-                                                                <button id="update-taxes-btn" class="px-4 py-2 bg-red-500 text-white rounded-md">Update All Products</button>
-                                                            </div>
-                                                        `,
-                                                        size: 'lg'
-                                                    });
+                                                    handleBulkTaxUpdate();
                                                 }}>
                                                 <div className="flex items-center">
                                                     <div className="p-2 bg-gradient-to-br from-red-50 to-white rounded-lg mr-3 flex-shrink-0">
@@ -1999,33 +3213,7 @@ function Dashboard() {
                                                 className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg transition-colors"
                                                 onClick={() => {
                                                     // Open Import Products modal
-                                                    window.ModalManager?.createCenterModal({
-                                                        id: 'import-products-modal',
-                                                        title: "Bulk Import Products",
-                                                        content: `<div class="p-4 text-center">
-                                                            <div class="mb-6">
-                                                                <p class="font-medium text-gray-700">Step 1</p>
-                                                                <div class="flex justify-center items-center mt-2">
-                                                                    <span class="text-gray-700 mr-2">Download template file:</span>
-                                                                    <a href="https://firebasestorage.googleapis.com/v0/b/frihbi-app.appspot.com/o/assets%2FImport%20Product%20Sample%20sheet.xlsx?alt=media" class="text-red-500 font-medium hover:underline" download>Sample.xlsx</a>
-                                                                </div>
-                                                            </div>
-                                                            <div class="mb-6">
-                                                                <p class="font-medium text-gray-700">Step 2</p>
-                                                                <div class="mt-2 border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:bg-gray-50">
-                                                                    <i class="ph ph-upload text-gray-400 text-4xl"></i>
-                                                                    <p class="mt-2 font-medium">Upload .csv / .xlsx</p>
-                                                                    <p class="text-sm text-gray-500">Max file size 20mb and 100 products</p>
-                                                                </div>
-                                                            </div>
-                                                        </div>`,
-                                                        actions: `
-                                                            <div class="flex justify-center p-4">
-                                                                <button id="start-import-btn" class="px-8 py-3 bg-red-500 text-white rounded-md font-medium">Start</button>
-                                                            </div>
-                                                        `,
-                                                        size: 'md'
-                                                    });
+                                                    handleProductImport();
                                                 }}>
                                                 <div className="flex items-center">
                                                     <div className="p-2 bg-gradient-to-br from-red-50 to-white rounded-lg mr-3 flex-shrink-0">
@@ -2051,8 +3239,39 @@ function Dashboard() {
                                                     id: 'store-hours-modal',
                                                     title: "Store Hours",
                                                     content: `<div class="p-4">
-                                                        <p class="text-gray-600">Set your regular business hours</p>
+                                                        <div class="space-y-4">
+                                                            <div>
+                                                                <h3 class="font-medium mb-2">Business Days</h3>
+                                                                <div class="flex flex-wrap gap-2">
+                                                                    <button class="px-3 py-1 bg-red-500 text-white rounded-md">Mon</button>
+                                                                    <button class="px-3 py-1 bg-red-500 text-white rounded-md">Tue</button>
+                                                                    <button class="px-3 py-1 bg-red-500 text-white rounded-md">Wed</button>
+                                                                    <button class="px-3 py-1 bg-red-500 text-white rounded-md">Thu</button>
+                                                                    <button class="px-3 py-1 bg-red-500 text-white rounded-md">Fri</button>
+                                                                    <button class="px-3 py-1 border border-gray-300 text-gray-600 rounded-md">Sat</button>
+                                                                    <button class="px-3 py-1 border border-gray-300 text-gray-600 rounded-md">Sun</button>
+                                                                </div>
+                                                            </div>
+                                                            <div>
+                                                                <h3 class="font-medium mb-2">Opening Hours</h3>
+                                                                <div class="grid grid-cols-2 gap-4">
+                                                                    <div>
+                                                                        <label class="block text-sm text-gray-600 mb-1">Opening Time</label>
+                                                                        <input type="time" class="w-full px-3 py-2 border rounded-md" value="09:00">
+                                                                    </div>
+                                                                    <div>
+                                                                        <label class="block text-sm text-gray-600 mb-1">Closing Time</label>
+                                                                        <input type="time" class="w-full px-3 py-2 border rounded-md" value="21:00">
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
                                                     </div>`,
+                                                    actions: `
+                                                        <div class="flex justify-end p-4">
+                                                            <button id="save-hours-btn" class="px-4 py-2 bg-red-500 text-white rounded-md">Save</button>
+                                                        </div>
+                                                    `,
                                                     size: 'md'
                                                 });
                                             }}>
@@ -2079,8 +3298,44 @@ function Dashboard() {
                                                     id: 'payment-methods-modal',
                                                     title: "Payment Methods",
                                                     content: `<div class="p-4">
-                                                        <p class="text-gray-600">Manage available payment options</p>
+                                                        <div class="space-y-4">
+                                                            <div class="flex items-center justify-between p-3 border rounded-md">
+                                                                <div class="flex items-center">
+                                                                    <i class="ph ph-money text-red-500 text-xl mr-3"></i>
+                                                                    <span>Cash</span>
+                                                                </div>
+                                                                <label class="relative inline-flex items-center cursor-pointer">
+                                                                    <input type="checkbox" checked class="sr-only peer">
+                                                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
+                                                                </label>
+                                                            </div>
+                                                            <div class="flex items-center justify-between p-3 border rounded-md">
+                                                                <div class="flex items-center">
+                                                                    <i class="ph ph-credit-card text-red-500 text-xl mr-3"></i>
+                                                                    <span>Card Payment</span>
+                                                                </div>
+                                                                <label class="relative inline-flex items-center cursor-pointer">
+                                                                    <input type="checkbox" checked class="sr-only peer">
+                                                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
+                                                                </label>
+                                                            </div>
+                                                            <div class="flex items-center justify-between p-3 border rounded-md">
+                                                                <div class="flex items-center">
+                                                                    <i class="ph ph-qr-code text-red-500 text-xl mr-3"></i>
+                                                                    <span>UPI</span>
+                                                                </div>
+                                                                <label class="relative inline-flex items-center cursor-pointer">
+                                                                    <input type="checkbox" checked class="sr-only peer">
+                                                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
+                                                                </label>
+                                                            </div>
+                                                        </div>
                                                     </div>`,
+                                                    actions: `
+                                                        <div class="flex justify-end p-4">
+                                                            <button id="save-payment-methods-btn" class="px-4 py-2 bg-red-500 text-white rounded-md">Save</button>
+                                                        </div>
+                                                    `,
                                                     size: 'md'
                                                 });
                                             }}>
@@ -2097,6 +3352,21 @@ function Dashboard() {
                                                 <i className="ph ph-caret-right text-lg"></i>
                                             </button>
                                         </div>
+
+                                        {/* Activate button */}
+                                        {!seller.hasSubscription && (
+                                            <div className="py-8 text-center">
+                                                <button
+                                                    onClick={() => {
+                                                        window.open(`https://us-central1-frihbi-app.cloudfunctions.net/seller-upgradeUser?uid=${seller.id}`, '_blank');
+                                                    }}
+                                                    className="text-gray-600 opacity-60 hover:opacity-100 flex items-center justify-center mx-auto"
+                                                >
+                                                    <i className="ph ph-arrow-up-right mr-1"></i>
+                                                    <span className="underline">Activate this account</span>
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </>
                             )}
