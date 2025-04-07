@@ -3107,7 +3107,7 @@ function Dashboard() {
                                     <div className="space-y-0">
                                         {/* Account Settings */}
                                         <div
-                                            className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg transition-colors"
+                                            className="flex flex-col sm:flex-row sm:items-center justify-between py-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-4 rounded-lg transition-colors"
                                             onClick={() => {
                                                 // Check if user has permission
                                                 if (seller?.checkPermission && seller.checkPermission("Profile", "Edit")) {
@@ -3125,7 +3125,7 @@ function Dashboard() {
                                                 }
                                             }}>
                                             <div className="flex items-center">
-                                                <div className="p-2 bg-gradient-to-br from-red-50 to-white rounded-lg mr-3 flex-shrink-0">
+                                                <div className="w-12 h-12 bg-red-50 rounded-lg mr-4 flex-shrink-0 flex items-center justify-center">
                                                     <i className="ph ph-user text-red-500 text-xl"></i>
                                                 </div>
                                                 <div>
@@ -3139,100 +3139,71 @@ function Dashboard() {
                                         </div>
 
                                         {/* Access Roles */}
-                                        {seller?.isSuperAdmin && (
-                                            <div
-                                                className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg transition-colors"
-                                                onClick={() => {
-                                                    // Open Access Role management
-                                                    handleAccessRoleManagement();
-                                                }}>
-                                                <div className="flex items-center">
-                                                    <div className="p-2 bg-gradient-to-br from-red-50 to-white rounded-lg mr-3 flex-shrink-0">
-                                                        <i className="ph ph-key text-red-500 text-xl"></i>
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="font-medium text-gray-800">Access Roles</h4>
-                                                        <p className="text-sm text-gray-500">Manage access role for your team</p>
-                                                    </div>
+                                        <div
+                                            className="flex flex-col sm:flex-row sm:items-center justify-between py-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-4 rounded-lg transition-colors"
+                                            onClick={() => {
+                                                // Open Access Role management
+                                                handleAccessRoleManagement();
+                                            }}>
+                                            <div className="flex items-center">
+                                                <div className="w-12 h-12 bg-red-50 rounded-lg mr-4 flex-shrink-0 flex items-center justify-center">
+                                                    <i className="ph ph-key text-red-500 text-xl"></i>
                                                 </div>
-                                                <button className="mt-2 sm:mt-0 text-gray-400 self-start">
-                                                    <i className="ph ph-caret-right text-lg"></i>
-                                                </button>
+                                                <div>
+                                                    <h4 className="font-medium text-gray-800">Access Roles</h4>
+                                                    <p className="text-sm text-gray-500">Manage access role for your team</p>
+                                                </div>
                                             </div>
-                                        )}
+                                            <button className="mt-2 sm:mt-0 text-gray-400 self-start">
+                                                <i className="ph ph-caret-right text-lg"></i>
+                                            </button>
+                                        </div>
 
                                         {/* Print Template */}
-                                        {seller?.checkPermission && seller.checkPermission("Profile", "Edit") && (
-                                            <div
-                                                className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg transition-colors"
-                                                onClick={() => {
-                                                    // Open Print Template management
-                                                    handlePrintTemplateManagement();
-                                                }}>
-                                                <div className="flex items-center">
-                                                    <div className="p-2 bg-gradient-to-br from-red-50 to-white rounded-lg mr-3 flex-shrink-0">
-                                                        <i className="ph ph-printer text-red-500 text-xl"></i>
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="font-medium text-gray-800">Print Template</h4>
-                                                        <p className="text-sm text-gray-500">Manage KOT & Bill template</p>
-                                                    </div>
+                                        <div
+                                            className="flex flex-col sm:flex-row sm:items-center justify-between py-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-4 rounded-lg transition-colors"
+                                            onClick={() => {
+                                                // Open Print Template management
+                                                handlePrintTemplateManagement();
+                                            }}>
+                                            <div className="flex items-center">
+                                                <div className="w-12 h-12 bg-red-50 rounded-lg mr-4 flex-shrink-0 flex items-center justify-center">
+                                                    <i className="ph ph-printer text-red-500 text-xl"></i>
                                                 </div>
-                                                <button className="mt-2 sm:mt-0 text-gray-400 self-start">
-                                                    <i className="ph ph-caret-right text-lg"></i>
-                                                </button>
+                                                <div>
+                                                    <h4 className="font-medium text-gray-800">Print Template</h4>
+                                                    <p className="text-sm text-gray-500">Manage KOT & Bill template</p>
+                                                </div>
                                             </div>
-                                        )}
+                                            <button className="mt-2 sm:mt-0 text-gray-400 self-start">
+                                                <i className="ph ph-caret-right text-lg"></i>
+                                            </button>
+                                        </div>
 
                                         {/* Bulk Tax Update */}
-                                        {seller?.checkPermission && seller.checkPermission("Product", "Edit") && (
-                                            <div
-                                                className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg transition-colors"
-                                                onClick={() => {
-                                                    // Open Bulk Tax Update management
-                                                    handleBulkTaxUpdate();
-                                                }}>
-                                                <div className="flex items-center">
-                                                    <div className="p-2 bg-gradient-to-br from-red-50 to-white rounded-lg mr-3 flex-shrink-0">
-                                                        <i className="ph ph-currency-dollar text-red-500 text-xl"></i>
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="font-medium text-gray-800">Bulk Tax Update</h4>
-                                                        <p className="text-sm text-gray-500">Update tax for all products</p>
-                                                    </div>
+                                        <div
+                                            className="flex flex-col sm:flex-row sm:items-center justify-between py-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-4 rounded-lg transition-colors"
+                                            onClick={() => {
+                                                // Open Bulk Tax Update management
+                                                handleBulkTaxUpdate();
+                                            }}>
+                                            <div className="flex items-center">
+                                                <div className="w-12 h-12 bg-red-50 rounded-lg mr-4 flex-shrink-0 flex items-center justify-center">
+                                                    <i className="ph ph-currency-dollar text-red-500 text-xl"></i>
                                                 </div>
-                                                <button className="mt-2 sm:mt-0 text-gray-400 self-start">
-                                                    <i className="ph ph-caret-right text-lg"></i>
-                                                </button>
-                                            </div>
-                                        )}
-
-                                        {/* Import Products */}
-                                        {seller?.hasProAccess && (
-                                            <div
-                                                className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg transition-colors"
-                                                onClick={() => {
-                                                    // Open Import Products modal
-                                                    handleProductImport();
-                                                }}>
-                                                <div className="flex items-center">
-                                                    <div className="p-2 bg-gradient-to-br from-red-50 to-white rounded-lg mr-3 flex-shrink-0">
-                                                        <i className="ph ph-file-excel text-red-500 text-xl"></i>
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="font-medium text-gray-800">Import Products</h4>
-                                                        <p className="text-sm text-gray-500">Bulk import products from Excel/CSV</p>
-                                                    </div>
+                                                <div>
+                                                    <h4 className="font-medium text-gray-800">Bulk Tax Update</h4>
+                                                    <p className="text-sm text-gray-500">Update tax for all products</p>
                                                 </div>
-                                                <button className="mt-2 sm:mt-0 text-gray-400 self-start">
-                                                    <i className="ph ph-caret-right text-lg"></i>
-                                                </button>
                                             </div>
-                                        )}
+                                            <button className="mt-2 sm:mt-0 text-gray-400 self-start">
+                                                <i className="ph ph-caret-right text-lg"></i>
+                                            </button>
+                                        </div>
 
                                         {/* Store Hours */}
                                         <div
-                                            className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg transition-colors"
+                                            className="flex flex-col sm:flex-row sm:items-center justify-between py-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-4 rounded-lg transition-colors"
                                             onClick={() => {
                                                 // Open Store Hours management
                                                 window.ModalManager?.createCenterModal({
@@ -3276,7 +3247,7 @@ function Dashboard() {
                                                 });
                                             }}>
                                             <div className="flex items-center">
-                                                <div className="p-2 bg-gradient-to-br from-red-50 to-white rounded-lg mr-3 flex-shrink-0">
+                                                <div className="w-12 h-12 bg-red-50 rounded-lg mr-4 flex-shrink-0 flex items-center justify-center">
                                                     <i className="ph ph-clock text-red-500 text-xl"></i>
                                                 </div>
                                                 <div>
@@ -3291,7 +3262,7 @@ function Dashboard() {
 
                                         {/* Payment Methods */}
                                         <div
-                                            className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg transition-colors"
+                                            className="flex flex-col sm:flex-row sm:items-center justify-between py-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-4 rounded-lg transition-colors"
                                             onClick={() => {
                                                 // Open Payment Methods management
                                                 window.ModalManager?.createCenterModal({
@@ -3340,7 +3311,7 @@ function Dashboard() {
                                                 });
                                             }}>
                                             <div className="flex items-center">
-                                                <div className="p-2 bg-gradient-to-br from-red-50 to-white rounded-lg mr-3 flex-shrink-0">
+                                                <div className="w-12 h-12 bg-red-50 rounded-lg mr-4 flex-shrink-0 flex items-center justify-center">
                                                     <i className="ph ph-credit-card text-red-500 text-xl"></i>
                                                 </div>
                                                 <div>
@@ -3353,20 +3324,6 @@ function Dashboard() {
                                             </button>
                                         </div>
 
-                                        {/* Activate button */}
-                                        {!seller.hasSubscription && (
-                                            <div className="py-8 text-center">
-                                                <button
-                                                    onClick={() => {
-                                                        window.open(`https://us-central1-frihbi-app.cloudfunctions.net/seller-upgradeUser?uid=${seller.id}`, '_blank');
-                                                    }}
-                                                    className="text-gray-600 opacity-60 hover:opacity-100 flex items-center justify-center mx-auto"
-                                                >
-                                                    <i className="ph ph-arrow-up-right mr-1"></i>
-                                                    <span className="underline">Activate this account</span>
-                                                </button>
-                                            </div>
-                                        )}
                                     </div>
                                 </>
                             )}
