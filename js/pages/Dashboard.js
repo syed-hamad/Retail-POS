@@ -1841,21 +1841,6 @@ function Dashboard() {
                                 </div>
                             ) : (
                                 <>
-                                    {/* Fetch and display restaurant info from SDK */}
-                                    <div className="mb-4 flex flex-col bg-gradient-to-r from-red-50 to-white p-4 rounded-xl border border-red-100 shadow-sm">
-                                        <div className="flex items-center justify-between">
-                                            <h3 className="text-xl font-semibold text-gray-800">
-                                                <span className="text-red-500">{window.sdk?.profile?.businessName || seller.businessName || seller.name || "Restaurant Name"}</span>
-                                            </h3>
-                                            <div className="p-2 rounded-full bg-red-50 flex-shrink-0">
-                                                <i className="ph ph-envelope text-red-500"></i>
-                                            </div>
-                                        </div>
-                                        <div className="text-gray-500 mt-1 flex items-center">
-                                            <i className="ph ph-at text-red-400 mr-1.5"></i>
-                                            <span>{window.sdk?.profile?.email || seller.email || "restaurant@example.com"}</span>
-                                        </div>
-                                    </div>
 
                                     <div className="flex flex-col sm:flex-row sm:items-center gap-4 pb-4 border-b border-gray-100">
                                         <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-red-50 to-white flex items-center justify-center border border-gray-200 shadow-sm">
@@ -1866,8 +1851,8 @@ function Dashboard() {
                                             )}
                                         </div>
                                         <div className="flex-1">
-                                            <h3 className="text-lg font-semibold text-gray-800">{seller.name || 'Your Store'}</h3>
-                                            <p className="text-gray-500">{seller.storeType || 'Retail Store'}</p>
+                                            <h3 className="text-lg font-semibold text-gray-800">{seller.businessName || 'Your Store'}</h3>
+                                            <p className="text-gray-500">{seller.email || 'Retail Store'}</p>
                                         </div>
                                         <button className="px-3 py-1.5 bg-gradient-to-r from-white to-gray-50 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5 text-sm shadow-sm self-start sm:self-center">
                                             <i className="ph ph-pencil"></i>
@@ -2117,19 +2102,6 @@ function Dashboard() {
                             )}
                         </div>
                     </div>
-
-                    {/* Activate Account (Only shown for non-subscribed accounts) */}
-                    {seller && !seller.hasSubscription && (
-                        <div className="mt-4 text-center">
-                            <button
-                                className="inline-flex items-center gap-1.5 text-gray-500 hover:text-gray-800 transition-colors"
-                                onClick={() => window.open(`https://us-central1-frihbi-app.cloudfunctions.net/seller-upgradeUser?uid=${seller.id}`, '_blank')}
-                            >
-                                <i className="ph ph-arrow-square-out"></i>
-                                <span className="text-sm underline">Activate this account</span>
-                            </button>
-                        </div>
-                    )}
                 </div>
             )}
 

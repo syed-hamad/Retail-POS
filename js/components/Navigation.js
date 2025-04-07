@@ -4,12 +4,20 @@ function SidebarNav({ tabs, activeTab, setActiveTab }) {
         <div className="hidden md:flex flex-col w-64 border-r h-full fixed left-0 top-0 pt-16" style={{ backgroundColor: "#fff8f8" }}>
             <div className="px-3 py-8">
                 <div className="flex items-center justify-center mb-8">
-                    <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center">
-                        <i className="ph ph-storefront text-red-500 text-2xl"></i>
+                    <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0">
+                        {window.sdk?.profile?.avatar || window.useProfile?.()?.avatar ? (
+                            <img
+                                src={window.sdk?.profile?.avatar || window.useProfile?.()?.avatar}
+                                alt="Store Logo"
+                                className="w-12 h-12 object-contain"
+                            />
+                        ) : (
+                            <i className="ph ph-storefront text-red-500 text-2xl"></i>
+                        )}
                     </div>
                     <div className="ml-3">
-                        <h2 className="text-xl font-bold text-gray-800">Liquid POS</h2>
-                        <p className="text-sm text-gray-500">Restaurant Management</p>
+                        <h2 className="text-xl font-bold text-gray-800">{window.sdk?.profile?.businessName || window.useProfile?.()?.businessName || "Liquid POS"}</h2>
+                        <p className="text-sm text-gray-500">{window.sdk?.profile?.email || window.useProfile?.()?.email || "Restaurant Management"}</p>
                     </div>
                 </div>
                 <div className="flex flex-col space-y-2">
@@ -41,10 +49,10 @@ function BottomNav({ tabs, activeTab, setActiveTab }) {
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`flex flex-col items-center justify-center transition-all relative ${activeTab === tab.id 
-                            ? 'text-red-500' 
+                        className={`flex flex-col items-center justify-center transition-all relative ${activeTab === tab.id
+                            ? 'text-red-500'
                             : 'text-gray-600 hover:text-red-400'
-                        }`}
+                            }`}
                     >
                         {activeTab === tab.id && (
                             <div className="absolute top-0 w-10 h-1 bg-gradient-to-r from-red-600 to-red-500 rounded-b-lg animate-fadeIn"></div>
