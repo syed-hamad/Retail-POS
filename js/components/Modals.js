@@ -2433,28 +2433,40 @@ function ProductFormModal({ isOpen, onClose, product = null }) {
             setUploading(true);
             setError(null);
 
-            // Preview image immediately
+            // Preview image immediately for better UX
             const reader = new FileReader();
-            reader.onload = (e) => {
+            reader.onload = async (e) => {
                 const result = e.target.result;
                 setPreviewImage(result);
 
-                // Simulate a delay to show uploading state
-                setTimeout(() => {
-                    try {
-                        // For demo, we'll just use the preview URL
-                        // In production, this would be replaced with actual file upload
-                        setFormData(prev => ({
-                            ...prev,
-                            imgs: [result]
-                        }));
-                        setUploading(false);
-                    } catch (error) {
-                        console.error('Error in upload timeout:', error);
-                        setError('Failed to process image');
-                        setUploading(false);
-                    }
-                }, 1000);
+                try {
+                    // Generate a temporary ID if this is a new product
+                    const productId = formData.id || `temp_${Date.now()}`;
+
+                    // Create a unique filename with timestamp to avoid conflicts
+                    const timestamp = Date.now();
+                    const fileName = `main_${timestamp}.jpg`;
+                    const filePath = `products/${productId}/${fileName}`;
+
+                    // Upload the file to Firebase Storage
+                    await window.sdk.storage.uploadFile(filePath, file);
+
+                    // Get the download URL
+                    const imageUrl = await window.sdk.storage.getDownloadURL(filePath);
+
+                    // Update form data with the new image URL
+                    setFormData(prev => ({
+                        ...prev,
+                        imgs: [...prev.imgs, imageUrl]
+                    }));
+
+                    setUploading(false);
+                    showToast('Image uploaded successfully', 'success');
+                } catch (error) {
+                    console.error('Error uploading image:', error);
+                    setError('Failed to upload image to storage');
+                    setUploading(false);
+                }
             };
 
             reader.readAsDataURL(file);
@@ -2500,18 +2512,43 @@ function ProductFormModal({ isOpen, onClose, product = null }) {
         console.log("Updated charges:", updatedCharges);
     };
 
-    const removeImage = (index) => {
-        setFormData(prev => {
-            const updatedImgs = [...prev.imgs];
-            updatedImgs.splice(index, 1);
-            return { ...prev, imgs: updatedImgs };
-        });
+    const removeImage = async (index) => {
+        try {
+            // Get the image URL that's being removed
+            const imageToRemove = formData.imgs[index];
 
-        // Update preview image
-        if (index === 0 && formData.imgs.length > 1) {
-            setPreviewImage(formData.imgs[1]);
-        } else if (formData.imgs.length <= 1) {
-            setPreviewImage('');
+            // If it's a Firebase Storage URL, try to delete the file
+            if (imageToRemove && imageToRemove.includes('firebasestorage.googleapis.com')) {
+                // Extract the path from the URL
+                const urlParts = imageToRemove.split('/o/')[1];
+                if (urlParts) {
+                    const path = decodeURIComponent(urlParts.split('?')[0]);
+                    try {
+                        await window.sdk.storage.deleteFile(path);
+                        showToast('Image deleted from storage', 'success');
+                    } catch (deleteError) {
+                        console.warn('Could not delete image from storage:', deleteError);
+                        // Continue with UI update even if delete fails
+                    }
+                }
+            }
+
+            // Update the form data
+            setFormData(prev => {
+                const updatedImgs = [...prev.imgs];
+                updatedImgs.splice(index, 1);
+                return { ...prev, imgs: updatedImgs };
+            });
+
+            // Update preview image
+            if (index === 0 && formData.imgs.length > 1) {
+                setPreviewImage(formData.imgs[1]);
+            } else if (formData.imgs.length <= 1) {
+                setPreviewImage('');
+            }
+        } catch (error) {
+            console.error('Error removing image:', error);
+            showToast('Failed to remove image', 'error');
         }
     };
 
@@ -2554,26 +2591,88 @@ function ProductFormModal({ isOpen, onClose, product = null }) {
                         inclusive: charge.inclusive
                     };
                 }),
-                recipe: recipeItems // Save recipe items
+                recipe: recipeItems, // Save recipe items
+                updatedAt: new Date()
             };
 
-            // Get current user
-            const user = window.sdk.getCurrentUser();
+            // Get current user profile
+            try {
+                const profileDoc = await window.sdk.profile.get();
+                const userProfile = profileDoc.data();
 
-            if (user) {
-                productData.sellerId = user.uid;
-                productData.sellerBusinessName = user.businessName || '';
-                productData.sellerAvatar = user.photoURL || '';
+                if (userProfile) {
+                    productData.sellerId = userProfile.uid || '';
+                    productData.sellerBusinessName = userProfile.businessName || '';
+                    productData.sellerAvatar = userProfile.photoURL || '';
+                }
+            } catch (profileError) {
+                console.warn('Could not get profile data:', profileError);
+                // Continue without profile data
             }
+
+            let productId;
 
             // Save to Firestore
             if (product) {
                 // Update existing product
-                await window.sdk.collection("Product").doc(product.id).update(productData);
+                productId = product.id;
+                await window.sdk.collection("Product").doc(productId).update(productData);
                 showToast('Product updated successfully');
             } else {
                 // Add new product
-                await window.sdk.collection("Product").add(productData);
+                const docRef = await window.sdk.collection("Product").add({
+                    ...productData,
+                    date: new Date()
+                });
+                productId = docRef.id;
+
+                // If we had temporary IDs in the image paths, we need to update them
+                if (formData.imgs.length > 0) {
+                    const hasTemps = formData.imgs.some(img => img.includes('temp_'));
+
+                    if (hasTemps) {
+                        // Get all images for this product
+                        try {
+                            const files = await window.sdk.storage.listFiles(`products/temp_`);
+
+                            // Move each temp file to the correct product folder
+                            for (const item of files.items) {
+                                const fullPath = item.fullPath;
+                                if (fullPath.includes('temp_')) {
+                                    // Get file content
+                                    const fileBlob = await fetch(await window.sdk.storage.getDownloadURL(fullPath)).then(r => r.blob());
+
+                                    // Upload to new location
+                                    const newPath = fullPath.replace(/products\/temp_[^\/]+\//, `products/${productId}/`);
+                                    await window.sdk.storage.uploadFile(newPath, fileBlob);
+
+                                    // Get new URL
+                                    const newUrl = await window.sdk.storage.getDownloadURL(newPath);
+
+                                    // Find old URL in product images and replace it
+                                    const oldUrl = await window.sdk.storage.getDownloadURL(fullPath);
+                                    if (productData.imgs.includes(oldUrl)) {
+                                        productData.imgs = productData.imgs.map(url =>
+                                            url === oldUrl ? newUrl : url
+                                        );
+                                    }
+
+                                    // Delete old file
+                                    await window.sdk.storage.deleteFile(fullPath);
+                                }
+                            }
+
+                            // Update product with fixed image URLs
+                            await window.sdk.collection("Product").doc(productId).update({
+                                imgs: productData.imgs
+                            });
+                        } catch (moveError) {
+                            console.error('Error moving temporary images:', moveError);
+                            // Continue anyway, as the product is created and images will still work
+                        }
+                    }
+                }
+
                 showToast('Product added successfully');
             }
 
@@ -2610,6 +2709,28 @@ function ProductFormModal({ isOpen, onClose, product = null }) {
             setUploading(true);
             setError('');
 
+            // First delete all product images from storage if they exist
+            if (formData.imgs && formData.imgs.length > 0) {
+                try {
+                    const files = await window.sdk.storage.listFiles(`products/${product.id}`);
+
+                    // Delete each file
+                    for (const item of files.items) {
+                        try {
+                            await window.sdk.storage.deleteFile(item.fullPath);
+                            console.log(`Deleted image: ${item.fullPath}`);
+                        } catch (deleteError) {
+                            console.warn(`Could not delete image: ${item.fullPath}`, deleteError);
+                            // Continue with deletion of other files
+                        }
+                    }
+                } catch (listError) {
+                    console.warn('Could not list images for deletion:', listError);
+                    // Continue with document deletion regardless
+                }
+            }
+
+            // Then delete the product document
             await window.sdk.collection("Product").doc(product.id).delete();
             window.showToast('Product deleted successfully');
             setUploading(false);
@@ -2666,45 +2787,69 @@ function ProductFormModal({ isOpen, onClose, product = null }) {
 
                     <form className="space-y-5">
                         {/* Product Image Upload */}
-                        <div className="flex justify-center">
-                            <div className="w-full max-w-sm border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                                {previewImage ? (
-                                    <div className="relative">
-                                        <img
-                                            src={previewImage}
-                                            alt="Product preview"
-                                            className="mx-auto max-h-48 object-contain mb-2"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => removeImage(0)}
-                                            className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full"
-                                        >
-                                            <i className="ph ph-x text-sm"></i>
-                                        </button>
-                                    </div>
-                                ) : (
+                        <div>
+                            <div className="mb-1 flex justify-between items-center">
+                                <label className="block text-sm font-medium text-gray-700">
+                                    Product Images
+                                </label>
+                                <label className="cursor-pointer inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors">
+                                    <i className="ph ph-plus mr-1"></i>
+                                    <span>{uploading ? 'Uploading...' : 'Add Image'}</span>
+                                    <input
+                                        type="file"
+                                        className="hidden"
+                                        onChange={handleImageUpload}
+                                        accept="image/*"
+                                        disabled={uploading}
+                                    />
+                                </label>
+                            </div>
+
+                            {formData.imgs.length > 0 ? (
+                                <div className="grid grid-cols-3 gap-2 mt-2 mb-2">
+                                    {formData.imgs.map((img, index) => (
+                                        <div key={index} className="relative rounded-lg border border-gray-200 overflow-hidden aspect-square">
+                                            <img
+                                                src={img}
+                                                alt={`Product ${index + 1}`}
+                                                className="w-full h-full object-cover"
+                                                onClick={() => setPreviewImage(img)}
+                                            />
+                                            {img === previewImage && (
+                                                <div className="absolute inset-0 bg-red-500 bg-opacity-20 flex items-center justify-center">
+                                                    <span className="px-2 py-1 bg-red-500 text-white text-xs rounded">Main</span>
+                                                </div>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => removeImage(index)}
+                                                className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full"
+                                            >
+                                                <i className="ph ph-x text-sm"></i>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="w-full border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
                                     <div className="flex flex-col items-center justify-center py-6">
                                         <i className="ph ph-image text-4xl text-gray-400 mb-2"></i>
-                                        <p className="text-gray-500">Upload product image</p>
+                                        <p className="text-gray-500">No product images</p>
+                                        <p className="text-xs text-gray-400 mt-1">Click "Add Image" to upload</p>
                                     </div>
-                                )}
-
-                                <div className="mt-2">
-                                    <label className="cursor-pointer inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors">
-                                        <i className="ph ph-upload-simple mr-2"></i>
-                                        <span>{uploading ? 'Uploading...' : 'Choose File'}</span>
-                                        <input
-                                            type="file"
-                                            className="hidden"
-                                            onChange={handleImageUpload}
-                                            accept="image/*"
-                                            disabled={uploading}
-                                        />
-                                    </label>
                                 </div>
-                                <p className="text-xs text-gray-500 mt-1">Maximum file size: 5MB</p>
-                            </div>
+                            )}
+
+                            {previewImage && (
+                                <div className="mt-3 bg-gray-50 p-3 rounded-lg">
+                                    <div className="text-sm font-medium text-gray-700 mb-2">Preview Image</div>
+                                    <img
+                                        src={previewImage}
+                                        alt="Product preview"
+                                        className="mx-auto max-h-48 object-contain"
+                                    />
+                                </div>
+                            )}
                         </div>
 
                         {/* Category Selection */}

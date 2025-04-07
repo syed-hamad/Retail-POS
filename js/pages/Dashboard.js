@@ -39,6 +39,7 @@ function Dashboard() {
     const [isOrderRoomOpen, setIsOrderRoomOpen] = React.useState(false);
     const [selectedRoomTableId, setSelectedRoomTableId] = React.useState(null);
     const [selectedRoomVariant, setSelectedRoomVariant] = React.useState(null);
+    const [activeView, setActiveView] = React.useState('dashboard'); // 'dashboard' or 'settings'
     const [dashboardMetrics, setDashboardMetrics] = React.useState({
         todayOrders: 0,
         todayRevenue: 0,
@@ -1353,434 +1354,784 @@ function Dashboard() {
     // Render the dashboard
     return (
         <div className="pb-24 md:pb-4 px-4 mt-4">
-            {/* Orders Dashboard */}
-            <div className="mb-6">
-                <div className="flex items-center justify-between mb-5">
-                    <h2 className="text-xl font-bold text-gray-800 flex items-center">
-                        <i className="ph ph-storefront text-red-500 mr-2"></i>
-                        Today's Summary
-                    </h2>
-                </div>
-
-                <div className="overflow-x-auto overflow-visible pb-2 -mx-4 px-4">
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 min-w-[300px]">
-                        <DashboardCard
-                            icon="ph-chart-line-up"
-                            title="Today's Orders"
-                            value={formatNumber(dashboardMetrics.todayOrders)}
-                            trend={`${dashboardMetrics.todayOrdersTrend >= 0 ? '+' : ''}${dashboardMetrics.todayOrdersTrend.toFixed(1)}%`}
-                            color={dashboardMetrics.todayOrdersTrend >= 0 ? "primary" : "warning"}
-                            compact={true}
-                        />
-                        <DashboardCard
-                            icon="ph-currency-dollar"
-                            title="Today's Revenue"
-                            value={formatCurrency(dashboardMetrics.todayRevenue)}
-                            trend={`${dashboardMetrics.todayRevenueTrend >= 0 ? '+' : ''}${dashboardMetrics.todayRevenueTrend.toFixed(1)}%`}
-                            color={dashboardMetrics.todayRevenueTrend >= 0 ? "success" : "warning"}
-                            compact={true}
-                        />
-                        <DashboardCard
-                            icon="ph-users"
-                            title="New Customers"
-                            value={formatNumber(dashboardMetrics.newCustomers)}
-                            trend={`${dashboardMetrics.newCustomersTrend >= 0 ? '+' : ''}${dashboardMetrics.newCustomersTrend.toFixed(1)}%`}
-                            color={dashboardMetrics.newCustomersTrend >= 0 ? "primary" : "warning"}
-                            compact={true}
-                        />
-                        <DashboardCard
-                            icon="ph-shopping-cart"
-                            title="Avg. Order Value"
-                            value={formatCurrency(dashboardMetrics.avgOrderValue)}
-                            trend={`${dashboardMetrics.avgOrderValueTrend >= 0 ? '+' : ''}${dashboardMetrics.avgOrderValueTrend.toFixed(1)}%`}
-                            color={dashboardMetrics.avgOrderValueTrend >= 0 ? "info" : "warning"}
-                            compact={true}
-                            className="hidden md:flex"
-                        />
-                        <DashboardCard
-                            icon="ph-clock"
-                            title="Avg. Service Time"
-                            value={`${Math.round(dashboardMetrics.avgServiceTime)} min`}
-                            trend={`${dashboardMetrics.avgServiceTimeTrend >= 0 ? '+' : ''}${dashboardMetrics.avgServiceTimeTrend.toFixed(1)}%`}
-                            color={dashboardMetrics.avgServiceTimeTrend >= 0 ? "success" : "warning"}
-                            compact={true}
-                            className="hidden lg:flex"
-                        />
-                    </div>
-                </div>
-            </div>
-
-            {/* Order Channels Section */}
-            <div className="mb-6 bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
-                <div className="px-3 py-3 border-b border-gray-200 flex items-center">
-                    <i className="ph ph-globe text-red-500 text-xl mr-2"></i>
-                    <h2 className="text-lg font-semibold text-gray-800">Order Channels</h2>
-                </div>
-                <div className="p-3">
-                    {isLoading ? (
-                        <div className="text-center py-10">
-                            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
-                            <p className="mt-3 text-gray-600">Loading orders...</p>
-                        </div>
-                    ) : error ? (
-                        <div className="text-center py-10">
-                            <div className="rounded-full h-10 w-10 bg-red-100 flex items-center justify-center mx-auto">
-                                <i className="ph ph-x text-red-500 text-xl"></i>
-                            </div>
-                            <p className="mt-3 text-gray-600">{error}</p>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                            {channels
-                                .filter(channel => channel.isChannel)
-                                .map(channel => (
-                                    <div
-                                        key={channel.id}
-                                        className="mb-2"
-                                        onClick={() => handleRoomClick(null, channel.id)}
-                                        onContextMenu={(e) => {
-                                            e.preventDefault();
-                                            showRenameRoomModal(null, channel.id);
-                                        }}
-                                    >
-                                        <TableCard
-                                            title={channel.title}
-                                            orders={channel.orders || []}
-                                            duration={channel.duration}
-                                            onTap={() => handleRoomClick(null, channel.id)}
-                                            onLongPress={() => showRenameRoomModal(null, channel.id)}
-                                            compact={true}
-                                        />
-                                    </div>
-                                ))}
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Tables Section */}
-            <div className="mb-6 bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
-                <div className="px-3 py-3 border-b border-gray-200 flex items-center justify-between">
-                    <div className="flex items-center">
-                        <i className="ph ph-table text-red-500 text-xl mr-2"></i>
-                        <h2 className="text-lg font-semibold text-gray-800">Dining Tables</h2>
-                    </div>
-                    <button
-                        onClick={showAddTableModal}
-                        className="px-2 py-1 bg-gradient-to-r from-white to-gray-50 border border-gray-200 text-red-500 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1.5 text-sm shadow-sm"
-                    >
-                        <i className="ph ph-plus"></i>
-                        <span>Add Table</span>
-                    </button>
-                </div>
-                <div className="p-3">
-                    {isLoading ? (
-                        <div className="text-center py-10">
-                            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
-                            <p className="mt-3 text-gray-600">Loading tables...</p>
-                        </div>
-                    ) : error ? (
-                        <div className="text-center py-10">
-                            <div className="rounded-full h-10 w-10 bg-red-100 flex items-center justify-center mx-auto">
-                                <i className="ph ph-x text-red-500 text-xl"></i>
-                            </div>
-                            <p className="mt-3 text-gray-600">{error}</p>
-                        </div>
-                    ) : tables.length === 0 ? (
-                        <NoOrdersFound />
-                    ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                            {tables
-                                .filter(table => table.isTable)
-                                .map(table => (
-                                    <div
-                                        key={table.id}
-                                        className="mb-2"
-                                        onClick={() => handleRoomClick(table.id, null)}
-                                        onContextMenu={(e) => {
-                                            e.preventDefault();
-                                            showRenameRoomModal(table.id, null);
-                                        }}
-                                    >
-                                        <TableCard
-                                            title={table.title}
-                                            orders={table.orders || []}
-                                            duration={table.duration}
-                                            onTap={() => handleRoomClick(table.id, null)}
-                                            onLongPress={() => showRenameRoomModal(table.id, null)}
-                                            compact={true}
-                                        />
-                                    </div>
-                                ))}
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Orders Section */}
-            <div className="mb-6 bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
-                <div className="px-3 py-3 border-b border-gray-200 flex items-center">
-                    <i className="ph ph-qr-code text-red-500 text-xl mr-2"></i>
-                    <h2 className="text-lg font-semibold text-gray-800">Recent Orders</h2>
-                </div>
-
-                {/* Order Tabs */}
-                <div className="flex border-b border-gray-200">
-                    <button
-                        className={`flex-1 py-2 px-4 text-sm font-medium ${!showCompletedOrders ? 'text-red-500 border-b-2 border-red-500' : 'text-gray-500 hover:text-gray-700'}`}
-                        onClick={() => setShowCompletedOrders(false)}
-                    >
-                        <i className={`ph ph-timer ${!showCompletedOrders ? 'text-red-500' : 'text-gray-400'} mr-1.5`}></i>
-                        QR Orders
-                    </button>
-                    <button
-                        className={`flex-1 py-2 px-4 text-sm font-medium ${showCompletedOrders ? 'text-red-500 border-b-2 border-red-500' : 'text-gray-500 hover:text-gray-700'}`}
-                        onClick={() => setShowCompletedOrders(true)}
-                    >
-                        <i className={`ph ph-check-circle ${showCompletedOrders ? 'text-red-500' : 'text-gray-400'} mr-1.5`}></i>
-                        Completed Orders
-                    </button>
-                </div>
-
-                {/* Desktop Summary Row - Only for Active Orders tab */}
-                {!showCompletedOrders && (
-                    <div className="hidden md:flex border-b border-gray-100 bg-gradient-to-r from-warm-bg to-white">
-                        <div className="grid grid-cols-4 gap-4 p-4 w-full">
-                            <div className="flex items-center gap-2">
-                                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-red-50 to-white flex items-center justify-center shadow-sm flex-shrink-0">
-                                    <i className="ph ph-timer text-red-500 text-lg"></i>
-                                </div>
-                                <div>
-                                    <div className="text-xs text-gray-500">Pending Orders</div>
-                                    <div className="text-lg font-bold text-gray-800">{qrOrders.length}</div>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-green-50 to-white flex items-center justify-center shadow-sm flex-shrink-0">
-                                    <i className="ph ph-check-circle text-green-500 text-lg"></i>
-                                </div>
-                                <div>
-                                    <div className="text-xs text-gray-500">Kitchen Orders Today</div>
-                                    <div className="text-lg font-bold text-gray-800">
-                                        {(() => {
-                                            // Filter orders accepted today
-                                            const today = new Date();
-                                            today.setHours(0, 0, 0, 0);
-                                            const acceptedToday = orders.filter(order => {
-                                                // Check if order has 'KITCHEN' status
-                                                if (!order.status || !Array.isArray(order.status)) return false;
-
-                                                // Find the kitchen status entry
-                                                const kitchenStatus = order.status.find(
-                                                    s => s.label && s.label.toUpperCase() === 'KITCHEN'
-                                                );
-
-                                                if (!kitchenStatus || !kitchenStatus.date) return false;
-
-                                                // Check if it was accepted today
-                                                const statusDate = parseDate(kitchenStatus.date);
-                                                return statusDate && statusDate >= today;
-                                            });
-
-                                            return acceptedToday.length;
-                                        })()}
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-50 to-white flex items-center justify-center shadow-sm flex-shrink-0">
-                                    <i className="ph ph-clock-countdown text-orange-500 text-lg"></i>
-                                </div>
-                                <div>
-                                    <div className="text-xs text-gray-500">Avg. Accept Time</div>
-                                    <div className="text-lg font-bold text-gray-800">
-                                        {(() => {
-                                            // Calculate average acceptance time for orders today
-                                            const today = new Date();
-                                            today.setHours(0, 0, 0, 0);
-
-                                            let totalAcceptTimeMinutes = 0;
-                                            let acceptedOrderCount = 0;
-
-                                            orders.forEach(order => {
-                                                if (!order.status || !Array.isArray(order.status)) return;
-
-                                                // Find the placed and kitchen status entries
-                                                const placedStatus = order.status.find(
-                                                    s => s.label && s.label.toUpperCase() === 'PLACED'
-                                                );
-
-                                                const kitchenStatus = order.status.find(
-                                                    s => s.label && s.label.toUpperCase() === 'KITCHEN'
-                                                );
-
-                                                if (!placedStatus || !kitchenStatus) return;
-
-                                                const placedDate = parseDate(placedStatus.date);
-                                                const kitchenDate = parseDate(kitchenStatus.date);
-
-                                                if (!placedDate || !kitchenDate) return;
-
-                                                // Only consider orders accepted today
-                                                if (kitchenDate < today) return;
-
-                                                // Calculate time difference in minutes
-                                                const acceptTimeMinutes = (kitchenDate - placedDate) / (1000 * 60);
-
-                                                // Only consider valid times (greater than 0 and less than 1 day)
-                                                if (acceptTimeMinutes > 0 && acceptTimeMinutes < 1440) {
-                                                    totalAcceptTimeMinutes += acceptTimeMinutes;
-                                                    acceptedOrderCount++;
-                                                }
-                                            });
-
-                                            if (acceptedOrderCount === 0) return "N/A";
-
-                                            const avgAcceptTime = Math.round(totalAcceptTimeMinutes / acceptedOrderCount);
-                                            return `${avgAcceptTime} min`;
-                                        })()}
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-50 to-white flex items-center justify-center shadow-sm flex-shrink-0">
-                                    <i className="ph ph-money text-blue-500 text-lg"></i>
-                                </div>
-                                <div>
-                                    <div className="text-xs text-gray-500">Avg. Order Value</div>
-                                    <div className="text-lg font-bold text-gray-800">
-                                        {(() => {
-                                            // Calculate average order value for QR orders
-                                            if (qrOrders.length === 0) return "₹0";
-
-                                            const totalValue = qrOrders.reduce((sum, order) => {
-                                                const itemsTotal = order.items?.reduce((total, item) => {
-                                                    return total + ((item.price || 0) * (item.quantity || item.qnt || 1));
-                                                }, 0) || 0;
-
-                                                return sum + itemsTotal;
-                                            }, 0);
-
-                                            const avgValue = Math.round(totalValue / qrOrders.length);
-                                            return `₹${avgValue}`;
-                                        })()}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Date Filter - Only for Completed Orders tab */}
-                {showCompletedOrders && (
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-warm-bg to-white">
-                        <div className="relative">
-                            <select
-                                value={dateFilter}
-                                onChange={(e) => setDateFilter(e.target.value)}
-                                className="appearance-none bg-gradient-to-r from-white to-gray-50 border border-gray-200 text-gray-700 py-1.5 px-4 pr-8 rounded-lg leading-tight focus:outline-none focus:border-red-500 text-sm"
-                            >
-                                <option value="today">Today</option>
-                                <option value="yesterday">Yesterday</option>
-                                <option value="7days">Last 7 Days</option>
-                                <option value="custom">Custom Range</option>
-                            </select>
-                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                                <i className="ph ph-caret-down"></i>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                <div className="p-4" ref={qrOrdersScrollRef} onScroll={handleScroll}>
-                    {/* Active Orders Tab Content */}
-                    {!showCompletedOrders && (
+            {/* View Toggle */}
+            <div className="flex items-center justify-between mb-5">
+                <h2 className="text-xl font-bold text-gray-800 flex items-center">
+                    {activeView === 'dashboard' ? (
                         <>
-                            {loadingQrOrders ? (
+                            <i className="ph ph-storefront text-red-500 mr-2"></i>
+                            Dashboard
+                        </>
+                    ) : (
+                        <>
+                            <i className="ph ph-gear text-red-500 mr-2"></i>
+                            Settings
+                        </>
+                    )}
+                </h2>
+                <div className="flex bg-gray-100 rounded-lg p-1 shadow-sm">
+                    <button
+                        onClick={() => setActiveView('dashboard')}
+                        className={`px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-1.5 ${activeView === 'dashboard'
+                            ? 'bg-white text-red-500 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-800'
+                            }`}
+                    >
+                        <i className="ph ph-chart-pie"></i>
+                        <span className="hidden sm:inline">Dashboard</span>
+                    </button>
+                    <button
+                        onClick={() => setActiveView('settings')}
+                        className={`px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-1.5 ${activeView === 'settings'
+                            ? 'bg-white text-red-500 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-800'
+                            }`}
+                    >
+                        <i className="ph ph-gear"></i>
+                        <span className="hidden sm:inline">Settings</span>
+                    </button>
+                </div>
+            </div>
+
+            {/* Dashboard View */}
+            {activeView === 'dashboard' && (
+                <>
+                    {/* Orders Dashboard */}
+                    <div className="mb-6">
+                        <div className="mb-5">
+                            <h3 className="text-lg font-semibold text-gray-700">Today's Summary</h3>
+                        </div>
+
+                        <div className="overflow-x-auto overflow-visible pb-2 -mx-4 px-4">
+                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 min-w-[300px]">
+                                <DashboardCard
+                                    icon="ph-chart-line-up"
+                                    title="Today's Orders"
+                                    value={formatNumber(dashboardMetrics.todayOrders)}
+                                    trend={`${dashboardMetrics.todayOrdersTrend >= 0 ? '+' : ''}${dashboardMetrics.todayOrdersTrend.toFixed(1)}%`}
+                                    color={dashboardMetrics.todayOrdersTrend >= 0 ? "primary" : "warning"}
+                                    compact={true}
+                                />
+                                <DashboardCard
+                                    icon="ph-currency-dollar"
+                                    title="Today's Revenue"
+                                    value={formatCurrency(dashboardMetrics.todayRevenue)}
+                                    trend={`${dashboardMetrics.todayRevenueTrend >= 0 ? '+' : ''}${dashboardMetrics.todayRevenueTrend.toFixed(1)}%`}
+                                    color={dashboardMetrics.todayRevenueTrend >= 0 ? "success" : "warning"}
+                                    compact={true}
+                                />
+                                <DashboardCard
+                                    icon="ph-users"
+                                    title="New Customers"
+                                    value={formatNumber(dashboardMetrics.newCustomers)}
+                                    trend={`${dashboardMetrics.newCustomersTrend >= 0 ? '+' : ''}${dashboardMetrics.newCustomersTrend.toFixed(1)}%`}
+                                    color={dashboardMetrics.newCustomersTrend >= 0 ? "primary" : "warning"}
+                                    compact={true}
+                                />
+                                <DashboardCard
+                                    icon="ph-shopping-cart"
+                                    title="Avg. Order Value"
+                                    value={formatCurrency(dashboardMetrics.avgOrderValue)}
+                                    trend={`${dashboardMetrics.avgOrderValueTrend >= 0 ? '+' : ''}${dashboardMetrics.avgOrderValueTrend.toFixed(1)}%`}
+                                    color={dashboardMetrics.avgOrderValueTrend >= 0 ? "info" : "warning"}
+                                    compact={true}
+                                    className="hidden md:flex"
+                                />
+                                <DashboardCard
+                                    icon="ph-clock"
+                                    title="Avg. Service Time"
+                                    value={`${Math.round(dashboardMetrics.avgServiceTime)} min`}
+                                    trend={`${dashboardMetrics.avgServiceTimeTrend >= 0 ? '+' : ''}${dashboardMetrics.avgServiceTimeTrend.toFixed(1)}%`}
+                                    color={dashboardMetrics.avgServiceTimeTrend >= 0 ? "success" : "warning"}
+                                    compact={true}
+                                    className="hidden lg:flex"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Order Channels Section */}
+                    <div className="mb-6 bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
+                        <div className="px-3 py-3 border-b border-gray-200 flex items-center">
+                            <i className="ph ph-globe text-red-500 text-xl mr-2"></i>
+                            <h2 className="text-lg font-semibold text-gray-800">Order Channels</h2>
+                        </div>
+                        <div className="p-3">
+                            {isLoading ? (
                                 <div className="text-center py-10">
                                     <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
-                                    <p className="mt-3 text-gray-600">Loading QR orders...</p>
+                                    <p className="mt-3 text-gray-600">Loading orders...</p>
                                 </div>
-                            ) : errorQrOrders ? (
-                                <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">
-                                    <p>{errorQrOrders}</p>
-                                </div>
-                            ) : qrOrders.length === 0 ? (
+                            ) : error ? (
                                 <div className="text-center py-10">
-                                    <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                                        <i className="ph ph-qr-code text-2xl text-red-500"></i>
+                                    <div className="rounded-full h-10 w-10 bg-red-100 flex items-center justify-center mx-auto">
+                                        <i className="ph ph-x text-red-500 text-xl"></i>
                                     </div>
-                                    <h3 className="text-lg font-medium text-gray-700 mb-1">No QR Orders Found</h3>
-                                    <p className="text-gray-500">QR orders from your customers will appear here</p>
+                                    <p className="mt-3 text-gray-600">{error}</p>
                                 </div>
                             ) : (
-                                <div>
-                                    <div className="overflow-x-auto md:overflow-visible">
-                                        <div className="space-y-3 min-w-[100%] md:min-w-0">
-                                            {qrOrders.map(order => (
-                                                <OrderGroupTile
-                                                    key={order.id}
-                                                    order={order}
-                                                    onAccept={() => handleAcceptOrder(order.id)}
-                                                    onReject={() => handleRejectOrder(order.id)}
-                                                    onPrintBill={() => handlePrintBill(order.id)}
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                                    {channels
+                                        .filter(channel => channel.isChannel)
+                                        .map(channel => (
+                                            <div
+                                                key={channel.id}
+                                                className="mb-2"
+                                                onClick={() => handleRoomClick(null, channel.id)}
+                                                onContextMenu={(e) => {
+                                                    e.preventDefault();
+                                                    showRenameRoomModal(null, channel.id);
+                                                }}
+                                            >
+                                                <TableCard
+                                                    title={channel.title}
+                                                    orders={channel.orders || []}
+                                                    duration={channel.duration}
+                                                    onTap={() => handleRoomClick(null, channel.id)}
+                                                    onLongPress={() => showRenameRoomModal(null, channel.id)}
+                                                    compact={true}
                                                 />
-                                            ))}
+                                            </div>
+                                        ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
 
-                                            {isLoadingMore && (
-                                                <div className="text-center py-4">
-                                                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-500 mx-auto"></div>
-                                                </div>
-                                            )}
+                    {/* Tables Section */}
+                    <div className="mb-6 bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
+                        <div className="px-3 py-3 border-b border-gray-200 flex items-center justify-between">
+                            <div className="flex items-center">
+                                <i className="ph ph-table text-red-500 text-xl mr-2"></i>
+                                <h2 className="text-lg font-semibold text-gray-800">Dining Tables</h2>
+                            </div>
+                            <button
+                                onClick={showAddTableModal}
+                                className="px-2 py-1 bg-gradient-to-r from-white to-gray-50 border border-gray-200 text-red-500 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1.5 text-sm shadow-sm"
+                            >
+                                <i className="ph ph-plus"></i>
+                                <span>Add Table</span>
+                            </button>
+                        </div>
+                        <div className="p-3">
+                            {isLoading ? (
+                                <div className="text-center py-10">
+                                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
+                                    <p className="mt-3 text-gray-600">Loading tables...</p>
+                                </div>
+                            ) : error ? (
+                                <div className="text-center py-10">
+                                    <div className="rounded-full h-10 w-10 bg-red-100 flex items-center justify-center mx-auto">
+                                        <i className="ph ph-x text-red-500 text-xl"></i>
+                                    </div>
+                                    <p className="mt-3 text-gray-600">{error}</p>
+                                </div>
+                            ) : tables.length === 0 ? (
+                                <NoOrdersFound />
+                            ) : (
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                                    {tables
+                                        .filter(table => table.isTable)
+                                        .map(table => (
+                                            <div
+                                                key={table.id}
+                                                className="mb-2"
+                                                onClick={() => handleRoomClick(table.id, null)}
+                                                onContextMenu={(e) => {
+                                                    e.preventDefault();
+                                                    showRenameRoomModal(table.id, null);
+                                                }}
+                                            >
+                                                <TableCard
+                                                    title={table.title}
+                                                    orders={table.orders || []}
+                                                    duration={table.duration}
+                                                    onTap={() => handleRoomClick(table.id, null)}
+                                                    onLongPress={() => showRenameRoomModal(table.id, null)}
+                                                    compact={true}
+                                                />
+                                            </div>
+                                        ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Orders Section */}
+                    <div className="mb-6 bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
+                        <div className="px-3 py-3 border-b border-gray-200 flex items-center">
+                            <i className="ph ph-qr-code text-red-500 text-xl mr-2"></i>
+                            <h2 className="text-lg font-semibold text-gray-800">Recent Orders</h2>
+                        </div>
+
+                        {/* Order Tabs */}
+                        <div className="flex border-b border-gray-200">
+                            <button
+                                className={`flex-1 py-2 px-4 text-sm font-medium ${!showCompletedOrders ? 'text-red-500 border-b-2 border-red-500' : 'text-gray-500 hover:text-gray-700'}`}
+                                onClick={() => setShowCompletedOrders(false)}
+                            >
+                                <i className={`ph ph-timer ${!showCompletedOrders ? 'text-red-500' : 'text-gray-400'} mr-1.5`}></i>
+                                QR Orders
+                            </button>
+                            <button
+                                className={`flex-1 py-2 px-4 text-sm font-medium ${showCompletedOrders ? 'text-red-500 border-b-2 border-red-500' : 'text-gray-500 hover:text-gray-700'}`}
+                                onClick={() => setShowCompletedOrders(true)}
+                            >
+                                <i className={`ph ph-check-circle ${showCompletedOrders ? 'text-red-500' : 'text-gray-400'} mr-1.5`}></i>
+                                Completed Orders
+                            </button>
+                        </div>
+
+                        {/* Desktop Summary Row - Only for Active Orders tab */}
+                        {!showCompletedOrders && (
+                            <div className="hidden md:flex border-b border-gray-100 bg-gradient-to-r from-warm-bg to-white">
+                                <div className="grid grid-cols-4 gap-4 p-4 w-full">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-red-50 to-white flex items-center justify-center shadow-sm flex-shrink-0">
+                                            <i className="ph ph-timer text-red-500 text-lg"></i>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-gray-500">Pending Orders</div>
+                                            <div className="text-lg font-bold text-gray-800">{qrOrders.length}</div>
                                         </div>
                                     </div>
-                                    <div className="md:hidden text-center text-xs text-gray-400 mt-3 flex items-center justify-center">
-                                        <i className="ph ph-arrows-horizontal mr-1 text-gray-300"></i>
-                                        <span>Swipe horizontally on orders if needed</span>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-green-50 to-white flex items-center justify-center shadow-sm flex-shrink-0">
+                                            <i className="ph ph-check-circle text-green-500 text-lg"></i>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-gray-500">Kitchen Orders Today</div>
+                                            <div className="text-lg font-bold text-gray-800">
+                                                {(() => {
+                                                    // Filter orders accepted today
+                                                    const today = new Date();
+                                                    today.setHours(0, 0, 0, 0);
+                                                    const acceptedToday = orders.filter(order => {
+                                                        // Check if order has 'KITCHEN' status
+                                                        if (!order.status || !Array.isArray(order.status)) return false;
+
+                                                        // Find the kitchen status entry
+                                                        const kitchenStatus = order.status.find(
+                                                            s => s.label && s.label.toUpperCase() === 'KITCHEN'
+                                                        );
+
+                                                        if (!kitchenStatus || !kitchenStatus.date) return false;
+
+                                                        // Check if it was accepted today
+                                                        const statusDate = parseDate(kitchenStatus.date);
+                                                        return statusDate && statusDate >= today;
+                                                    });
+
+                                                    return acceptedToday.length;
+                                                })()}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-50 to-white flex items-center justify-center shadow-sm flex-shrink-0">
+                                            <i className="ph ph-clock-countdown text-orange-500 text-lg"></i>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-gray-500">Avg. Accept Time</div>
+                                            <div className="text-lg font-bold text-gray-800">
+                                                {(() => {
+                                                    // Calculate average acceptance time for orders today
+                                                    const today = new Date();
+                                                    today.setHours(0, 0, 0, 0);
+
+                                                    let totalAcceptTimeMinutes = 0;
+                                                    let acceptedOrderCount = 0;
+
+                                                    orders.forEach(order => {
+                                                        if (!order.status || !Array.isArray(order.status)) return;
+
+                                                        // Find the placed and kitchen status entries
+                                                        const placedStatus = order.status.find(
+                                                            s => s.label && s.label.toUpperCase() === 'PLACED'
+                                                        );
+
+                                                        const kitchenStatus = order.status.find(
+                                                            s => s.label && s.label.toUpperCase() === 'KITCHEN'
+                                                        );
+
+                                                        if (!placedStatus || !kitchenStatus) return;
+
+                                                        const placedDate = parseDate(placedStatus.date);
+                                                        const kitchenDate = parseDate(kitchenStatus.date);
+
+                                                        if (!placedDate || !kitchenDate) return;
+
+                                                        // Only consider orders accepted today
+                                                        if (kitchenDate < today) return;
+
+                                                        // Calculate time difference in minutes
+                                                        const acceptTimeMinutes = (kitchenDate - placedDate) / (1000 * 60);
+
+                                                        // Only consider valid times (greater than 0 and less than 1 day)
+                                                        if (acceptTimeMinutes > 0 && acceptTimeMinutes < 1440) {
+                                                            totalAcceptTimeMinutes += acceptTimeMinutes;
+                                                            acceptedOrderCount++;
+                                                        }
+                                                    });
+
+                                                    if (acceptedOrderCount === 0) return "N/A";
+
+                                                    const avgAcceptTime = Math.round(totalAcceptTimeMinutes / acceptedOrderCount);
+                                                    return `${avgAcceptTime} min`;
+                                                })()}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-50 to-white flex items-center justify-center shadow-sm flex-shrink-0">
+                                            <i className="ph ph-money text-blue-500 text-lg"></i>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-gray-500">Avg. Order Value</div>
+                                            <div className="text-lg font-bold text-gray-800">
+                                                {(() => {
+                                                    // Calculate average order value for QR orders
+                                                    if (qrOrders.length === 0) return "₹0";
+
+                                                    const totalValue = qrOrders.reduce((sum, order) => {
+                                                        const itemsTotal = order.items?.reduce((total, item) => {
+                                                            return total + ((item.price || 0) * (item.quantity || item.qnt || 1));
+                                                        }, 0) || 0;
+
+                                                        return sum + itemsTotal;
+                                                    }, 0);
+
+                                                    const avgValue = Math.round(totalValue / qrOrders.length);
+                                                    return `₹${avgValue}`;
+                                                })()}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                            )}
-                        </>
-                    )}
+                            </div>
+                        )}
 
-                    {/* Completed Orders Tab Content */}
-                    {showCompletedOrders && (
-                        <>
-                            {loadingCompletedOrders ? (
+                        {/* Date Filter - Only for Completed Orders tab */}
+                        {showCompletedOrders && (
+                            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-warm-bg to-white">
+                                <div className="relative">
+                                    <select
+                                        value={dateFilter}
+                                        onChange={(e) => setDateFilter(e.target.value)}
+                                        className="appearance-none bg-gradient-to-r from-white to-gray-50 border border-gray-200 text-gray-700 py-1.5 px-4 pr-8 rounded-lg leading-tight focus:outline-none focus:border-red-500 text-sm"
+                                    >
+                                        <option value="today">Today</option>
+                                        <option value="yesterday">Yesterday</option>
+                                        <option value="7days">Last 7 Days</option>
+                                        <option value="custom">Custom Range</option>
+                                    </select>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                                        <i className="ph ph-caret-down"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="p-4" ref={qrOrdersScrollRef} onScroll={handleScroll}>
+                            {/* Active Orders Tab Content */}
+                            {!showCompletedOrders && (
+                                <>
+                                    {loadingQrOrders ? (
+                                        <div className="text-center py-10">
+                                            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
+                                            <p className="mt-3 text-gray-600">Loading QR orders...</p>
+                                        </div>
+                                    ) : errorQrOrders ? (
+                                        <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">
+                                            <p>{errorQrOrders}</p>
+                                        </div>
+                                    ) : qrOrders.length === 0 ? (
+                                        <div className="text-center py-10">
+                                            <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                <i className="ph ph-qr-code text-2xl text-red-500"></i>
+                                            </div>
+                                            <h3 className="text-lg font-medium text-gray-700 mb-1">No QR Orders Found</h3>
+                                            <p className="text-gray-500">QR orders from your customers will appear here</p>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <div className="overflow-x-auto md:overflow-visible">
+                                                <div className="space-y-3 min-w-[100%] md:min-w-0">
+                                                    {qrOrders.map(order => (
+                                                        <OrderGroupTile
+                                                            key={order.id}
+                                                            order={order}
+                                                            onAccept={() => handleAcceptOrder(order.id)}
+                                                            onReject={() => handleRejectOrder(order.id)}
+                                                            onPrintBill={() => handlePrintBill(order.id)}
+                                                        />
+                                                    ))}
+
+                                                    {isLoadingMore && (
+                                                        <div className="text-center py-4">
+                                                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-500 mx-auto"></div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="md:hidden text-center text-xs text-gray-400 mt-3 flex items-center justify-center">
+                                                <i className="ph ph-arrows-horizontal mr-1 text-gray-300"></i>
+                                                <span>Swipe horizontally on orders if needed</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+
+                            {/* Completed Orders Tab Content */}
+                            {showCompletedOrders && (
+                                <>
+                                    {loadingCompletedOrders ? (
+                                        <div className="text-center py-10">
+                                            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
+                                            <p className="mt-3 text-gray-600">Loading completed orders...</p>
+                                        </div>
+                                    ) : errorCompletedOrders ? (
+                                        <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">
+                                            <p>{errorCompletedOrders}</p>
+                                        </div>
+                                    ) : orders.length === 0 ? (
+                                        <div className="text-center py-10">
+                                            <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                <i className="ph ph-check-circle text-2xl text-red-500"></i>
+                                            </div>
+                                            <h3 className="text-lg font-medium text-gray-700 mb-1">No Completed Orders</h3>
+                                            <p className="text-gray-500">Completed orders will appear here</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {orders
+                                                .filter(order => order.currentStatus?.label === "COMPLETED" || order.paid === true)
+                                                .map(order => (
+                                                    <OrderGroupTile
+                                                        key={order.id}
+                                                        order={order}
+                                                        onPrintBill={() => handlePrintBill(order.id)}
+                                                    />
+                                                ))
+                                            }
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* Settings View */}
+            {activeView === 'settings' && (
+                <div className="space-y-6">
+                    {/* Store Settings */}
+                    <div className="bg-section-bg rounded-xl shadow-section overflow-hidden border border-gray-200">
+                        <div className="px-3 py-3 border-b border-gray-200 flex items-center">
+                            <i className="ph ph-storefront text-red-500 text-xl mr-2"></i>
+                            <h2 className="text-lg font-semibold text-gray-800">Store Settings</h2>
+                        </div>
+                        <div className="p-4 space-y-4">
+                            {!seller ? (
                                 <div className="text-center py-10">
                                     <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500 mx-auto"></div>
-                                    <p className="mt-3 text-gray-600">Loading completed orders...</p>
-                                </div>
-                            ) : errorCompletedOrders ? (
-                                <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4">
-                                    <p>{errorCompletedOrders}</p>
-                                </div>
-                            ) : orders.length === 0 ? (
-                                <div className="text-center py-10">
-                                    <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                                        <i className="ph ph-check-circle text-2xl text-red-500"></i>
-                                    </div>
-                                    <h3 className="text-lg font-medium text-gray-700 mb-1">No Completed Orders</h3>
-                                    <p className="text-gray-500">Completed orders will appear here</p>
+                                    <p className="mt-3 text-gray-600">Loading store details...</p>
                                 </div>
                             ) : (
-                                <div className="space-y-3">
-                                    {orders
-                                        .filter(order => order.currentStatus?.label === "COMPLETED" || order.paid === true)
-                                        .map(order => (
-                                            <OrderGroupTile
-                                                key={order.id}
-                                                order={order}
-                                                onPrintBill={() => handlePrintBill(order.id)}
-                                            />
-                                        ))
-                                    }
-                                </div>
+                                <>
+                                    {/* Fetch and display restaurant info from SDK */}
+                                    <div className="mb-4 flex flex-col bg-gradient-to-r from-red-50 to-white p-4 rounded-xl border border-red-100 shadow-sm">
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="text-xl font-semibold text-gray-800">
+                                                <span className="text-red-500">{window.sdk?.profile?.businessName || seller.businessName || seller.name || "Restaurant Name"}</span>
+                                            </h3>
+                                            <div className="p-2 rounded-full bg-red-50 flex-shrink-0">
+                                                <i className="ph ph-envelope text-red-500"></i>
+                                            </div>
+                                        </div>
+                                        <div className="text-gray-500 mt-1 flex items-center">
+                                            <i className="ph ph-at text-red-400 mr-1.5"></i>
+                                            <span>{window.sdk?.profile?.email || seller.email || "restaurant@example.com"}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-4 pb-4 border-b border-gray-100">
+                                        <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-red-50 to-white flex items-center justify-center border border-gray-200 shadow-sm">
+                                            {seller.logo ? (
+                                                <img src={seller.logo} alt={seller.name} className="w-10 h-10 object-contain" />
+                                            ) : (
+                                                <i className="ph ph-storefront text-red-500 text-2xl"></i>
+                                            )}
+                                        </div>
+                                        <div className="flex-1">
+                                            <h3 className="text-lg font-semibold text-gray-800">{seller.name || 'Your Store'}</h3>
+                                            <p className="text-gray-500">{seller.storeType || 'Retail Store'}</p>
+                                        </div>
+                                        <button className="px-3 py-1.5 bg-gradient-to-r from-white to-gray-50 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5 text-sm shadow-sm self-start sm:self-center">
+                                            <i className="ph ph-pencil"></i>
+                                            <span>Edit</span>
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-0">
+                                        {/* Account Settings */}
+                                        <div
+                                            className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg transition-colors"
+                                            onClick={() => {
+                                                // Check if user has permission
+                                                if (seller?.checkPermission && seller.checkPermission("Profile", "Edit")) {
+                                                    // Open edit profile modal/page
+                                                    window.ModalManager?.createCenterModal({
+                                                        id: 'edit-profile-modal',
+                                                        title: "Account Settings",
+                                                        content: `<div class="p-4">
+                                                            <p class="text-gray-600">Manage and update account settings</p>
+                                                        </div>`,
+                                                        size: 'lg'
+                                                    });
+                                                } else {
+                                                    window.ModalManager?.showToast("You don't have permission to access this feature");
+                                                }
+                                            }}>
+                                            <div className="flex items-center">
+                                                <div className="p-2 bg-gradient-to-br from-red-50 to-white rounded-lg mr-3 flex-shrink-0">
+                                                    <i className="ph ph-user text-red-500 text-xl"></i>
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-medium text-gray-800">Account Settings</h4>
+                                                    <p className="text-sm text-gray-500">Manage and update account settings</p>
+                                                </div>
+                                            </div>
+                                            <button className="mt-2 sm:mt-0 text-gray-400 self-start">
+                                                <i className="ph ph-caret-right text-lg"></i>
+                                            </button>
+                                        </div>
+
+                                        {/* Access Roles */}
+                                        {seller?.isSuperAdmin && (
+                                            <div
+                                                className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg transition-colors"
+                                                onClick={() => {
+                                                    // Open Access Role management
+                                                    window.ModalManager?.createCenterModal({
+                                                        id: 'access-role-modal',
+                                                        title: "Access Roles",
+                                                        content: `<div class="p-4">
+                                                            <p class="text-gray-600">Manage access roles for your team</p>
+                                                        </div>`,
+                                                        size: 'lg'
+                                                    });
+                                                }}>
+                                                <div className="flex items-center">
+                                                    <div className="p-2 bg-gradient-to-br from-red-50 to-white rounded-lg mr-3 flex-shrink-0">
+                                                        <i className="ph ph-key text-red-500 text-xl"></i>
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="font-medium text-gray-800">Access Roles</h4>
+                                                        <p className="text-sm text-gray-500">Manage access role for your team</p>
+                                                    </div>
+                                                </div>
+                                                <button className="mt-2 sm:mt-0 text-gray-400 self-start">
+                                                    <i className="ph ph-caret-right text-lg"></i>
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {/* Print Template */}
+                                        {seller?.checkPermission && seller.checkPermission("Profile", "Edit") && (
+                                            <div
+                                                className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg transition-colors"
+                                                onClick={() => {
+                                                    // Open Print Template management
+                                                    window.ModalManager?.createCenterModal({
+                                                        id: 'print-template-modal',
+                                                        title: "Print Template",
+                                                        content: `<div class="p-4">
+                                                            <p class="text-gray-600">Manage KOT & Bill template</p>
+                                                        </div>`,
+                                                        size: 'lg'
+                                                    });
+                                                }}>
+                                                <div className="flex items-center">
+                                                    <div className="p-2 bg-gradient-to-br from-red-50 to-white rounded-lg mr-3 flex-shrink-0">
+                                                        <i className="ph ph-printer text-red-500 text-xl"></i>
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="font-medium text-gray-800">Print Template</h4>
+                                                        <p className="text-sm text-gray-500">Manage KOT & Bill template</p>
+                                                    </div>
+                                                </div>
+                                                <button className="mt-2 sm:mt-0 text-gray-400 self-start">
+                                                    <i className="ph ph-caret-right text-lg"></i>
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {/* Bulk Tax Update */}
+                                        {seller?.checkPermission && seller.checkPermission("Product", "Edit") && (
+                                            <div
+                                                className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg transition-colors"
+                                                onClick={() => {
+                                                    // Open Bulk Tax Update management
+                                                    window.ModalManager?.createCenterModal({
+                                                        id: 'bulk-tax-modal',
+                                                        title: "Bulk Tax Update",
+                                                        content: `<div class="p-4">
+                                                            <p class="text-gray-600">Update tax for all products</p>
+                                                            <div class="mt-4 flex items-center text-red-500">
+                                                                <i class="ph ph-warning-circle mr-2"></i>
+                                                                <p class="text-sm">Please be careful, this will update and override all the taxes for all products.</p>
+                                                            </div>
+                                                        </div>`,
+                                                        actions: `
+                                                            <div class="flex justify-end p-4">
+                                                                <button id="update-taxes-btn" class="px-4 py-2 bg-red-500 text-white rounded-md">Update All Products</button>
+                                                            </div>
+                                                        `,
+                                                        size: 'lg'
+                                                    });
+                                                }}>
+                                                <div className="flex items-center">
+                                                    <div className="p-2 bg-gradient-to-br from-red-50 to-white rounded-lg mr-3 flex-shrink-0">
+                                                        <i className="ph ph-currency-dollar text-red-500 text-xl"></i>
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="font-medium text-gray-800">Bulk Tax Update</h4>
+                                                        <p className="text-sm text-gray-500">Update tax for all products</p>
+                                                    </div>
+                                                </div>
+                                                <button className="mt-2 sm:mt-0 text-gray-400 self-start">
+                                                    <i className="ph ph-caret-right text-lg"></i>
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {/* Import Products */}
+                                        {seller?.hasProAccess && (
+                                            <div
+                                                className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg transition-colors"
+                                                onClick={() => {
+                                                    // Open Import Products modal
+                                                    window.ModalManager?.createCenterModal({
+                                                        id: 'import-products-modal',
+                                                        title: "Bulk Import Products",
+                                                        content: `<div class="p-4 text-center">
+                                                            <div class="mb-6">
+                                                                <p class="font-medium text-gray-700">Step 1</p>
+                                                                <div class="flex justify-center items-center mt-2">
+                                                                    <span class="text-gray-700 mr-2">Download template file:</span>
+                                                                    <a href="https://firebasestorage.googleapis.com/v0/b/frihbi-app.appspot.com/o/assets%2FImport%20Product%20Sample%20sheet.xlsx?alt=media" class="text-red-500 font-medium hover:underline" download>Sample.xlsx</a>
+                                                                </div>
+                                                            </div>
+                                                            <div class="mb-6">
+                                                                <p class="font-medium text-gray-700">Step 2</p>
+                                                                <div class="mt-2 border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:bg-gray-50">
+                                                                    <i class="ph ph-upload text-gray-400 text-4xl"></i>
+                                                                    <p class="mt-2 font-medium">Upload .csv / .xlsx</p>
+                                                                    <p class="text-sm text-gray-500">Max file size 20mb and 100 products</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>`,
+                                                        actions: `
+                                                            <div class="flex justify-center p-4">
+                                                                <button id="start-import-btn" class="px-8 py-3 bg-red-500 text-white rounded-md font-medium">Start</button>
+                                                            </div>
+                                                        `,
+                                                        size: 'md'
+                                                    });
+                                                }}>
+                                                <div className="flex items-center">
+                                                    <div className="p-2 bg-gradient-to-br from-red-50 to-white rounded-lg mr-3 flex-shrink-0">
+                                                        <i className="ph ph-file-excel text-red-500 text-xl"></i>
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="font-medium text-gray-800">Import Products</h4>
+                                                        <p className="text-sm text-gray-500">Bulk import products from Excel/CSV</p>
+                                                    </div>
+                                                </div>
+                                                <button className="mt-2 sm:mt-0 text-gray-400 self-start">
+                                                    <i className="ph ph-caret-right text-lg"></i>
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {/* Store Hours */}
+                                        <div
+                                            className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg transition-colors"
+                                            onClick={() => {
+                                                // Open Store Hours management
+                                                window.ModalManager?.createCenterModal({
+                                                    id: 'store-hours-modal',
+                                                    title: "Store Hours",
+                                                    content: `<div class="p-4">
+                                                        <p class="text-gray-600">Set your regular business hours</p>
+                                                    </div>`,
+                                                    size: 'md'
+                                                });
+                                            }}>
+                                            <div className="flex items-center">
+                                                <div className="p-2 bg-gradient-to-br from-red-50 to-white rounded-lg mr-3 flex-shrink-0">
+                                                    <i className="ph ph-clock text-red-500 text-xl"></i>
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-medium text-gray-800">Store Hours</h4>
+                                                    <p className="text-sm text-gray-500">Set your regular business hours</p>
+                                                </div>
+                                            </div>
+                                            <button className="mt-2 sm:mt-0 text-gray-400 self-start">
+                                                <i className="ph ph-caret-right text-lg"></i>
+                                            </button>
+                                        </div>
+
+                                        {/* Payment Methods */}
+                                        <div
+                                            className="flex flex-col sm:flex-row sm:items-center justify-between py-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-2 rounded-lg transition-colors"
+                                            onClick={() => {
+                                                // Open Payment Methods management
+                                                window.ModalManager?.createCenterModal({
+                                                    id: 'payment-methods-modal',
+                                                    title: "Payment Methods",
+                                                    content: `<div class="p-4">
+                                                        <p class="text-gray-600">Manage available payment options</p>
+                                                    </div>`,
+                                                    size: 'md'
+                                                });
+                                            }}>
+                                            <div className="flex items-center">
+                                                <div className="p-2 bg-gradient-to-br from-red-50 to-white rounded-lg mr-3 flex-shrink-0">
+                                                    <i className="ph ph-credit-card text-red-500 text-xl"></i>
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-medium text-gray-800">Payment Methods</h4>
+                                                    <p className="text-sm text-gray-500">Manage available payment options</p>
+                                                </div>
+                                            </div>
+                                            <button className="mt-2 sm:mt-0 text-gray-400 self-start">
+                                                <i className="ph ph-caret-right text-lg"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </>
                             )}
-                        </>
+                        </div>
+                    </div>
+
+                    {/* Activate Account (Only shown for non-subscribed accounts) */}
+                    {seller && !seller.hasSubscription && (
+                        <div className="mt-4 text-center">
+                            <button
+                                className="inline-flex items-center gap-1.5 text-gray-500 hover:text-gray-800 transition-colors"
+                                onClick={() => window.open(`https://us-central1-frihbi-app.cloudfunctions.net/seller-upgradeUser?uid=${seller.id}`, '_blank')}
+                            >
+                                <i className="ph ph-arrow-square-out"></i>
+                                <span className="text-sm underline">Activate this account</span>
+                            </button>
+                        </div>
                     )}
                 </div>
-            </div>
+            )}
 
             {/* Modals */}
             <AddTableModal
