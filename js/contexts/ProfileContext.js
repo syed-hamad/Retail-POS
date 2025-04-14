@@ -97,7 +97,7 @@ function ProfileProvider({ children }) {
     const listenToProfileChanges = () => {
         if (!profile?.id) return () => { };
 
-        return window.sdk.collection('Sellers').doc(profile.id)
+        return window.sdk.db.collection('Sellers').doc(profile.id)
             .onSnapshot(
                 (doc) => {
                     if (doc.exists) {
@@ -135,7 +135,7 @@ function ProfileProvider({ children }) {
             let newBillNo = 0;
 
             // Get the current seller document
-            const sellerRef = window.sdk.collection('Sellers').doc(profile.id);
+            const sellerRef = window.sdk.db.collection('Sellers').doc(profile.id);
             const sellerDoc = await sellerRef.get();
 
             if (!sellerDoc.exists) return;
@@ -202,81 +202,83 @@ function ProfileProvider({ children }) {
         window.open(url, '_blank');
 
         // Track analytics
-        console.log('Analytics: DOWNLOAD_QR');
+        if (window.sdk.analytics) {
+            window.sdk.analytics.logEvent('download_qr', {
+                table_id: tableId || 'store_qr',
+                store_url: getStoreLink()
+            });
+        }
     };
 
     // Check permissions
-    const checkPermission = (module, action, silent = true) => {
-        // Get current user email
-        // Since auth is handled by the host platform, we can't use window.sdk.auth()
-        // Instead, we'll use a different approach or assume the user has permission
-        const currentEmail = localStorage.getItem('CURRENT_USER_EMAIL') || '';
+    const checkPermission = async (module, action, silent = true) => {
+        try {
+            // Map our module:action format to SDK's permission IDs
+            const permissionId = `${module.toLowerCase()}_${action.toLowerCase()}`;
 
-        // SuperAdmin or admin can do anything
-        if (isSuperAdmin() || isAdmin()) return true;
+            // Check permission directly with the SDK
+            const hasPermission = await window.sdk.permissions.hasPermission(permissionId);
 
-        if (!currentEmail) {
-            console.log("checkPermission failed: currentEmail is null or empty");
-
-            if (!silent) {
-                showToast("You are not authorized!");
-                // In React, we'd use navigation or history to go back
-                // For now, just log it
-                console.log("User not authorized, should go back");
+            if (!hasPermission && !silent) {
+                showToast(`You don't have ${action} permission for ${module}`);
+                console.log(`User does not have permission: ${permissionId}`);
             }
+
+            return hasPermission;
+        } catch (error) {
+            console.error('Error checking permission:', error);
             return false;
         }
-
-        // Find role for current user
-        const role = roles.find(role => role.email === currentEmail);
-
-        if (!role?.permissions) {
-            console.log("checkPermission failed: No permissions found for role");
-
-            if (!silent) {
-                showToast("You are not authorized!");
-                console.log("User not authorized, should go back");
-            }
-            return false;
-        }
-
-        // Check if user has the required permission
-        const hasPermission = role.hasPermission(module, action);
-
-        console.log(`checkPermission: User '${currentEmail}' has permission '${module}:${action}' -> ${hasPermission}`);
-
-        if (!hasPermission && !silent) {
-            showToast(`You don't have ${action} permission for ${module}`);
-            console.log("User not authorized, should go back");
-        }
-
-        return hasPermission;
     };
 
     // Check if user is super admin
-    const isSuperAdmin = () => {
-        // Since auth is handled by the host platform, we can't use window.sdk.auth()
-        // Instead, we'll use a different approach or assume the user has permission
-        const currentEmail = localStorage.getItem('CURRENT_USER_EMAIL') || '';
+    const isSuperAdmin = async () => {
+        const currentEmail = firebase.auth().currentUser?.email;
 
-        // Check if user is in super admin list (you'd need to define this)
-        const isSuperAdminEmail = ['admin@shopto.app'].includes(currentEmail);
+        // First check if user is profile owner
+        if (profile?.email === currentEmail) {
+            return true;
+        }
 
-        return isSuperAdminEmail || (profile?.email === currentEmail);
+        // Get all permissions for current user
+        try {
+            const userPermissions = await window.sdk.permissions.getUserPermissions();
+            // If user has all permissions, consider them a super admin
+            const allPermissionIds = (await window.sdk.permissions.getPermissionSchema())
+                .map(p => p.id);
+
+            return allPermissionIds.every(id => userPermissions.includes(id));
+        } catch (error) {
+            console.error('Error checking super admin status:', error);
+            return false;
+        }
     };
 
-    // Check if user is admin
-    const isAdmin = () => {
-        // Since auth is handled by the host platform, we can't use window.sdk.auth()
-        // Instead, we'll use a different approach or assume the user has permission
-        const currentEmail = localStorage.getItem('CURRENT_USER_EMAIL') || '';
-        return profile?.email === currentEmail;
+    // Check if user is admin (has most permissions but maybe not all)
+    const isAdmin = async () => {
+        const currentEmail = firebase.auth().currentUser?.email;
+
+        // If user is profile owner, they are admin
+        if (profile?.email === currentEmail) {
+            return true;
+        }
+
+        // Get all permissions for current user
+        try {
+            const userPermissions = await window.sdk.permissions.getUserPermissions();
+            // Admin should have edit permissions
+            const adminPermissionIds = ["products_edit", "orders_edit", "customers_edit"];
+            return adminPermissionIds.every(id => userPermissions.includes(id));
+        } catch (error) {
+            console.error('Error checking admin status:', error);
+            return false;
+        }
     };
 
     // Send notification
     const sendNotification = async (title, msg, { img, fcmToken } = {}) => {
         try {
-            await window.sdk.collection('Sellers')
+            await window.sdk.db.collection('Sellers')
                 .doc(profile.id)
                 .collection('notification')
                 .add({
@@ -301,14 +303,18 @@ function ProfileProvider({ children }) {
         try {
             const updatedTables = tables.filter(t => t.title !== tableId);
 
-            await window.sdk.collection('Sellers')
+            await window.sdk.db.collection('Sellers')
                 .doc(profile.id)
                 .update({ tables: updatedTables });
 
             setTables(updatedTables);
 
             // Track analytics
-            console.log('Analytics: REMOVE_TABLE');
+            if (window.sdk.analytics) {
+                window.sdk.analytics.logEvent('remove_table', {
+                    table_id: tableId
+                });
+            }
 
             return true;
         } catch (err) {

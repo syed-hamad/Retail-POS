@@ -122,7 +122,7 @@ function Analytics() {
                 const currentRange = getDateRange(dateFilter);
 
                 // Fetch all orders for analysis
-                const ordersSnapshot = await sdk.collection("Orders")
+                const ordersSnapshot = await sdk.db.collection("Orders")
                     .orderBy("date", "desc")
                     .limit(200) // Increased limit to get more historical data for trends
                     .get();

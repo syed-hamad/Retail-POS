@@ -503,7 +503,7 @@ class BluetoothPrinting {
     async printKOT(orderId) {
         try {
             // Fetch order data
-            const orderRef = window.sdk.collection("Orders").doc(orderId);
+            const orderRef = window.sdk.db.collection("Orders").doc(orderId);
             const orderDoc = await orderRef.get();
             const orderData = orderDoc.data();
 
@@ -556,7 +556,7 @@ class BluetoothPrinting {
     async printBill(orderId) {
         try {
             // Fetch order data
-            const orderRef = window.sdk.collection("Orders").doc(orderId);
+            const orderRef = window.sdk.db.collection("Orders").doc(orderId);
             const orderDoc = await orderRef.get();
             const orderData = orderDoc.data();
 

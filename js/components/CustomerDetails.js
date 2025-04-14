@@ -21,7 +21,7 @@ function CustomerDetails() {
         }
 
         // Set up real-time listener for this customer
-        this.customerListener = sdk.collection("Customers").doc(customerData.id)
+        this.customerListener = sdk.db.collection("Customers").doc(customerData.id)
             .onSnapshot(doc => {
                 if (doc.exists) {
                     // Update the customer data
@@ -41,7 +41,7 @@ function CustomerDetails() {
             });
 
         // Set up real-time listener for wallet transactions
-        this.walletListener = sdk.collection("Wallet")
+        this.walletListener = sdk.db.collection("Wallet")
             .where("customerId", "==", customerData.id)
             .onSnapshot(() => {
                 // When wallet changes, refresh transactions if transactions tab is active
@@ -373,7 +373,7 @@ function CustomerDetails() {
     this.fetchTransactionsForCustomer = async function (customerId) {
         try {
             // Get wallet transactions
-            const walletSnapshot = await sdk.collection("Wallet")
+            const walletSnapshot = await sdk.db.collection("Wallet")
                 .where("customerId", "==", customerId)
                 .get();
 
@@ -404,7 +404,7 @@ function CustomerDetails() {
             });
 
             // Get credit orders
-            const ordersSnapshot = await sdk.collection("Orders")
+            const ordersSnapshot = await sdk.db.collection("Orders")
                 .where("custId", "==", customerId)
                 .where("payMode", "==", "CREDIT")
                 .get();
@@ -460,7 +460,7 @@ function CustomerDetails() {
     // Fetch orders for a customer from SDK
     this.fetchOrdersForCustomer = async function (customerId) {
         try {
-            const snapshot = await sdk.collection("Orders")
+            const snapshot = await sdk.db.collection("Orders")
                 .where("custId", "==", customerId)
                 .orderBy("date", "desc")
                 .get();
@@ -568,7 +568,7 @@ function CustomerDetails() {
 
                     try {
                         // Add to wallet collection
-                        await sdk.collection("Wallet").add({
+                        await sdk.db.collection("Wallet").add({
                             amount: amount,
                             mode: paymentMode,
                             customerId: customerData.id,
@@ -637,7 +637,7 @@ function CustomerDetails() {
                     if (!name) return;
 
                     try {
-                        await sdk.collection("Customers").doc(customerData.id).update({
+                        await sdk.db.collection("Customers").doc(customerData.id).update({
                             name: name
                         });
 

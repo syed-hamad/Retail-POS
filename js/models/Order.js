@@ -294,7 +294,7 @@ class MOrder {
     }
 
     get ref() {
-        return window.sdk.collection("Orders").doc(this.id);
+        return window.sdk.db.collection("Orders").doc(this.id);
     }
 
     getOrderSourceColor() {

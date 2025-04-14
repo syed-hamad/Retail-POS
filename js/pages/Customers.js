@@ -62,7 +62,7 @@ function Customers() {
         try {
             setLoading(true);
             // Use the SDK to fetch customers as in the Flutter code
-            const customersQuery = sdk.collection("Customers");
+            const customersQuery = sdk.db.collection("Customers");
 
             // Cancel any existing listener
             if (window.customersUnsubscribe) {
@@ -396,7 +396,7 @@ function Customers() {
                 // Generate an ID using phone and timestamp
                 const id = `${formData.phone.replace(/\s/g, '')}_${Date.now()}`;
 
-                await sdk.collection("Customers").doc(id).set({
+                await sdk.db.collection("Customers").doc(id).set({
                     name: formData.name,
                     phone: formData.phone,
                     date: new Date(),
@@ -517,7 +517,7 @@ function Customers() {
                                 // Generate an ID using phone and timestamp
                                 const id = `${phoneInput.value.replace(/\s/g, '')}_${Date.now()}`;
 
-                                await sdk.collection("Customers").doc(id).set({
+                                await sdk.db.collection("Customers").doc(id).set({
                                     name: nameInput.value,
                                     phone: phoneInput.value,
                                     date: new Date(),

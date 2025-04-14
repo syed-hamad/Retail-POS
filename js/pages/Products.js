@@ -20,7 +20,7 @@ function Products() {
             setError(null);
 
             // Fetch products
-            const productsSnapshot = await window.sdk.collection("Product")
+            const productsSnapshot = await window.sdk.db.collection("Product")
                 .orderBy("date", "desc")
                 .limit(100)
                 .get();
@@ -43,7 +43,7 @@ function Products() {
             console.log(`Successfully loaded ${productsList.length} products`);
 
             // Fetch inventory items
-            const inventorySnapshot = await window.sdk.collection("Inventory")
+            const inventorySnapshot = await window.sdk.db.collection("Inventory")
                 .orderBy("updatedAt", "desc")
                 .limit(100)
                 .get();
@@ -180,7 +180,7 @@ function Products() {
                 setInventory(updatedInventory);
 
                 // Update in Firestore
-                await sdk.collection("Inventory").doc(editingItem.id).update({
+                await sdk.db.collection("Inventory").doc(editingItem.id).update({
                     name: itemData.name,
                     quantity: Number(itemData.quantity),
                     unit: itemData.unit,
@@ -202,7 +202,7 @@ function Products() {
                 });
 
                 // Add to Firestore
-                const newItemRef = sdk.collection("Inventory").doc();
+                const newItemRef = sdk.db.collection("Inventory").doc();
                 await newItemRef.set(newItemData.toJson());
 
                 newItemData.id = newItemRef.id;
@@ -225,7 +225,7 @@ function Products() {
             setInventory(updatedInventory);
 
             // Delete from Firestore
-            await sdk.collection("Inventory").doc(itemId).delete();
+            await sdk.db.collection("Inventory").doc(itemId).delete();
             showToast('Inventory item deleted successfully', 'success');
         } catch (err) {
             console.error('Error deleting inventory:', err);

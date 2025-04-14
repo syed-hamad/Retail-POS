@@ -871,7 +871,7 @@ function Dashboard() {
 
     // Check SDK availability when component mounts
     React.useEffect(() => {
-        if (!window.sdk || !window.sdk.collection) {
+        if (!window.sdk || !window.sdk.db.collection) {
             console.error("SDK is not available or not properly initialized");
             setError("SDK is not available. Some features may not work properly.");
         }
@@ -904,7 +904,7 @@ function Dashboard() {
     const setupKitchenOrdersListener = () => {
         try {
             // Check if SDK is available
-            if (!window.sdk || !window.sdk.collection) {
+            if (!window.sdk || !window.sdk.db.collection) {
                 console.error("SDK is not available or not properly initialized");
                 setError("SDK is not available. Please try again later.");
                 return;
@@ -913,7 +913,7 @@ function Dashboard() {
             console.log("[Kitchen Listener] Setting up real-time listener for KITCHEN orders");
 
             // Query for KITCHEN orders - mirrors the Flutter implementation
-            const kitchenQuery = window.sdk.collection("Orders")
+            const kitchenQuery = window.sdk.db.collection("Orders")
                 .where("currentStatus.label", "==", "KITCHEN")
                 .orderBy("date", "desc")
                 .limit(100); // Increased limit for better pagination
@@ -965,7 +965,7 @@ function Dashboard() {
     const fetchRecentCompletedOrders = async (kitchenOrdersData) => {
         try {
             // Check if SDK is available
-            if (!window.sdk || !window.sdk.collection) {
+            if (!window.sdk || !window.sdk.db.collection) {
                 console.error("SDK is not available or not properly initialized");
                 return;
             }
@@ -976,7 +976,7 @@ function Dashboard() {
             const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
 
             // Fetch ALL recent orders for metrics (both COMPLETED and other statuses for today/yesterday)
-            const recentCompletedQuery = window.sdk.collection("Orders")
+            const recentCompletedQuery = window.sdk.db.collection("Orders")
                 .orderBy("date", "desc")
                 .where("date", ">=", startOfYesterday) // Get at least yesterday's orders
                 .limit(300); // Increased limit to ensure we get all relevant orders
@@ -1035,7 +1035,7 @@ function Dashboard() {
             setErrorQrOrders(null);
 
             // Check if SDK is available
-            if (!window.sdk || !window.sdk.collection) {
+            if (!window.sdk || !window.sdk.db.collection) {
                 console.error("SDK is not available or not properly initialized");
                 setErrorQrOrders("SDK is not available. Please try again later.");
                 setLoadingQrOrders(false);
@@ -1045,7 +1045,7 @@ function Dashboard() {
             console.log("[PLACED Listener] Setting up real-time listener for PLACED orders");
 
             // Query for PLACED orders - similar to the KITCHEN orders listener
-            const placedQuery = window.sdk.collection("Orders")
+            const placedQuery = window.sdk.db.collection("Orders")
                 .where("currentStatus.label", "==", "PLACED")
                 .orderBy("date", "desc")
                 .limit(100); // Increased limit for better pagination
@@ -1089,12 +1089,12 @@ function Dashboard() {
             setLoadingQrOrders(true);
 
             // Check if SDK is available
-            if (!window.sdk || !window.sdk.collection) {
+            if (!window.sdk || !window.sdk.db.collection) {
                 throw new Error('SDK is not available or not properly initialized');
             }
 
             // Fetch the order first to log its current state
-            const orderRef = window.sdk.collection("Orders").doc(orderId);
+            const orderRef = window.sdk.db.collection("Orders").doc(orderId);
             const orderDoc = await orderRef.get();
 
             if (!orderDoc.exists) {
@@ -1156,7 +1156,7 @@ function Dashboard() {
             setLoadingQrOrders(true);
 
             // Check if SDK is available
-            if (!window.sdk || !window.sdk.collection) {
+            if (!window.sdk || !window.sdk.db.collection) {
                 throw new Error('SDK is not available or not properly initialized');
             }
 
@@ -1167,7 +1167,7 @@ function Dashboard() {
             };
 
             // Update the order status directly without checking if it exists
-            const orderRef = window.sdk.collection("Orders").doc(orderId);
+            const orderRef = window.sdk.db.collection("Orders").doc(orderId);
 
             // Update with array union for atomicity
             await orderRef.update({
@@ -1189,7 +1189,7 @@ function Dashboard() {
     const handlePrintBill = async (orderId) => {
         try {
             // Check if SDK is available
-            if (!window.sdk || !window.sdk.collection) {
+            if (!window.sdk || !window.sdk.db.collection) {
                 throw new Error('SDK is not available or not properly initialized');
             }
 
@@ -1257,7 +1257,7 @@ function Dashboard() {
             setErrorCompletedOrders(null);
 
             // Check if SDK is available
-            if (!window.sdk || !window.sdk.collection) {
+            if (!window.sdk || !window.sdk.db.collection) {
                 console.error("SDK is not available or not properly initialized");
                 setErrorCompletedOrders("SDK is not available. Please try again later.");
                 setLoadingCompletedOrders(false);
@@ -1271,7 +1271,7 @@ function Dashboard() {
             const endDate = calculateEndDate(dateFilter, customDateRange.endDate);
 
             // Query specifically for COMPLETED orders only
-            let ordersQuery = window.sdk.collection("Orders")
+            let ordersQuery = window.sdk.db.collection("Orders")
                 .where("currentStatus.label", "==", "COMPLETED")
                 .orderBy("date", "desc")
                 .limit(100);
@@ -2281,7 +2281,7 @@ function Dashboard() {
                         };
 
                         // Get all products for this seller
-                        const productsSnapshot = await window.sdk.collection("Product")
+                        const productsSnapshot = await window.sdk.db.collection("Product")
                             .where("sellerId", "==", seller.id)
                             .get();
 

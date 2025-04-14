@@ -6,7 +6,7 @@ function ProductCard({ product }) {
         if (!confirm(`Are you sure you want to delete "${product.title}"?`)) return;
 
         try {
-            window.sdk.collection("Product").doc(product.id).delete()
+            window.sdk.db.collection("Product").doc(product.id).delete()
                 .then(() => {
                     showToast("Product deleted successfully");
                     // Trigger a re-fetch instead of reloading the page
@@ -30,7 +30,7 @@ function ProductCard({ product }) {
         const newActiveState = !product.active;
 
         try {
-            window.sdk.collection("Product").doc(product.id).update({
+            window.sdk.db.collection("Product").doc(product.id).update({
                 active: newActiveState
             })
                 .then(() => {

@@ -1298,7 +1298,7 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
                                         // Add methods that OrderView component expects
                                         serveItem: async (item, served) => {
                                             try {
-                                                const orderRef = window.sdk.collection("Orders").doc(order.id);
+                                                const orderRef = window.sdk.db.collection("Orders").doc(order.id);
                                                 const orderDoc = await orderRef.get();
                                                 if (!orderDoc.exists) throw new Error('Order not found');
 
@@ -1319,7 +1319,7 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
                                         },
                                         addItem: async (item) => {
                                             try {
-                                                const orderRef = window.sdk.collection("Orders").doc(order.id);
+                                                const orderRef = window.sdk.db.collection("Orders").doc(order.id);
                                                 const orderDoc = await orderRef.get();
                                                 if (!orderDoc.exists) throw new Error('Order not found');
 
@@ -1341,7 +1341,7 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
                                         },
                                         removeItem: async (item) => {
                                             try {
-                                                const orderRef = window.sdk.collection("Orders").doc(order.id);
+                                                const orderRef = window.sdk.db.collection("Orders").doc(order.id);
                                                 const orderDoc = await orderRef.get();
                                                 if (!orderDoc.exists) throw new Error('Order not found');
 
@@ -1588,7 +1588,7 @@ function OrderView({ order, tableId, variant }) {
             }
 
             // Update order status to COMPLETED
-            const orderRef = window.sdk.collection("Orders").doc(order.id);
+            const orderRef = window.sdk.db.collection("Orders").doc(order.id);
             await orderRef.update({
                 status: window.sdk.FieldValue.arrayUnion({
                     label: "COMPLETED",
@@ -1728,7 +1728,7 @@ function OrderView({ order, tableId, variant }) {
             // Convert order to the format expected by POS component
             const orderForPOS = {
                 ...order,
-                ref: window.sdk.collection("Orders").doc(order.id)
+                ref: window.sdk.db.collection("Orders").doc(order.id)
             };
 
             // Render the POS component
@@ -1759,7 +1759,7 @@ function OrderView({ order, tableId, variant }) {
     const toggleItemServed = async (item, served) => {
         try {
             // Get a reference to the order document
-            const orderRef = window.sdk.collection("Orders").doc(order.id);
+            const orderRef = window.sdk.db.collection("Orders").doc(order.id);
 
             // Get the current order data
             const orderDoc = await orderRef.get();
@@ -1790,7 +1790,7 @@ function OrderView({ order, tableId, variant }) {
     const handleRemoveItem = async (item) => {
         try {
             // Get a reference to the order document
-            const orderRef = window.sdk.collection("Orders").doc(order.id);
+            const orderRef = window.sdk.db.collection("Orders").doc(order.id);
 
             // Get the current order data
             const orderDoc = await orderRef.get();
@@ -1836,7 +1836,7 @@ function OrderView({ order, tableId, variant }) {
     const handleAddItem = async (item) => {
         try {
             // Get a reference to the order document
-            const orderRef = window.sdk.collection("Orders").doc(order.id);
+            const orderRef = window.sdk.db.collection("Orders").doc(order.id);
 
             // Get the current order data
             const orderDoc = await orderRef.get();
@@ -2067,7 +2067,7 @@ function CustomerSearch({ isOpen, onClose, onSelectCustomer }) {
                 setError(null);
 
                 // Search for customers
-                const results = await window.sdk.collection("Customers")
+                const results = await window.sdk.db.collection("Customers")
                     .where("phone", "==", searchTerm)
                     .limit(10)
                     .get()
@@ -2115,7 +2115,7 @@ function CustomerSearch({ isOpen, onClose, onSelectCustomer }) {
             };
 
             // Add to Firestore
-            const newCustomerRef = window.sdk.collection("Customers").doc();
+            const newCustomerRef = window.sdk.db.collection("Customers").doc();
             await newCustomerRef.set(customerData);
 
             const customer = {
@@ -2380,7 +2380,7 @@ function ProductFormModal({ isOpen, onClose, product = null }) {
     React.useEffect(() => {
         async function fetchCategories() {
             try {
-                const snapshot = await window.sdk.collection("Product").get();
+                const snapshot = await window.sdk.db.collection("Product").get();
                 // Start with default categories plus popular food categories
                 const cats = new Set([
                     'Appetizers', 'Main Course', 'Breakfast', 'Desserts', 'Beverages',
@@ -2616,15 +2616,34 @@ function ProductFormModal({ isOpen, onClose, product = null }) {
             if (product) {
                 // Update existing product
                 productId = product.id;
-                await window.sdk.collection("Product").doc(productId).update(productData);
+                await window.sdk.db.collection("Product").doc(productId).update(productData);
+
+                // Track product update with analytics
+                if (window.sdk.analytics) {
+                    window.sdk.analytics.logEvent('product_updated', {
+                        product_id: productId,
+                        product_name: productData.title,
+                        category: productData.category || 'uncategorized'
+                    });
+                }
+
                 showToast('Product updated successfully');
             } else {
                 // Add new product
-                const docRef = await window.sdk.collection("Product").add({
+                const docRef = await window.sdk.db.collection("Product").add({
                     ...productData,
                     date: new Date()
                 });
                 productId = docRef.id;
+
+                // Track product creation with analytics
+                if (window.sdk.analytics) {
+                    window.sdk.analytics.logEvent('product_created', {
+                        product_id: productId,
+                        product_name: productData.title,
+                        category: productData.category || 'uncategorized'
+                    });
+                }
 
                 // If we had temporary IDs in the image paths, we need to update them
                 if (formData.imgs.length > 0) {
@@ -2663,7 +2682,7 @@ function ProductFormModal({ isOpen, onClose, product = null }) {
                             }
 
                             // Update product with fixed image URLs
-                            await window.sdk.collection("Product").doc(productId).update({
+                            await window.sdk.db.collection("Product").doc(productId).update({
                                 imgs: productData.imgs
                             });
                         } catch (moveError) {
@@ -2731,7 +2750,17 @@ function ProductFormModal({ isOpen, onClose, product = null }) {
             }
 
             // Then delete the product document
-            await window.sdk.collection("Product").doc(product.id).delete();
+            await window.sdk.db.collection("Product").doc(product.id).delete();
+
+            // Track product deletion with analytics
+            if (window.sdk.analytics) {
+                window.sdk.analytics.logEvent('product_deleted', {
+                    product_id: product.id,
+                    product_name: product.title,
+                    category: product.category || 'uncategorized'
+                });
+            }
+
             window.showToast('Product deleted successfully');
             setUploading(false);
             onClose();
@@ -3256,7 +3285,7 @@ function RecipeItems({ items, setItems }) {
         async function fetchInventoryItems() {
             try {
                 setLoading(true);
-                const inventorySnapshot = await window.sdk.collection("Inventory")
+                const inventorySnapshot = await window.sdk.db.collection("Inventory")
                     .orderBy("updatedAt", "desc")
                     .limit(100)
                     .get();
@@ -3392,7 +3421,7 @@ function RecipeItems({ items, setItems }) {
                             async function reloadInventory() {
                                 try {
                                     setLoading(true);
-                                    const snapshot = await window.sdk.collection("Inventory")
+                                    const snapshot = await window.sdk.db.collection("Inventory")
                                         .orderBy("updatedAt", "desc")
                                         .limit(100)
                                         .get();

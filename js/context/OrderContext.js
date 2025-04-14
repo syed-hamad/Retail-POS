@@ -34,7 +34,7 @@ function OrderProvider({ children }) {
 
         try {
             // Create query for active orders (KITCHEN, PLACED)
-            const query = window.sdk.collection("Orders")
+            const query = window.sdk.db.collection("Orders")
                 .where("currentStatus.label", "in", ["KITCHEN", "PLACED"])
                 .orderBy("date", "desc")
                 .limit(50);  // Reasonable limit
@@ -83,7 +83,7 @@ function OrderProvider({ children }) {
             const endTimestamp = dateRange.end instanceof Date ?
                 window.sdk.timestamp.fromDate(dateRange.end) : dateRange.end;
 
-            let query = window.sdk.collection("Orders")
+            let query = window.sdk.db.collection("Orders")
                 .where("currentStatus.label", "==", "COMPLETED")
                 .orderBy("date", "desc")
                 .limit(20);
@@ -91,7 +91,7 @@ function OrderProvider({ children }) {
             // Add date filtering if supported
             try {
                 // This may fail if the right indexes don't exist
-                query = window.sdk.collection("Orders")
+                query = window.sdk.db.collection("Orders")
                     .where("currentStatus.label", "==", "COMPLETED")
                     .where("date", ">=", startTimestamp)
                     .where("date", "<=", endTimestamp)

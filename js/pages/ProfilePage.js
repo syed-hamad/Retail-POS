@@ -54,7 +54,7 @@ function ProfilePage({ inModal = false, onClose }) {
         if (e) e.preventDefault();
 
         try {
-            await sdk.collection('Sellers').doc(profile.id).update(formData);
+            await sdk.db.collection('Sellers').doc(profile.id).update(formData);
             showToast('Profile updated successfully', 'success');
             setIsEditing(false);
             if (inModal && onClose) onClose();

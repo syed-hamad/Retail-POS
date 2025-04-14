@@ -34,7 +34,7 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
     // Load products from Firestore
     const loadProducts = async () => {
         try {
-            const snapshot = await window.sdk.collection("Product").get();
+            const snapshot = await window.sdk.db.collection("Product").get();
             let allProducts = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
@@ -176,7 +176,7 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
 
         try {
             const now = new Date();
-            const orderId = order?.id || window.sdk.collection("Orders").doc().id;
+            const orderId = order?.id || window.sdk.db.collection("Orders").doc().id;
 
             // Convert cart to order items
             const items = Object.values(cart).map(cartItem => {
@@ -241,7 +241,7 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
                     }
                 } else {
                     // Fallback if no ref is provided
-                    const existingItems = await window.sdk.collection("Orders").doc(orderId).get()
+                    const existingItems = await window.sdk.db.collection("Orders").doc(orderId).get()
                         .then(doc => doc.exists ? doc.data().items : []);
 
                     // Create a map of existing items by product ID
@@ -307,10 +307,21 @@ function POS({ title, tableId, order, variant, checkout = false, onClose }) {
             };
 
             // Save to Firestore
-            await window.sdk.collection("Orders").doc(orderId).set(
+            await window.sdk.db.collection("Orders").doc(orderId).set(
                 order ? { items: finalItems } : orderData,
                 { merge: true }
             );
+
+            // Track order creation/update with analytics
+            if (window.sdk.analytics) {
+                window.sdk.analytics.logEvent(order ? 'order_updated' : 'order_created', {
+                    order_id: orderId,
+                    table_id: tableId || 'direct',
+                    order_type: OrderStatus.KITCHEN,
+                    item_count: finalItems.length,
+                    total_amount: orderData.total
+                });
+            }
 
             showToast("Order saved successfully");
             handleClearCart();

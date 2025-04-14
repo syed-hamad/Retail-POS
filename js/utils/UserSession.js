@@ -3,6 +3,7 @@ class UserSession {
     static session = null; // Equivalent to SharedPreferences in Dart
     static seller = null; // ProfileInfo object
     static initialized = false;
+    static permissions = null; // Cache for user permissions
 
     // Initialize the session
     static async init() {
@@ -32,10 +33,69 @@ class UserSession {
             // Fetch IP info for country/currency
             await UserSession.fetchIP();
 
+            // Initialize permissions
+            await UserSession.initPermissions();
+
             console.log("UserSession initialized successfully");
         } catch (err) {
             console.error("Error during UserSession initialization:", err);
         }
+    }
+
+    // Initialize user permissions
+    static async initPermissions() {
+        try {
+            if (window.sdk?.permissions) {
+                // Get all permissions for the current user
+                UserSession.permissions = await window.sdk.permissions.getUserPermissions();
+                console.log("User permissions loaded:", UserSession.permissions);
+            }
+        } catch (err) {
+            console.error("Error loading user permissions:", err);
+            UserSession.permissions = [];
+        }
+    }
+
+    // Check if the user has a specific permission
+    static async hasPermission(permissionId) {
+        try {
+            // If we haven't cached permissions yet, get them now
+            if (!UserSession.permissions) {
+                await UserSession.initPermissions();
+            }
+
+            // Check if it's in our cached permissions
+            if (UserSession.permissions && UserSession.permissions.includes(permissionId)) {
+                return true;
+            }
+
+            // If not in cache or we're not sure, check directly with SDK
+            if (window.sdk?.permissions) {
+                return await window.sdk.permissions.hasPermission(permissionId);
+            }
+
+            return false;
+        } catch (err) {
+            console.error(`Error checking permission '${permissionId}':`, err);
+            return false;
+        }
+    }
+
+    // Map module/action format to permission ID format
+    static getPermissionId(module, action) {
+        return `${module.toLowerCase()}_${action.toLowerCase()}`;
+    }
+
+    // Check permission by module and action
+    static async checkPermission(module, action, silent = true) {
+        const permissionId = UserSession.getPermissionId(module, action);
+        const hasPermission = await UserSession.hasPermission(permissionId);
+
+        if (!hasPermission && !silent && window.showToast) {
+            window.showToast(`You don't have permission for this action`);
+        }
+
+        return hasPermission;
     }
 
     // Fetch user profile data
@@ -50,7 +110,7 @@ class UserSession {
             console.log(`Fetching user profile for seller ID: ${sid}`);
 
             // Fetch seller profile from Firestore
-            const doc = await window.sdk.collection('Sellers').doc(sid).get();
+            const doc = await window.sdk.db.collection('Sellers').doc(sid).get();
             if (doc.exists) {
                 // We need to wait until ProfileInfo is defined
                 if (typeof window.ProfileInfo === 'undefined') {

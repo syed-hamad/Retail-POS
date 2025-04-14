@@ -254,7 +254,7 @@ function AddCustomer({ onSelectCustomer, onContentVisibilityChange }) {
 
     const fetchCustomers = async () => {
         try {
-            const snapshot = await window.sdk.collection("Customers").get();
+            const snapshot = await window.sdk.db.collection("Customers").get();
             const customersList = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
@@ -293,7 +293,7 @@ function AddCustomer({ onSelectCustomer, onContentVisibilityChange }) {
                 orderCount: 0
             };
 
-            const docRef = await window.sdk.collection("Customers").add(customerData);
+            const docRef = await window.sdk.db.collection("Customers").add(customerData);
             const newCustomer = { id: docRef.id, ...customerData };
 
             onSelectCustomer(newCustomer);

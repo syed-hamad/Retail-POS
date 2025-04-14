@@ -7,7 +7,7 @@ function CustomerCard({ customer }) {
     // Set up real-time listener when component mounts
     React.useEffect(() => {
         if (customer?.id) {
-            const unsubscribe = sdk.collection("Customers").doc(customer.id)
+            const unsubscribe = sdk.db.collection("Customers").doc(customer.id)
                 .onSnapshot(doc => {
                     if (doc.exists) {
                         setCustomerData({

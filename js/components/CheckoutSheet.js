@@ -127,7 +127,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
 
         try {
             // Simple query similar to the Flutter implementation
-            const customersRef = window.sdk.collection("Customers");
+            const customersRef = window.sdk.db.collection("Customers");
 
             // Basic query without compound indexing requirements or sellerId filter (handled by SDK)
             let snapshot = await customersRef.get();
@@ -326,7 +326,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
         try {
             // Create simple query to get customers, avoiding complex indexing
             // No need for sellerId filter as it's handled by the SDK
-            let customersRef = window.sdk.collection("Customers");
+            let customersRef = window.sdk.db.collection("Customers");
             let snapshot = await customersRef.get();
 
             // Process results
@@ -394,8 +394,8 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
 
         try {
             // Ensure orderId exists or create a new one
-            const targetOrderId = orderId || window.sdk.collection("Orders").doc().id;
-            const orderRef = window.sdk.collection("Orders").doc(targetOrderId);
+            const targetOrderId = orderId || window.sdk.db.collection("Orders").doc().id;
+            const orderRef = window.sdk.db.collection("Orders").doc(targetOrderId);
 
             // Convert cart items to Order items format
             const items = Object.values(cart).map(cartItem => {
@@ -1222,7 +1222,7 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                                                         };
 
                                                         // Add to Firestore
-                                                        window.sdk.collection("Customers").add(newCustomer)
+                                                        window.sdk.db.collection("Customers").add(newCustomer)
                                                             .then(docRef => {
                                                                 // Set as selected customer
                                                                 setCustomer({

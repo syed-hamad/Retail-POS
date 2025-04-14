@@ -108,7 +108,7 @@ function Passbook() {
     React.useEffect(() => {
         async function fetchData() {
             try {
-                const ordersSnapshot = await sdk.collection("Orders")
+                const ordersSnapshot = await sdk.db.collection("Orders")
                     .orderBy("date", "desc")
                     .limit(100)
                     .get();
@@ -118,7 +118,7 @@ function Passbook() {
                     ...doc.data()
                 }));
 
-                const customersSnapshot = await sdk.collection("Customers")
+                const customersSnapshot = await sdk.db.collection("Customers")
                     .orderBy("lastOrderDate", "desc")
                     .limit(100)
                     .get();

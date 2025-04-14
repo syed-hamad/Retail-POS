@@ -93,7 +93,7 @@ function OrderView({ order, tableId, variant, onClose }) {
             // Convert MOrder instance to plain order object with ref for POS component
             const orderForPOS = {
                 ...order,
-                ref: window.sdk.collection("Orders").doc(order.id)
+                ref: window.sdk.db.collection("Orders").doc(order.id)
             };
 
             // Render the POS component
