@@ -7,17 +7,126 @@
  */
 class BluetoothPrinting {
     constructor() {
+        // Initialize printer sizes first
+        this.printerSizes = {
+            '2inch': 32,  // 2-inch thermal printer (32 characters)
+            '3inch': 48,  // 3-inch thermal printer (48 characters)
+            '4inch': 64   // 4-inch thermal printer (64 characters)
+        };
+
         this.printer = null;
         this.connected = false;
         this.device = null;
         this.characteristic = null;
         this.encoder = new TextEncoder();
 
+        // Add printer width configuration after printerSizes is initialized
+        this.printerWidth = this.getSavedPrinterWidth() || 48; // Default to 48 characters (standard 3-inch)
+
         // Try to restore the last successful connection info from localStorage
         this.lastConnectedDevice = this.getSavedPrinter();
 
         // Track attempts to auto-reconnect to prevent infinite loops
         this.reconnectAttempted = false;
+    }
+
+    /**
+     * Set the printer width configuration
+     * @param {string} size - The printer size ('2inch', '3inch', '4inch')
+     */
+    setPrinterSize(size) {
+        if (this.printerSizes && this.printerSizes[size]) {
+            this.printerWidth = this.printerSizes[size];
+            this.savePrinterWidth(size);
+        } else {
+            throw new Error('Invalid printer size. Supported sizes are: 2inch, 3inch, 4inch');
+        }
+    }
+
+    /**
+     * Save the printer width configuration to localStorage
+     * @private
+     */
+    savePrinterWidth(size) {
+        try {
+            localStorage.setItem('printerWidth', size);
+        } catch (error) {
+            console.error('Error saving printer width:', error);
+        }
+    }
+
+    /**
+     * Get saved printer width from localStorage
+     * @returns {number} The saved printer width in characters
+     * @private
+     */
+    getSavedPrinterWidth() {
+        try {
+            // Ensure printerSizes is initialized
+            if (!this.printerSizes) {
+                return 48; // Default to 3-inch (48 characters)
+            }
+
+            const size = localStorage.getItem('printerWidth');
+            // Add null check for size and this.printerSizes[size]
+            return (size && this.printerSizes[size]) ? this.printerSizes[size] : this.printerSizes['3inch'];
+        } catch (error) {
+            console.error('Error retrieving saved printer width:', error);
+            // Ensure safe fallback even if this.printerSizes is undefined
+            return 48; // Default to 3-inch (48 characters)
+        }
+    }
+
+    /**
+     * Format text to fit the printer width
+     * @param {string} text - The text to format
+     * @param {Object} options - Formatting options
+     * @returns {string} Formatted text
+     * @private
+     */
+    formatText(text, options = {}) {
+        const {
+            align = 'left',  // left, center, right
+            bold = false,
+            doubleWidth = false,
+            doubleHeight = false
+        } = options;
+
+        // Calculate effective width based on text modifiers
+        let effectiveWidth = this.printerWidth;
+        if (doubleWidth) effectiveWidth = Math.floor(effectiveWidth / 2);
+
+        // Split text into words
+        const words = text.split(' ');
+        let lines = [];
+        let currentLine = '';
+
+        // Word wrap
+        for (const word of words) {
+            if (currentLine.length + word.length + 1 <= effectiveWidth) {
+                currentLine += (currentLine ? ' ' : '') + word;
+            } else {
+                if (currentLine) lines.push(currentLine);
+                currentLine = word;
+            }
+        }
+        if (currentLine) lines.push(currentLine);
+
+        // Apply alignment
+        lines = lines.map(line => {
+            switch (align) {
+                case 'center':
+                    const padding = Math.max(0, Math.floor((effectiveWidth - line.length) / 2));
+                    return ' '.repeat(padding) + line;
+                case 'right':
+                    const rightPad = Math.max(0, effectiveWidth - line.length);
+                    return ' '.repeat(rightPad) + line;
+                default: // left
+                    return line;
+            }
+        });
+
+        return lines.join('\n');
     }
 
     /**
@@ -263,6 +372,85 @@ class BluetoothPrinting {
     }
 
     /**
+     * Shows a modal to select printer size
+     */
+    async showPrinterSizeModal() {
+        return new Promise((resolve, reject) => {
+            if (window.ModalManager && typeof window.ModalManager.createCenterModal === 'function') {
+                const modalContent = `
+                    <div class="py-2">
+                        <div class="flex items-center justify-center mb-4">
+                            <i class="ph ph-printer text-red-500 text-3xl"></i>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <h3 class="text-gray-800 font-medium mb-2">Select Printer Size</h3>
+                            <p class="text-gray-600 text-sm">Choose your printer's paper width for optimal formatting</p>
+                        </div>
+                        
+                        <div class="space-y-3">
+                            <button id="size-2inch" class="w-full py-2.5 bg-gray-100 text-gray-800 hover:bg-gray-200 rounded-lg transition-colors flex items-center justify-center gap-2">
+                                <i class="ph ph-printer"></i>
+                                2-inch (32 characters)
+                            </button>
+                            
+                            <button id="size-3inch" class="w-full py-2.5 bg-red-500 text-white hover:bg-red-600 rounded-lg transition-colors flex items-center justify-center gap-2">
+                                <i class="ph ph-printer"></i>
+                                3-inch (48 characters)
+                            </button>
+                            
+                            <button id="size-4inch" class="w-full py-2.5 bg-gray-100 text-gray-800 hover:bg-gray-200 rounded-lg transition-colors flex items-center justify-center gap-2">
+                                <i class="ph ph-printer"></i>
+                                4-inch (64 characters)
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                const modal = window.ModalManager.createCenterModal({
+                    id: 'printer-size-modal',
+                    title: 'Printer Configuration',
+                    content: modalContent,
+                    onShown: (modalControl) => {
+                        const handle2Inch = document.getElementById('size-2inch');
+                        const handle3Inch = document.getElementById('size-3inch');
+                        const handle4Inch = document.getElementById('size-4inch');
+
+                        if (handle2Inch) {
+                            handle2Inch.addEventListener('click', () => {
+                                modalControl.close();
+                                resolve('2inch');
+                            });
+                        }
+
+                        if (handle3Inch) {
+                            handle3Inch.addEventListener('click', () => {
+                                modalControl.close();
+                                resolve('3inch');
+                            });
+                        }
+
+                        if (handle4Inch) {
+                            handle4Inch.addEventListener('click', () => {
+                                modalControl.close();
+                                resolve('4inch');
+                            });
+                        }
+                    }
+                });
+            } else {
+                // Fallback to simple prompt if ModalManager is not available
+                const size = prompt('Select printer size (2inch, 3inch, 4inch):', '3inch');
+                if (size && ['2inch', '3inch', '4inch'].includes(size)) {
+                    resolve(size);
+                } else {
+                    resolve('3inch'); // Default to 3-inch if invalid or cancelled
+                }
+            }
+        });
+    }
+
+    /**
      * Connect to a Bluetooth printer device
      * Must be called from a user gesture (like a button click)
      */
@@ -277,7 +465,7 @@ class BluetoothPrinting {
         }
 
         try {
-            // Show connection modal to let user decide whether to use saved printer or select new one
+            // Show connection modal and handle printer selection
             let action;
             try {
                 action = await this.showPrinterConnectionModal();
@@ -447,6 +635,14 @@ class BluetoothPrinting {
 
             // Save successful connection
             this.savePrinter();
+
+            // Show printer size selection modal after successful connection
+            try {
+                const selectedSize = await this.showPrinterSizeModal();
+                this.setPrinterSize(selectedSize);
+            } catch (error) {
+                console.error('Error setting printer size:', error);
+            }
 
             return true;
         } catch (error) {
@@ -834,4 +1030,4 @@ class BluetoothPrinting {
 }
 
 // Create a singleton instance
-window.BluetoothPrinting = new BluetoothPrinting(); 
+window.BluetoothPrinting = new BluetoothPrinting();
