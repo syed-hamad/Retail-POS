@@ -377,6 +377,9 @@ class BluetoothPrinting {
     async showPrinterSizeModal() {
         return new Promise((resolve, reject) => {
             if (window.ModalManager && typeof window.ModalManager.createCenterModal === 'function') {
+                // Get current size for highlighting the active button
+                const currentSize = localStorage.getItem('printerWidth') || '3inch';
+
                 const modalContent = `
                     <div class="py-2">
                         <div class="flex items-center justify-center mb-4">
@@ -389,17 +392,17 @@ class BluetoothPrinting {
                         </div>
                         
                         <div class="space-y-3">
-                            <button id="size-2inch" class="w-full py-2.5 bg-gray-100 text-gray-800 hover:bg-gray-200 rounded-lg transition-colors flex items-center justify-center gap-2">
+                            <button id="size-2inch" class="w-full py-2.5 ${currentSize === '2inch' ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'} rounded-lg transition-colors flex items-center justify-center gap-2">
                                 <i class="ph ph-printer"></i>
                                 2-inch (32 characters)
                             </button>
                             
-                            <button id="size-3inch" class="w-full py-2.5 bg-red-500 text-white hover:bg-red-600 rounded-lg transition-colors flex items-center justify-center gap-2">
+                            <button id="size-3inch" class="w-full py-2.5 ${currentSize === '3inch' ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'} rounded-lg transition-colors flex items-center justify-center gap-2">
                                 <i class="ph ph-printer"></i>
                                 3-inch (48 characters)
                             </button>
                             
-                            <button id="size-4inch" class="w-full py-2.5 bg-gray-100 text-gray-800 hover:bg-gray-200 rounded-lg transition-colors flex items-center justify-center gap-2">
+                            <button id="size-4inch" class="w-full py-2.5 ${currentSize === '4inch' ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'} rounded-lg transition-colors flex items-center justify-center gap-2">
                                 <i class="ph ph-printer"></i>
                                 4-inch (64 characters)
                             </button>
@@ -416,25 +419,22 @@ class BluetoothPrinting {
                         const handle3Inch = document.getElementById('size-3inch');
                         const handle4Inch = document.getElementById('size-4inch');
 
+                        const handleSizeSelection = (size) => {
+                            this.setPrinterSize(size); // Set size before closing modal
+                            modalControl.close();
+                            resolve(size);
+                        };
+
                         if (handle2Inch) {
-                            handle2Inch.addEventListener('click', () => {
-                                modalControl.close();
-                                resolve('2inch');
-                            });
+                            handle2Inch.addEventListener('click', () => handleSizeSelection('2inch'));
                         }
 
                         if (handle3Inch) {
-                            handle3Inch.addEventListener('click', () => {
-                                modalControl.close();
-                                resolve('3inch');
-                            });
+                            handle3Inch.addEventListener('click', () => handleSizeSelection('3inch'));
                         }
 
                         if (handle4Inch) {
-                            handle4Inch.addEventListener('click', () => {
-                                modalControl.close();
-                                resolve('4inch');
-                            });
+                            handle4Inch.addEventListener('click', () => handleSizeSelection('4inch'));
                         }
                     }
                 });
@@ -442,8 +442,10 @@ class BluetoothPrinting {
                 // Fallback to simple prompt if ModalManager is not available
                 const size = prompt('Select printer size (2inch, 3inch, 4inch):', '3inch');
                 if (size && ['2inch', '3inch', '4inch'].includes(size)) {
+                    this.setPrinterSize(size); // Set size before resolving
                     resolve(size);
                 } else {
+                    this.setPrinterSize('3inch'); // Set default size
                     resolve('3inch'); // Default to 3-inch if invalid or cancelled
                 }
             }
@@ -459,8 +461,9 @@ class BluetoothPrinting {
             throw new Error('Web Bluetooth is not supported in this browser. Please use Chrome or Edge.');
         }
 
-        // If already connected, return immediately
+        // If already connected, show size modal and return
         if (this.connected && this.device && this.characteristic) {
+            await this.showPrinterSizeModal();
             return true;
         }
 
