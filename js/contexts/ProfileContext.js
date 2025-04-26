@@ -26,11 +26,46 @@ function ProfileProvider({ children }) {
     // Fetch profile data on mount
     React.useEffect(() => {
         fetchProfile();
-
-        // Set up listener for profile changes
-        const unsubscribe = listenToProfileChanges();
-        return () => unsubscribe();
+        // No need to set up a separate listener here as we have the dedicated useEffect below
     }, []);
+
+    // Listen to profile changes
+    React.useEffect(() => {
+        if (!profile?.id) return;
+
+        const unsubscribe = window.sdk.db.collection('Sellers').doc(profile.id)
+            .onSnapshot(
+                (doc) => {
+                    if (doc.exists) {
+                        const updatedData = new ProfileInfo({
+                            id: doc.id,
+                            ...doc.data()
+                        });
+
+                        setProfile(updatedData);
+                        setTables(updatedData.tables || []);
+
+                        // Update roles
+                        if (updatedData.roles) {
+                            setRoles(updatedData.roles.map(role => Role.fromJson(role)));
+                        }
+
+                        // Update UserSession
+                        UserSession.seller = updatedData;
+
+                        // Trigger UI refresh
+                        if (window.refreshTables && typeof window.refreshTables === 'function') {
+                            window.refreshTables();
+                        }
+                    }
+                },
+                (err) => {
+                    console.error('Error listening to profile changes:', err);
+                }
+            );
+
+        return () => unsubscribe();
+    }, [profile?.id]);
 
     // Fetch profile data
     const fetchProfile = async () => {
@@ -91,37 +126,6 @@ function ProfileProvider({ children }) {
             setError('Failed to load profile');
             setLoading(false);
         }
-    };
-
-    // Listen to profile changes
-    const listenToProfileChanges = () => {
-        if (!profile?.id) return () => { };
-
-        return window.sdk.db.collection('Sellers').doc(profile.id)
-            .onSnapshot(
-                (doc) => {
-                    if (doc.exists) {
-                        const updatedData = new ProfileInfo({
-                            id: doc.id,
-                            ...doc.data()
-                        });
-
-                        setProfile(updatedData);
-                        setTables(updatedData.tables || []);
-
-                        // Update roles
-                        if (updatedData.roles) {
-                            setRoles(updatedData.roles.map(role => Role.fromJson(role)));
-                        }
-
-                        // Update UserSession
-                        UserSession.seller = updatedData;
-                    }
-                },
-                (err) => {
-                    console.error('Error listening to profile changes:', err);
-                }
-            );
     };
 
     // Fetch bill number

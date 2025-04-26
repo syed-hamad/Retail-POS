@@ -27,7 +27,43 @@ function AddTableModal({ isOpen, onClose, seller }) {
         }
     }, [isOpen]);
 
-    // Function to show modal using ModalManager
+    const handleAddTable = async (newTitle, newDesc) => {
+        try {
+            // Get current tables
+            const currentTables = seller?.tables || [];
+
+            // Check if table already exists
+            if (currentTables.some(t => t.title === newTitle)) {
+                throw new Error('Table already exists');
+            }
+
+            // Add new table
+            await window.sdk.profile.update({
+                tables: [...currentTables, { title: newTitle, desc: newDesc }]
+            });
+
+            // Track analytics if available
+            if (window.sdk.analytics) {
+                window.sdk.analytics.logEvent('add_table', {
+                    table_id: newTitle,
+                    seller_id: seller?.id
+                });
+            }
+
+            window.ModalManager?.showToast('Table added successfully');
+
+            // Trigger UI refresh
+            if (window.refreshTables && typeof window.refreshTables === 'function') {
+                window.refreshTables();
+            }
+
+            return true;
+        } catch (err) {
+            console.error('Error adding table:', err);
+            throw err;
+        }
+    };
+
     const showAddTableModal = () => {
         if (!window.ModalManager || typeof window.ModalManager.createCenterModal !== 'function') {
             return;
@@ -120,29 +156,12 @@ function AddTableModal({ isOpen, onClose, seller }) {
                             return;
                         }
 
-                        // Check if table already exists
-                        const existingTables = seller?.tables || [];
-                        if (existingTables.some(t => t.title === newTitle)) {
-                            errorContainer.textContent = 'Table already exists';
-                            errorContainer.classList.remove('hidden');
-                            return;
-                        }
-
                         try {
-                            // Get current tables
-                            const currentTables = existingTables || [];
-
-                            // Add new table
-                            await window.sdk.profile.update({
-                                tables: [...currentTables, { title: newTitle, desc: newDesc }]
-                            });
-
-                            window.ModalManager.showToast('Table added successfully');
+                            await handleAddTable(newTitle, newDesc);
                             modalControl.close();
                             onClose();
                         } catch (err) {
-                            console.error('Error adding table:', err);
-                            errorContainer.textContent = 'Failed to add table. Please try again.';
+                            errorContainer.textContent = err.message || 'Failed to add table. Please try again.';
                             errorContainer.classList.remove('hidden');
                         }
                     });
@@ -165,27 +184,11 @@ function AddTableModal({ isOpen, onClose, seller }) {
             return;
         }
 
-        // Check if table already exists
-        const existingTables = seller?.tables || [];
-        if (existingTables.some(t => t.title === title)) {
-            setError('Table already exists');
-            return;
-        }
-
         try {
-            // Get current tables
-            const currentTables = existingTables || [];
-
-            // Add new table
-            await window.sdk.profile.update({
-                tables: [...currentTables, { title, desc }]
-            });
-
-            showToast('Table added successfully');
+            await handleAddTable(title, desc);
             onClose();
         } catch (err) {
-            console.error('Error adding table:', err);
-            setError('Failed to add table. Please try again.');
+            setError(err.message || 'Failed to add table. Please try again.');
         }
     };
 
@@ -397,6 +400,11 @@ function RenameRoomModal({ isOpen, onClose, tableId, variant, seller }) {
                                 return;
                             }
 
+                            // Trigger UI refresh
+                            if (window.refreshTables && typeof window.refreshTables === 'function') {
+                                window.refreshTables();
+                            }
+
                             window.ModalManager.showToast('Renamed successfully');
                             modalControl.close();
                             onClose();
@@ -446,12 +454,17 @@ function RenameRoomModal({ isOpen, onClose, tableId, variant, seller }) {
                 }
 
                 const updatedTables = [...tables];
-                updatedTables[index] = { ...updatedTables[index], title };
+                updatedTables[index] = { ...updatedTables[index], title: newTitle };
 
                 await window.sdk.profile.update({ tables: updatedTables });
             } else {
                 setError("Can't rename room");
                 return;
+            }
+
+            // Trigger UI refresh
+            if (window.refreshTables && typeof window.refreshTables === 'function') {
+                window.refreshTables();
             }
 
             showToast('Renamed successfully');
@@ -1180,6 +1193,153 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
         );
     };
 
+    const deleteTable = async (tableId) => {
+        try {
+            // Get current tables from seller
+            const currentTables = seller?.tables || [];
+
+            // Remove the table
+            const updatedTables = currentTables.filter(table => table.title !== tableId);
+
+            // Update seller document in Firestore
+            await window.sdk.profile.update({
+                tables: updatedTables
+            });
+
+            showToast('Table removed successfully');
+            handleClose();
+        } catch (err) {
+            console.error('Error removing table:', err);
+            showToast('Failed to remove table. Please try again.');
+        }
+    };
+
+    const showRenameRoomModal = (tableId, variant) => {
+        if (window.ModalManager && typeof window.ModalManager.createCenterModal === 'function') {
+            const modalId = 'rename-room-modal-' + Date.now();
+            const initialTitle = tableId || variant || '';
+            const modalTitle = tableId ? "Rename Table" : "Rename Channel";
+
+            const content = `
+                <div id="rename-room-form">
+                    <div id="rename-error-container" class="mb-4 hidden p-3 bg-red-50 text-red-700 rounded-md"></div>
+                    <div class="mb-6">
+                        <label class="block text-gray-700 mb-2" for="room-title">
+                            Title
+                        </label>
+                        <input
+                            type="text"
+                            id="room-title"
+                            value="${initialTitle}"
+                            class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="eg. T1"
+                        />
+                    </div>
+                </div>
+            `;
+
+            const actions = `
+                <div class="flex justify-end gap-3">
+                    <button
+                        id="cancel-rename"
+                        type="button"
+                        class="px-4 py-2 border rounded-md hover:bg-gray-50"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        id="save-rename"
+                        type="button"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                    >
+                        Save
+                    </button>
+                </div>
+            `;
+
+            const modal = window.ModalManager.createCenterModal({
+                id: modalId,
+                title: modalTitle,
+                content: content,
+                actions: actions,
+                onShown: (modalControl) => {
+                    const titleInput = document.getElementById('room-title');
+                    const errorContainer = document.getElementById('rename-error-container');
+                    const cancelButton = document.getElementById('cancel-rename');
+                    const saveButton = document.getElementById('save-rename');
+
+                    if (titleInput && cancelButton && saveButton) {
+                        titleInput.focus();
+                        titleInput.select();
+
+                        cancelButton.addEventListener('click', () => {
+                            modalControl.close();
+                        });
+
+                        saveButton.addEventListener('click', async () => {
+                            const newTitle = titleInput.value.trim();
+
+                            if (!newTitle) {
+                                errorContainer.textContent = 'Please enter a title';
+                                errorContainer.classList.remove('hidden');
+                                return;
+                            }
+
+                            try {
+                                if (variant) {
+                                    const vars = seller?.priceVariants || [];
+                                    const index = vars.findIndex(v => v.title === variant);
+
+                                    if (index === -1) {
+                                        errorContainer.textContent = "Can't rename this default room";
+                                        errorContainer.classList.remove('hidden');
+                                        return;
+                                    }
+
+                                    const updatedVars = [...vars];
+                                    updatedVars[index] = { title: newTitle };
+
+                                    await window.sdk.profile.update({ priceVariants: updatedVars });
+                                } else if (tableId) {
+                                    const tables = seller?.tables || [];
+                                    const index = tables.findIndex(t => t.title === tableId);
+
+                                    if (index === -1) {
+                                        errorContainer.textContent = "Can't rename this table";
+                                        errorContainer.classList.remove('hidden');
+                                        return;
+                                    }
+
+                                    const updatedTables = [...tables];
+                                    updatedTables[index] = { ...updatedTables[index], title: newTitle };
+
+                                    await window.sdk.profile.update({ tables: updatedTables });
+                                }
+
+                                // Trigger UI refresh
+                                if (window.refreshTables && typeof window.refreshTables === 'function') {
+                                    window.refreshTables();
+                                }
+
+                                window.ModalManager.showToast('Renamed successfully');
+                                modalControl.close();
+                            } catch (err) {
+                                console.error('Error renaming:', err);
+                                errorContainer.textContent = 'Failed to rename. Please try again.';
+                                errorContainer.classList.remove('hidden');
+                            }
+                        });
+                    }
+                }
+            });
+        } else {
+            // Fallback to original React component modal
+            setSelectedTableId(tableId);
+            setSelectedVariant(variant);
+            setIsRenameRoomModalOpen(true);
+        }
+    };
+
     if (!isOpen) return null;
 
     // Use the utility function for modal classes
@@ -1294,7 +1454,7 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
                                         date: order.date,
                                         servedItems: order.items?.filter(item => item.served).length || 0,
                                         totalItems: order.items?.length || 0,
-                                        subTotal: order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || item.qnt || 1)), 0) || 0,
+                                        subTotal: order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.qnt || 1)), 0) || 0,
                                         // Add methods that OrderView component expects
                                         serveItem: async (item, served) => {
                                             try {
@@ -1326,8 +1486,8 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
                                                 const orderData = orderDoc.data();
                                                 const updatedItems = orderData.items.map(i => {
                                                     if (i.pid === item.pid) {
-                                                        const newQnt = (i.quantity || i.qnt || 1) + 1;
-                                                        return { ...i, quantity: newQnt, qnt: newQnt };
+                                                        const newQnt = (i.qnt || 1) + 1;
+                                                        return { ...i, qnt: newQnt };
                                                     }
                                                     return i;
                                                 });
@@ -1353,7 +1513,7 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
                                                     throw new Error('Item not found in order');
                                                 }
 
-                                                // Get current quantity
+                                                // Get current quantity - standardize on qnt property
                                                 const currentQty = parseInt(orderData.items[itemIndex].qnt || 1);
 
                                                 // If quantity is 1, remove the item completely
@@ -1806,7 +1966,7 @@ function OrderView({ order, tableId, variant }) {
                 throw new Error('Item not found in order');
             }
 
-            // Get current quantity
+            // Get current quantity - standardize on qnt property
             const currentQty = parseInt(orderData.items[itemIndex].qnt || 1);
 
             // If quantity is 1, remove the item completely
@@ -1846,34 +2006,26 @@ function OrderView({ order, tableId, variant }) {
 
             const orderData = orderDoc.data();
 
-            // Find the item in the items array
-            const existingItemIndex = orderData.items.findIndex(i => i.pid === item.pid);
-
-            if (existingItemIndex >= 0) {
-                // If the item exists, increase its quantity
-                const updatedItems = [...orderData.items];
-                const existingItem = updatedItems[existingItemIndex];
-                const currentQuantity = existingItem.quantity || existingItem.qnt || 1;
-                updatedItems[existingItemIndex] = {
-                    ...existingItem,
-                    quantity: currentQuantity + 1
-                };
-
-                // Update the order with the modified items array
-                await orderRef.update({ items: updatedItems });
-            } else {
-                // If the item doesn't exist, add it to the items array
-                const newItem = { ...item, quantity: 1 };
-                const updatedItems = [...orderData.items, newItem];
-
-                // Update the order with the modified items array
-                await orderRef.update({ items: updatedItems });
+            // Find the item in the current items array
+            const itemIndex = orderData.items.findIndex(i => i.pid === item.pid);
+            if (itemIndex === -1) {
+                throw new Error('Item not found in order');
             }
 
-            showToast(`${item.title} added to order`);
+            // Get current quantity and increase by 1
+            const currentQty = parseInt(orderData.items[itemIndex].qnt || 1);
+            const updatedItems = [...orderData.items];
+            updatedItems[itemIndex] = {
+                ...updatedItems[itemIndex],
+                qnt: currentQty + 1
+            };
+
+            // Update the order with the modified items array
+            await orderRef.update({ items: updatedItems });
+            showToast(`Added ${item.title} quantity by 1`);
         } catch (err) {
-            console.error('Error adding item:', err);
-            showToast('Failed to add item', 'error');
+            console.error('Error updating item quantity:', err);
+            showToast('Failed to update item quantity', 'error');
         }
     };
 
@@ -1899,7 +2051,7 @@ function OrderView({ order, tableId, variant }) {
     };
 
     // Calculate subtotal
-    const subtotal = order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || item.qnt || 1)), 0) || 0;
+    const subtotal = order.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.qnt || 1)), 0) || 0;
 
     return (
         <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6" style={{ backgroundColor: "#fff8f8", borderRadius: "16px" }}>
@@ -1995,7 +2147,7 @@ function OrderView({ order, tableId, variant }) {
                                         <i className="ph ph-minus"></i>
                                     </button>
                                     <span className="w-8 text-center font-medium">
-                                        {item.quantity || item.qnt || 1}
+                                        {item.qnt || 1}
                                     </span>
                                     <button
                                         className="w-7 h-7 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-full"

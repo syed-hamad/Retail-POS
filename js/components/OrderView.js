@@ -55,7 +55,13 @@ function OrderView({ order, tableId, variant, onClose }) {
             if (increment) {
                 await order.addItem(item);
             } else {
-                await order.removeItem(item);
+                // Verify the item still exists and has the current state before removing
+                const currentOrder = order.items?.find(i => i.pid === item.pid);
+                if (currentOrder) {
+                    await order.removeItem(item);
+                } else {
+                    showToast("Item no longer exists in the order", "error");
+                }
             }
         } catch (error) {
             console.error("Error updating quantity:", error);

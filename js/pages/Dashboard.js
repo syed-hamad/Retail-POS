@@ -71,6 +71,33 @@ function Dashboard() {
     // Add state for the unsubscribe function
     const [placedOrdersUnsubscribe, setPlacedOrdersUnsubscribe] = React.useState(null);
 
+    // Add refreshTables function to window object
+    React.useEffect(() => {
+        // Function to refresh tables UI
+        window.refreshTables = () => {
+            // Force re-render of tables from profile
+            if (profileTables && profileTables.length > 0) {
+                setTables((prevTables) => {
+                    // Merge profile tables with any dynamic tables that might exist
+                    const dynamicTables = prevTables.filter(t =>
+                        t.section === 'dynamic' && !profileTables.some(pt => pt.title === t.id)
+                    );
+                    return [...profileTables, ...dynamicTables];
+                });
+            }
+
+            // Refresh orders if needed
+            if (window.refreshOrders && typeof window.refreshOrders === 'function') {
+                window.refreshOrders();
+            }
+        };
+
+        // Clean up
+        return () => {
+            delete window.refreshTables;
+        };
+    }, [profileTables]);
+
     // Get the OrderContext data to update tables and channels
     React.useEffect(() => {
         // Depend on locally fetched 'kitchenOrders' state instead of 'orders'
@@ -575,6 +602,11 @@ function Dashboard() {
                         await sdk.profile.update({
                             tables: updatedTables
                         });
+
+                        // Trigger UI refresh
+                        if (window.refreshTables && typeof window.refreshTables === 'function') {
+                            window.refreshTables();
+                        }
 
                         showToast('Table removed successfully');
 

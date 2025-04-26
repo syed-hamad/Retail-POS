@@ -378,9 +378,12 @@ class MOrder {
             const index = itemsData.findIndex(i => i.pid === item.pid);
 
             if (index !== -1) {
-                if (itemsData[index].qnt > 1) {
+                // Check for qnt property with fallback
+                const currentQty = parseInt(itemsData[index].qnt || 1);
+
+                if (currentQty > 1) {
                     // Reduce quantity by 1
-                    itemsData[index].qnt = itemsData[index].qnt - 1;
+                    itemsData[index].qnt = currentQty - 1;
                 } else {
                     // Remove the item entirely
                     itemsData.splice(index, 1);
@@ -406,7 +409,7 @@ class MOrder {
 
         if (index !== -1) {
             // Increment quantity of existing item
-            itemsData[index].qnt = itemsData[index].qnt + 1;
+            itemsData[index].qnt = (itemsData[index].qnt || 1) + 1;
 
             await this.ref.update({ items: itemsData });
             await this.reload();
