@@ -3296,6 +3296,17 @@ function ProductFormModal({ isOpen, onClose, product = null }) {
                                                 {String(charge.value).includes('%') ? '%' : '₹'}
                                             </button>
                                         </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const updatedCharges = charges.filter((_, i) => i !== index);
+                                                setCharges(updatedCharges);
+                                            }}
+                                            className="p-2 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                                            title="Delete charge"
+                                        >
+                                            <i className="ph ph-trash"></i>
+                                        </button>
                                     </div>
                                     <div className="flex items-center">
                                         <label className="flex items-center cursor-pointer">
