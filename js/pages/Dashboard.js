@@ -2069,7 +2069,7 @@ function Dashboard() {
                         const totalProducts = productsSnapshot.size;
 
                         // Update each product with the new tax configuration
-                        const batch = window.sdk.batch();
+                        const batch = window.sdk.db.firestore.batch();
 
                         productsSnapshot.forEach(doc => {
                             const productData = doc.data();
