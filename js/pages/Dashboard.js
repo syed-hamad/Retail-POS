@@ -640,6 +640,10 @@ function Dashboard() {
                 const sevenDaysAgo = new Date(now);
                 sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
                 return new Date(sevenDaysAgo.getFullYear(), sevenDaysAgo.getMonth(), sevenDaysAgo.getDate());
+            case '30days':
+                const thirtyDaysAgo = new Date(now);
+                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
+                return new Date(thirtyDaysAgo.getFullYear(), thirtyDaysAgo.getMonth(), thirtyDaysAgo.getDate());
             case 'custom':
                 return customStartDate || now;
             default:
@@ -660,6 +664,8 @@ function Dashboard() {
                 yesterday.setDate(yesterday.getDate() - 1);
                 return new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59);
             case '7days':
+                return now;
+            case '30days':
                 return now;
             case 'custom':
                 return customEndDate || now;
@@ -2596,6 +2602,7 @@ function Dashboard() {
                                         <option value="today">Today</option>
                                         <option value="yesterday">Yesterday</option>
                                         <option value="7days">Last 7 Days</option>
+                                        <option value="30days">Last 30 Days</option>
                                         <option value="custom">Custom Range</option>
                                     </select>
                                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
