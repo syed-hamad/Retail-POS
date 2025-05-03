@@ -96,11 +96,11 @@ function CustomerDetails() {
             <!-- Tabs -->
             <div class="bg-white border-b">
                 <div class="flex">
-                    <button id="tab-transactions" class="flex-1 py-3 px-4 text-center text-red-500 border-b-2 border-red-500 font-medium">
-                        Transactions
-                    </button>
-                    <button id="tab-orders" class="flex-1 py-3 px-4 text-center text-gray-600">
+                    <button id="tab-orders" class="flex-1 py-3 px-4 text-center text-red-500 border-b-2 border-red-500 font-medium">
                         Orders
+                    </button>
+                    <button id="tab-transactions" class="flex-1 py-3 px-4 text-center text-gray-600">
+                        Transactions
                     </button>
                 </div>
             </div>
@@ -109,7 +109,7 @@ function CustomerDetails() {
             <div id="tab-content" class="flex-1 overflow-auto p-4">
                 <div class="text-center py-8">
                     <div class="animate-spin inline-block w-8 h-8 border-4 border-red-500 border-t-transparent rounded-full"></div>
-                    <p class="mt-2 text-gray-600">Loading data...</p>
+                    <p class="mt-2 text-gray-600">Loading orders...</p>
                 </div>
             </div>
         `;
@@ -207,7 +207,7 @@ function CustomerDetails() {
             }
 
             // Load initial data
-            this.loadTransactions(customerData);
+            this.loadOrders(customerData);
         };
 
         // If this is an existing modal, directly set it up
@@ -316,43 +316,92 @@ function CustomerDetails() {
         `;
 
         try {
-            // In a real implementation, this would fetch from the SDK
             const orders = await this.fetchOrdersForCustomer(customerData.id);
 
             if (orders.length === 0) {
                 tabContent.innerHTML = `
                     <div class="p-8 text-center text-gray-500">
-                        No orders found for this customer.
+                        <div class="mb-4">
+                            <i class="ph ph-shopping-bag text-6xl text-gray-200"></i>
+                        </div>
+                        <p>No orders found for this customer.</p>
                     </div>
                 `;
                 return;
             }
 
-            let html = '<ul>';
+            let html = '<ul class="space-y-4">';
             for (const order of orders) {
                 html += `
-                    <li class="border-b">
+                    <li class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
                         <div class="p-4">
-                            <div class="flex justify-between">
-                                <div class="flex">
-                                    <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center mr-3 text-blue-500">
-                                        <i class="ph ph-shopping-bag"></i>
+                            <div class="flex justify-between items-start mb-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+                                        <i class="ph ph-shopping-bag text-blue-500"></i>
                                     </div>
                                     <div>
-                                        <p class="font-medium">Order #${order.id.substring(0, 8)}</p>
-                                        <p class="text-sm text-gray-500">${this.formatDate(order.placeDate)}</p>
-                                        <p class="text-sm text-gray-500">
-                                            ${order.description || 'No description'}
-                                        </p>
+                                        <h4 class="font-medium">Order #${order.billNo}</h4>
+                                        <p class="text-sm text-gray-500">${this.formatDate(order.date)}</p>
                                     </div>
                                 </div>
-                                <div class="text-right">
-                                    <p class="font-medium">₹${order.total?.toLocaleString() || 0}</p>
-                                    <p class="text-sm text-gray-500">
-                                        ${order.payMode || 'Unknown payment'}
-                                    </p>
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2.5 py-1 text-xs font-medium rounded-full ${order.paid ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'
+                    }">
+                                        ${order.paid ? 'Paid' : 'Pending'}
+                                    </span>
+                                    <span class="px-2.5 py-1 text-xs font-medium rounded-full ${order.payMode === 'CASH' ? 'bg-green-50 text-green-600' :
+                        order.payMode === 'DIGITAL' ? 'bg-blue-50 text-blue-600' :
+                            'bg-orange-50 text-orange-600'
+                    }">
+                                        ${order.payMode}
+                                    </span>
                                 </div>
                             </div>
+
+                            <div class="border-t border-gray-100 -mx-4 px-4 py-3">
+                                <div class="space-y-2">
+                                    ${order.items.map(item => `
+                                        <div class="flex justify-between items-center">
+                                            <div class="flex items-center gap-2">
+                                                <span class="w-6 h-6 flex items-center justify-center bg-gray-50 rounded text-xs font-medium">
+                                                    ${item.quantity}x
+                                                </span>
+                                                <span class="text-sm">${item.title}</span>
+                                            </div>
+                                            <span class="text-sm font-medium">₹${item.total}</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+
+                            <div class="border-t border-gray-100 -mx-4 px-4 pt-3">
+                                <div class="flex justify-between items-center text-sm">
+                                    <span class="text-gray-600">Items Total</span>
+                                    <span class="font-medium">₹${order.itemTotal}</span>
+                                </div>
+                                <div class="flex justify-between items-center text-sm mt-1">
+                                    <span class="text-gray-600">Tax (18%)</span>
+                                    <span class="font-medium">₹${order.taxAmount.toFixed(2)}</span>
+                                </div>
+                                ${order.discount > 0 ? `
+                                    <div class="flex justify-between items-center text-sm mt-1">
+                                        <span class="text-gray-600">Discount</span>
+                                        <span class="font-medium text-green-600">-₹${order.discount}</span>
+                                    </div>
+                                ` : ''}
+                                <div class="flex justify-between items-center font-medium mt-2 pt-2 border-t border-gray-100">
+                                    <span>Total Amount</span>
+                                    <span class="text-red-600">₹${(order.finalAmount - order.discount).toFixed(2)}</span>
+                                </div>
+                            </div>
+
+                            ${order.instructions ? `
+                                <div class="mt-3 text-sm text-gray-600">
+                                    <i class="ph ph-note-pencil mr-1"></i>
+                                    ${order.instructions}
+                                </div>
+                            ` : ''}
                         </div>
                     </li>
                 `;
@@ -363,7 +412,10 @@ function CustomerDetails() {
         } catch (error) {
             tabContent.innerHTML = `
                 <div class="p-8 text-center text-red-500">
-                    Error loading orders: ${error.message}
+                    <div class="mb-2">
+                        <i class="ph ph-warning text-3xl"></i>
+                    </div>
+                    <p>Error loading orders: ${error.message}</p>
                 </div>
             `;
         }
@@ -460,29 +512,48 @@ function CustomerDetails() {
     // Fetch orders for a customer from SDK
     this.fetchOrdersForCustomer = async function (customerId) {
         try {
+            // Get orders with customer ID
             const snapshot = await sdk.db.collection("Orders")
                 .where("custId", "==", customerId)
                 .orderBy("date", "desc")
                 .get();
 
+            // Map orders with detailed information
             return snapshot.docs.map(doc => {
                 const data = doc.data();
                 // Handle both Firestore timestamp and JavaScript Date
-                let placeDate = null;
-                if (data.placeDate) {
-                    // Check if it's a Firestore timestamp (has toDate method)
-                    if (typeof data.placeDate.toDate === 'function') {
-                        placeDate = data.placeDate.toDate();
-                    } else {
-                        // Handle it as a JavaScript Date or timestamp number
-                        placeDate = new Date(data.placeDate);
-                    }
+                let orderDate = null;
+                if (data.date) {
+                    orderDate = typeof data.date.toDate === 'function' ? data.date.toDate() : new Date(data.date);
                 }
+
+                // Calculate totals
+                const itemTotal = data.items?.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || item.qnt || 1)), 0) || 0;
+                const taxAmount = itemTotal * 0.18; // 18% tax
+                const finalAmount = itemTotal + taxAmount;
+
+                // Format items with details
+                const formattedItems = data.items?.map(item => ({
+                    title: item.title || 'Unknown Item',
+                    price: item.price || 0,
+                    quantity: item.quantity || item.qnt || 1,
+                    total: (item.price || 0) * (item.quantity || item.qnt || 1),
+                    served: item.served || false
+                })) || [];
 
                 return {
                     id: doc.id,
-                    ...data,
-                    placeDate: placeDate
+                    date: orderDate,
+                    items: formattedItems,
+                    itemTotal: itemTotal,
+                    taxAmount: taxAmount,
+                    finalAmount: finalAmount,
+                    payMode: data.payMode || 'CASH',
+                    paid: data.paid || false,
+                    status: data.currentStatus?.label || 'PLACED',
+                    billNo: data.billNo || doc.id.slice(-6),
+                    instructions: data.instructions || '',
+                    discount: data.discount || 0
                 };
             });
         } catch (error) {
