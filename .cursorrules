@@ -3,4 +3,3 @@ For missing images, use semantic Phosphor icons (ph ph-user, ph ph-storefront, p
 Avoid NPM package dependencies - instead, load JavaScript libraries directly from trusted CDNs using script tags in the HTML.
 Polish the ui and make it look more calm, pleasant and professional.
 Make only relevant and accurate information if they are useful don't over engineer any stuff, and if you think it can improve the overall experience, then only add things, but it should must be accurate information from the database.
-
