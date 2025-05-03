@@ -5,9 +5,12 @@ function Analytics() {
     const [error, setError] = React.useState(null);
     const [dateFilter, setDateFilter] = React.useState('last30');
     const [customDateRange, setCustomDateRange] = React.useState({ start: null, end: null });
+    const [selectedMetric, setSelectedMetric] = React.useState(null);
+    const [isExporting, setIsExporting] = React.useState(false);
 
     // Date filter options
     const dateFilters = [
+        { id: 'today', label: 'Today' },
         { id: 'yesterday', label: 'Yesterday' },
         { id: 'last7', label: 'Last 7 Days' },
         { id: 'last30', label: 'Last 30 Days' },
@@ -20,6 +23,11 @@ function Analytics() {
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
         switch (filter) {
+            case 'today':
+                return {
+                    start: today,
+                    end: now
+                };
             case 'yesterday':
                 return {
                     start: new Date(today.getTime() - 24 * 60 * 60 * 1000),
@@ -38,7 +46,7 @@ function Analytics() {
             case 'custom':
                 return {
                     start: customDateRange.start,
-                    end: customDateRange.end
+                    end: customDateRange.end || now
                 };
             default:
                 return { start: null, end: null };
@@ -210,7 +218,60 @@ function Analytics() {
         fetchAnalytics();
     }, [dateFilter, customDateRange]);
 
-    const MetricCard = ({ title, value, trend, type = 'currency', className = '' }) => {
+    const exportToCSV = async () => {
+        try {
+            setIsExporting(true);
+            const range = getDateRange(dateFilter);
+            const ordersSnapshot = await sdk.db.collection("Orders")
+                .where("date", ">=", range.start)
+                .where("date", "<=", range.end)
+                .orderBy("date", "desc")
+                .get();
+
+            const orders = ordersSnapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    date: data.date?.toDate?.().toLocaleString() || '',
+                    total: (data.items || []).reduce((sum, item) =>
+                        sum + ((Number(item.price) || 0) * (Number(item.quantity || item.qnt || 0))), 0),
+                    items: data.items?.length || 0,
+                    type: data.isOnline ? 'Online' : 'Offline',
+                    source: data.source || 'Direct',
+                    status: data.status?.[data.status.length - 1]?.type || 'Unknown'
+                };
+            });
+
+            const csvContent = [
+                ['Order ID', 'Date', 'Total', 'Items', 'Type', 'Source', 'Status'],
+                ...orders.map(order => [
+                    order.id,
+                    order.date,
+                    order.total,
+                    order.items,
+                    order.type,
+                    order.source,
+                    order.status
+                ])
+            ].map(row => row.join(',')).join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `analytics_${dateFilter}_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (err) {
+            console.error('Error exporting data:', err);
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const MetricCard = ({ title, value, trend, type = 'currency', className = '', onClick }) => {
         const chartRef = React.useRef(null);
         const canvasRef = React.useRef(null);
 
@@ -353,7 +414,10 @@ function Analytics() {
         const trendIcon = trend >= 0 ? '↑' : '↓';
 
         return (
-            <div className={`relative overflow-hidden rounded-xl ${scheme.background} border ${scheme.border} shadow-sm hover:shadow-md transition-shadow`}>
+            <div
+                className={`relative overflow-hidden rounded-xl ${scheme.background} border ${scheme.border} shadow-sm hover:shadow-md transition-shadow cursor-pointer`}
+                onClick={onClick}
+            >
                 <div className="p-4">
                     <h3 className="text-sm font-medium text-gray-600">{title}</h3>
                     <div className="mt-2 flex items-baseline gap-2">
@@ -394,6 +458,19 @@ function Analytics() {
 
     return (
         <div className="p-4 space-y-6">
+            {/* Header with Export Button */}
+            <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold text-gray-800">Analytics</h2>
+                <button
+                    onClick={exportToCSV}
+                    disabled={isExporting || !metrics}
+                    className="px-3 py-1.5 text-sm bg-primary text-white rounded-lg flex items-center gap-1.5 hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    <i className={`ph ${isExporting ? 'ph-spinner ph-spin' : 'ph-download-simple'}`}></i>
+                    {isExporting ? 'Exporting...' : 'Download'}
+                </button>
+            </div>
+
             {/* Date filter tabs */}
             <div className="flex items-center gap-4 overflow-x-auto pb-2 mb-6">
                 {dateFilters.map(filter => (
@@ -442,6 +519,7 @@ function Analytics() {
                     value={metrics.totalSales}
                     trend={metrics.trends.sales}
                     className="bg-green-50"
+                    onClick={() => setSelectedMetric('sales')}
                 />
                 <MetricCard
                     title="Total Orders"
@@ -449,6 +527,7 @@ function Analytics() {
                     trend={metrics.trends.orders}
                     type="number"
                     className="bg-blue-50"
+                    onClick={() => setSelectedMetric('orders')}
                 />
                 <MetricCard
                     title="Turn Around Time (Avg)"
@@ -456,12 +535,14 @@ function Analytics() {
                     trend={metrics.trends.turnAround}
                     type="time"
                     className="bg-orange-50"
+                    onClick={() => setSelectedMetric('turnAround')}
                 />
                 <MetricCard
                     title="Order Value (Avg)"
                     value={metrics.avgOrderValue}
                     trend={metrics.trends.orderValue}
                     className="bg-purple-50"
+                    onClick={() => setSelectedMetric('orderValue')}
                 />
             </div>
 
@@ -472,26 +553,127 @@ function Analytics() {
                     value={metrics.offlineSales}
                     trend={metrics.trends.sales}
                     className="bg-gray-50"
+                    onClick={() => setSelectedMetric('offlineSales')}
                 />
                 <MetricCard
                     title="Online Sales"
                     value={metrics.onlineSales}
                     trend={metrics.trends.sales}
                     className="bg-gray-50"
+                    onClick={() => setSelectedMetric('onlineSales')}
                 />
                 <MetricCard
                     title="Dine-in Sales"
                     value={metrics.dineInSales}
                     trend={metrics.trends.sales}
                     className="bg-gray-50"
+                    onClick={() => setSelectedMetric('dineInSales')}
                 />
                 <MetricCard
                     title="Zomato"
                     value={metrics.zomatoSales}
                     trend={metrics.trends.sales}
                     className="bg-gray-50"
+                    onClick={() => setSelectedMetric('zomatoSales')}
                 />
             </div>
+
+            {/* Metric Detail Modal */}
+            {selectedMetric && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold text-gray-800">
+                                {selectedMetric.charAt(0).toUpperCase() + selectedMetric.slice(1)} Details
+                            </h3>
+                            <button
+                                onClick={() => setSelectedMetric(null)}
+                                className="text-gray-500 hover:text-gray-700"
+                            >
+                                <i className="ph ph-x text-xl"></i>
+                            </button>
+                        </div>
+                        <div className="space-y-4">
+                            {(() => {
+                                const formatValue = (value, type = 'currency') => {
+                                    if (type === 'currency') return `₹${Math.round(value).toLocaleString()}`;
+                                    if (type === 'time') return `${Math.round(value)} min`;
+                                    return value.toString();
+                                };
+
+                                const getMetricDetails = () => {
+                                    switch (selectedMetric) {
+                                        case 'sales':
+                                            return {
+                                                title: 'Total Sales',
+                                                value: metrics.totalSales,
+                                                breakdown: [
+                                                    { label: 'Online Sales', value: metrics.onlineSales },
+                                                    { label: 'Offline Sales', value: metrics.offlineSales },
+                                                    { label: 'Dine-in Sales', value: metrics.dineInSales },
+                                                    { label: 'Zomato Sales', value: metrics.zomatoSales }
+                                                ]
+                                            };
+                                        case 'orders':
+                                            return {
+                                                title: 'Total Orders',
+                                                value: metrics.totalOrders,
+                                                type: 'number',
+                                                breakdown: [
+                                                    { label: 'Average Order Value', value: metrics.avgOrderValue },
+                                                    { label: 'Average Turn Around Time', value: metrics.avgTurnAroundTime, type: 'time' }
+                                                ]
+                                            };
+                                        case 'turnAround':
+                                            return {
+                                                title: 'Turn Around Time',
+                                                value: metrics.avgTurnAroundTime,
+                                                type: 'time'
+                                            };
+                                        case 'orderValue':
+                                            return {
+                                                title: 'Average Order Value',
+                                                value: metrics.avgOrderValue
+                                            };
+                                        default:
+                                            return {
+                                                title: selectedMetric,
+                                                value: metrics[selectedMetric] || 0
+                                            };
+                                    }
+                                };
+
+                                const details = getMetricDetails();
+                                return (
+                                    <>
+                                        <div className="bg-gray-50 rounded-lg p-4">
+                                            <div className="text-sm text-gray-600 mb-1">{details.title}</div>
+                                            <div className="text-2xl font-bold text-gray-900">
+                                                {formatValue(details.value, details.type)}
+                                            </div>
+                                            <div className={`text-sm font-medium ${metrics.trends[selectedMetric] >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                {metrics.trends[selectedMetric] >= 0 ? '↑' : '↓'} {Math.abs(metrics.trends[selectedMetric]).toFixed(1)}% from previous period
+                                            </div>
+                                        </div>
+                                        {details.breakdown && (
+                                            <div className="grid grid-cols-2 gap-3">
+                                                {details.breakdown.map((item, index) => (
+                                                    <div key={index} className="bg-gray-50 rounded-lg p-3">
+                                                        <div className="text-sm text-gray-600 mb-1">{item.label}</div>
+                                                        <div className="text-lg font-semibold text-gray-900">
+                                                            {formatValue(item.value, item.type)}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 } 
