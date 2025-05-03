@@ -602,8 +602,14 @@ function CustomerDetails() {
         const editNameContent = `
             <div class="p-4">
                 <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
                     <input type="text" id="customer-name" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500" 
                            value="${customerData.name || ''}" placeholder="Customer name">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <input type="tel" id="customer-phone" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500" 
+                           value="${customerData.phone || ''}" placeholder="Phone number">
                 </div>
             </div>
         `;
@@ -622,7 +628,7 @@ function CustomerDetails() {
         const self = this;
         const editModal = window.ModalManager.createSideDrawerModal({
             id: 'edit-name-modal',
-            title: 'Edit Name',
+            title: 'Edit Customer',
             content: editNameContent,
             actions: editNameActions,
             zIndex: 1060,
@@ -634,21 +640,24 @@ function CustomerDetails() {
 
                 document.getElementById('submit-edit').addEventListener('click', async function () {
                     const name = document.getElementById('customer-name').value;
-                    if (!name) return;
+                    const phone = document.getElementById('customer-phone').value;
+                    if (!name || !phone) return;
 
                     try {
                         await sdk.db.collection("Customers").doc(customerData.id).update({
-                            name: name
+                            name: name,
+                            phone: phone
                         });
 
                         // Show success message
-                        window.ModalManager.showToast(`Updated customer name to ${name}`);
+                        window.ModalManager.showToast(`Updated customer details`);
 
                         // Close modal
                         modalControl.close();
 
                         // Update customer object
                         customerData.name = name;
+                        customerData.phone = phone;
 
                         // Refresh view
                         self.showCustomerDetailsModal(customerData);
@@ -658,8 +667,8 @@ function CustomerDetails() {
                             window.refreshCustomers();
                         }
                     } catch (error) {
-                        console.error("Error updating name:", error);
-                        window.ModalManager.showToast("Failed to update name", { type: "error" });
+                        console.error("Error updating customer details:", error);
+                        window.ModalManager.showToast("Failed to update details", { type: "error" });
                     }
                 });
 
