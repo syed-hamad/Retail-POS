@@ -894,6 +894,9 @@ class BluetoothPrinting {
         addLine();
         addCenteredText('*Thank You*');
 
+        // Add feed before cutting
+        commands.push(0x1B, 0x64, 0x02); // Feed 2 lines
+
         // Cut paper - full cut
         commands.push(0x1D, 0x56, 0x00);
 
