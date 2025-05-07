@@ -902,7 +902,7 @@ class BluetoothPrinting {
 
         // Business details
         const seller = window.UserSession?.seller || {};
-        addCenteredText(seller.businessName || 'Liquid POS');
+        addCenteredText(seller.businessName || '');
         if (seller.phone) addCenteredText(`Phone: ${seller.phone}`);
         if (seller.address) addCenteredText(`Address: ${seller.address}`);
         if (seller.storeLink) addCenteredText(`Web: ${seller.storeLink}`);
