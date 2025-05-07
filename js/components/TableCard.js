@@ -170,7 +170,6 @@ function OrderGroupTile({ order, onAccept, onReject, onPrintBill }) {
     const isCompletedOrder = order.currentStatus?.label === "COMPLETED" || order.paid === true;
 
     const handleOrderClick = () => {
-        // Use ModalManager if available, otherwise fall back to original implementation
         if (window.ModalManager && typeof window.ModalManager.createSideDrawerModal === 'function') {
             const modal = window.ModalManager.createSideDrawerModal({
                 id: `order-details-modal-${order.id}`,
@@ -180,6 +179,66 @@ function OrderGroupTile({ order, onAccept, onReject, onPrintBill }) {
                             <p class="mt-2">Loading order details...</p>
                          </div>`,
                 onShown: (modalControl) => {
+                    // Add functions to modalControl
+                    modalControl.acceptOrder = () => {
+                        onAccept && onAccept(order.id);
+                    };
+
+                    modalControl.rejectOrder = () => {
+                        onReject && onReject(order.id);
+                    };
+
+                    // Add print functions to modalControl
+                    modalControl.printBill = async (orderId) => {
+                        try {
+                            if (window.BluetoothPrinting) {
+                                await window.BluetoothPrinting.printBill(orderId || order.id);
+                                // Show success message
+                                if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                    window.ModalManager.showToast("Bill printed successfully", { type: "success" });
+                                } else {
+                                    alert("Bill printed successfully");
+                                }
+                            } else {
+                                onPrintBill && onPrintBill(orderId || order.id);
+                            }
+                            modalControl.close();
+                        } catch (error) {
+                            console.error("Error printing bill:", error);
+                            // Show error message
+                            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                window.ModalManager.showToast("Failed to print bill: " + error.message, { type: "error" });
+                            } else {
+                                alert("Failed to print bill: " + error.message);
+                            }
+                        }
+                    };
+
+                    modalControl.printKOT = async (orderId) => {
+                        try {
+                            if (window.BluetoothPrinting) {
+                                await window.BluetoothPrinting.printKOT(orderId || order.id);
+                                // Show success message
+                                if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                    window.ModalManager.showToast("Kitchen order printed successfully", { type: "success" });
+                                } else {
+                                    alert("Kitchen order printed successfully");
+                                }
+                            } else {
+                                onPrintBill && onPrintBill(orderId || order.id);
+                            }
+                            modalControl.close();
+                        } catch (error) {
+                            console.error("Error printing kitchen order:", error);
+                            // Show error message
+                            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                window.ModalManager.showToast("Failed to print kitchen order: " + error.message, { type: "error" });
+                            } else {
+                                alert("Failed to print kitchen order: " + error.message);
+                            }
+                        }
+                    };
+
                     // Create a temporary div to render the React component
                     const tempDiv = document.createElement('div');
                     ReactDOM.render(
@@ -187,8 +246,7 @@ function OrderGroupTile({ order, onAccept, onReject, onPrintBill }) {
                             order: order,
                             modalControl: modalControl,
                             onAccept,
-                            onReject,
-                            onPrintBill
+                            onReject
                         }),
                         tempDiv,
                         () => {
@@ -229,7 +287,7 @@ function OrderGroupTile({ order, onAccept, onReject, onPrintBill }) {
 
         const label = status.label?.toUpperCase();
 
-        if (label === 'PLACED') return 'bg-blue-50 text-blue-600 border-blue-100';
+        if (label === 'PLACED') return 'bg-red-50 text-red-600 border-red-100';
         if (label === 'KITCHEN') return 'bg-orange-50 text-orange-600 border-orange-100';
         if (label === 'COMPLETED') return 'bg-green-50 text-green-600 border-green-100';
         if (label === 'CANCELLED') return 'bg-red-50 text-red-600 border-red-100';
@@ -273,7 +331,7 @@ function OrderGroupTile({ order, onAccept, onReject, onPrintBill }) {
                     <div className="flex flex-wrap items-center justify-between gap-1.5 mt-2">
                         <div className="flex items-center gap-1.5 flex-wrap">
                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex items-center border ${statusColor}`}>
-                                {order.currentStatus?.label === "PLACED" && <i className="ph ph-hourglass text-blue-600 mr-1"></i>}
+                                {order.currentStatus?.label === "PLACED" && <i className="ph ph-hourglass text-red-600 mr-1"></i>}
                                 {order.currentStatus?.label === "KITCHEN" && <i className="ph ph-cooking-pot text-orange-600 mr-1"></i>}
                                 {order.currentStatus?.label === "COMPLETED" && <i className="ph ph-check-circle text-green-600 mr-1"></i>}
                                 {order.currentStatus?.label?.toUpperCase() || "PLACED"}
@@ -489,7 +547,7 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onPrintBill }) 
                                 <div className="flex justify-between items-center pt-1 text-xs">
                                     <span className="text-gray-600">Payment Method</span>
                                     <span className={`font-medium px-2 py-0.5 rounded-full ${order.payMode === 'CASH' ? 'bg-green-50 text-green-600' :
-                                        order.payMode === 'DIGITAL' ? 'bg-blue-50 text-blue-600' :
+                                        order.payMode === 'DIGITAL' ? 'bg-red-50 text-red-600' :
                                             order.payMode === 'CREDIT' ? 'bg-orange-50 text-orange-600' :
                                                 'bg-gray-50 text-gray-600'
                                         }`}>
@@ -507,12 +565,12 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onPrintBill }) 
                             Order Status
                         </h3>
                         <div className="flex items-center">
-                            <div className={`px-3 py-1.5 rounded-full text-sm font-medium ${isNewOrder ? 'bg-blue-100 text-blue-600' :
+                            <div className={`px-3 py-1.5 rounded-full text-sm font-medium ${isNewOrder ? 'bg-red-100 text-red-600' :
                                 isProcessingOrder ? 'bg-orange-100 text-orange-600' :
                                     isCompletedOrder ? 'bg-green-100 text-green-600' :
                                         'bg-gray-100 text-gray-600'
                                 }`}>
-                                <i className={`ph ${isNewOrder ? 'ph-hourglass text-blue-600' :
+                                <i className={`ph ${isNewOrder ? 'ph-hourglass text-red-600' :
                                     isProcessingOrder ? 'ph-cooking-pot text-orange-600' :
                                         isCompletedOrder ? 'ph-check-circle text-green-600' :
                                             'ph-question text-gray-600'
@@ -556,12 +614,43 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onPrintBill }) 
                         {isProcessingOrder && (
                             <div>
                                 <button
-                                    onClick={(e) => {
+                                    onClick={async (e) => {
                                         e.stopPropagation();
-                                        onPrintBill && onPrintBill();
+                                        try {
+                                            if (window.BluetoothPrinting) {
+                                                // Show connecting message
+                                                if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                                    if (!window.BluetoothPrinting.connected) {
+                                                        window.ModalManager.showToast("Connecting to printer...", { type: "info" });
+                                                    } else {
+                                                        window.ModalManager.showToast("Printing kitchen order...", { type: "info" });
+                                                    }
+                                                }
+
+                                                // Print the kitchen order directly
+                                                await window.BluetoothPrinting.printKOT(order.id);
+
+                                                // Show success message
+                                                if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                                    window.ModalManager.showToast("Kitchen order printed successfully", { type: "success" });
+                                                }
+                                            } else if (onPrintBill) {
+                                                onPrintBill(order.id);
+                                            } else {
+                                                console.error("BluetoothPrinting service not available");
+                                                if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                                    window.ModalManager.showToast("Printing service not available", { type: "error" });
+                                                }
+                                            }
+                                        } catch (error) {
+                                            console.error("Error printing kitchen order:", error);
+                                            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                                window.ModalManager.showToast("Failed to print kitchen order: " + error.message, { type: "error" });
+                                            }
+                                        }
                                         onClose();
                                     }}
-                                    className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg flex items-center justify-center gap-2 hover:from-blue-700 hover:to-blue-600 transition-colors text-sm font-medium shadow-sm"
+                                    className="w-full py-3 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg flex items-center justify-center gap-2 hover:from-red-700 hover:to-red-600 transition-colors text-sm font-medium shadow-sm"
                                 >
                                     <i className="ph ph-printer text-lg"></i>
                                     <span>Print Kitchen Order</span>
@@ -572,12 +661,10 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onPrintBill }) 
                         {isCompletedOrder && (
                             <div>
                                 <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onPrintBill && onPrintBill();
-                                        onClose();
-                                    }}
-                                    className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg flex items-center justify-center gap-2 hover:from-blue-700 hover:to-blue-600 transition-colors text-sm font-medium shadow-sm"
+                                    id="print-bill-button"
+                                    data-action="print-bill"
+                                    onclick="if(window.modalPrintBill) { window.modalPrintBill(); return false; }"
+                                    className="w-full py-3 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg flex items-center justify-center gap-2 hover:from-red-700 hover:to-red-600 transition-colors text-sm font-medium shadow-sm"
                                 >
                                     <i className="ph ph-printer text-lg"></i>
                                     <span>Print Bill</span>
@@ -616,7 +703,61 @@ function OrderDetailsContent({ order, modalControl }) {
 
     React.useEffect(() => {
         modalControl.setTitle('Order Details');
+
+        // Set up the print bill handler for DOM access
+        modalControl.printBillHandler = handlePrintBill;
+
+        // Set up a global handler that can be called from onclick HTML attribute
+        window.modalPrintBill = () => {
+            console.log("Print bill triggered from global handler");
+            handlePrintBill();
+            return false; // Prevent default
+        };
+
+        // After component is rendered and HTML is injected, set up DOM event listener
+        setTimeout(() => {
+            const printButton = document.getElementById('print-bill-button');
+            if (printButton) {
+                printButton.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    console.log("Print bill button clicked via DOM event");
+                    handlePrintBill();
+                });
+            }
+        }, 100);
+
+        // Cleanup function
+        return () => {
+            window.modalPrintBill = null;
+        };
     }, []);
+
+    function handlePrintBill() {
+        console.log("Printing bill");
+        try {
+            if (window.BluetoothPrinting) {
+                console.log("Printing bill...", order.id);
+                // Print the bill directly
+                window.BluetoothPrinting.printBill(order.id);
+
+                // Show success message
+                if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                    window.ModalManager.showToast("Bill printed successfully", { type: "success" });
+                }
+            } else {
+                console.error("BluetoothPrinting service not available");
+                if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                    window.ModalManager.showToast("Printing service not available", { type: "error" });
+                }
+            }
+        } catch (error) {
+            console.error("Error printing bill:", error);
+            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                window.ModalManager.showToast("Failed to print bill: " + error.message, { type: "error" });
+            }
+        }
+        modalControl.close();
+    }
 
     return (
         <div className="p-4 space-y-4">
@@ -714,7 +855,7 @@ function OrderDetailsContent({ order, modalControl }) {
                         <div className="flex justify-between items-center pt-1 text-xs">
                             <span className="text-gray-600">Payment Method</span>
                             <span className={`font-medium px-2 py-0.5 rounded-full ${order.payMode === 'CASH' ? 'bg-green-50 text-green-600' :
-                                order.payMode === 'DIGITAL' ? 'bg-blue-50 text-blue-600' :
+                                order.payMode === 'DIGITAL' ? 'bg-red-50 text-red-600' :
                                     order.payMode === 'CREDIT' ? 'bg-orange-50 text-orange-600' :
                                         'bg-gray-50 text-gray-600'
                                 }`}>
@@ -732,12 +873,12 @@ function OrderDetailsContent({ order, modalControl }) {
                     Order Status
                 </h3>
                 <div className="flex items-center">
-                    <div className={`px-3 py-1.5 rounded-full text-sm font-medium ${isNewOrder ? 'bg-blue-100 text-blue-600' :
+                    <div className={`px-3 py-1.5 rounded-full text-sm font-medium ${isNewOrder ? 'bg-red-100 text-red-600' :
                         isProcessingOrder ? 'bg-orange-100 text-orange-600' :
                             isCompletedOrder ? 'bg-green-100 text-green-600' :
                                 'bg-gray-100 text-gray-600'
                         }`}>
-                        <i className={`ph ${isNewOrder ? 'ph-hourglass text-blue-600' :
+                        <i className={`ph ${isNewOrder ? 'ph-hourglass text-red-600' :
                             isProcessingOrder ? 'ph-cooking-pot text-orange-600' :
                                 isCompletedOrder ? 'ph-check-circle text-green-600' :
                                     'ph-question text-gray-600'
@@ -779,12 +920,43 @@ function OrderDetailsContent({ order, modalControl }) {
 
             {isProcessingOrder && (
                 <button
-                    onClick={(e) => {
+                    onClick={async (e) => {
                         e.stopPropagation();
+                        try {
+                            if (window.BluetoothPrinting) {
+                                // Show connecting message
+                                if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                    if (!window.BluetoothPrinting.connected) {
+                                        window.ModalManager.showToast("Connecting to printer...", { type: "info" });
+                                    } else {
+                                        window.ModalManager.showToast("Printing kitchen order...", { type: "info" });
+                                    }
+                                }
+
+                                // Print the kitchen order directly
+                                await window.BluetoothPrinting.printKOT(order.id);
+
+                                // Show success message
+                                if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                    window.ModalManager.showToast("Kitchen order printed successfully", { type: "success" });
+                                }
+                            } else if (onPrintBill) {
+                                onPrintBill(order.id);
+                            } else {
+                                console.error("BluetoothPrinting service not available");
+                                if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                    window.ModalManager.showToast("Printing service not available", { type: "error" });
+                                }
+                            }
+                        } catch (error) {
+                            console.error("Error printing kitchen order:", error);
+                            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                window.ModalManager.showToast("Failed to print kitchen order: " + error.message, { type: "error" });
+                            }
+                        }
                         modalControl.close();
-                        modalControl.printKOT && modalControl.printKOT();
                     }}
-                    className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg flex items-center justify-center gap-2 hover:from-blue-700 hover:to-blue-600 transition-colors text-sm font-medium shadow-sm mt-2"
+                    className="w-full py-3 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg flex items-center justify-center gap-2 hover:from-red-700 hover:to-red-600 transition-colors text-sm font-medium shadow-sm mt-2"
                 >
                     <i className="ph ph-printer text-lg"></i>
                     <span>Print Kitchen Order</span>
@@ -793,12 +965,10 @@ function OrderDetailsContent({ order, modalControl }) {
 
             {isCompletedOrder && (
                 <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        modalControl.close();
-                        modalControl.printBill && modalControl.printBill();
-                    }}
-                    className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg flex items-center justify-center gap-2 hover:from-blue-700 hover:to-blue-600 transition-colors text-sm font-medium shadow-sm mt-2"
+                    id="print-bill-button"
+                    data-action="print-bill"
+                    onclick="if(window.modalPrintBill) { window.modalPrintBill(); return false; }"
+                    className="w-full py-3 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg flex items-center justify-center gap-2 hover:from-red-700 hover:to-red-600 transition-colors text-sm font-medium shadow-sm"
                 >
                     <i className="ph ph-printer text-lg"></i>
                     <span>Print Bill</span>
@@ -812,8 +982,8 @@ function OrderDetailsContent({ order, modalControl }) {
 function NoOrdersFound() {
     return (
         <div className="flex flex-col items-center justify-center py-20 opacity-30">
-            <i className="ph ph-table text-5xl text-blue-800 mb-4"></i>
-            <p className="text-xl font-bold text-blue-800 text-center">
+            <i className="ph ph-table text-5xl text-red-800 mb-4"></i>
+            <p className="text-xl font-bold text-red-800 text-center">
                 No tables added yet
             </p>
         </div>

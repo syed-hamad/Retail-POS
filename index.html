@@ -290,7 +290,7 @@
 
     <!-- Shopto SDK -->
     <script src="https://shopto.app/sdk/dist/sdk.v0.1.0.min.js"></script>
-    <!-- <script src="http://localhost:3000/sdk/dist/sdk.v0.1.0.min.js"></script>  --> 
+    <!-- <script src="http://localhost:3000/sdk/dist/sdk.v0.1.0.min.js"></script>  -->
 </head>
 
 <body>
@@ -298,6 +298,88 @@
     <!-- Load our modular Scripts -->
     <script type="text/babel" src="js/utils.js"></script>
     <script type="text/babel" src="js/utils/BluetoothPrinting.js"></script>
+    <script>
+        // Check if BluetoothPrinting initialized properly
+        document.addEventListener('DOMContentLoaded', function () {
+            console.log('Checking BluetoothPrinting initialization');
+            if (!window.BluetoothPrinting) {
+                console.error('BluetoothPrinting not initialized! Attempting to fix...');
+                try {
+                    // Load the script directly
+                    var script = document.createElement('script');
+                    script.src = 'js/utils/BluetoothPrinting.js';
+                    script.type = 'text/babel';
+                    document.head.appendChild(script);
+
+                    script.onload = function () {
+                        console.log('BluetoothPrinting script loaded. Available:', !!window.BluetoothPrinting);
+                        if (!window.BluetoothPrinting && typeof BluetoothPrinting === 'function') {
+                            window.BluetoothPrinting = new BluetoothPrinting();
+                            console.log('BluetoothPrinting initialized manually');
+                        }
+                    };
+                } catch (e) {
+                    console.error('Failed to load BluetoothPrinting:', e);
+                }
+            } else {
+                console.log('BluetoothPrinting initialized successfully');
+            }
+
+            // Add a convenience function for printing test
+            window.printTest = async function (orderId) {
+                orderId = orderId || "testOrder123"; // Default test order ID
+                console.log("Starting print test with orderId:", orderId);
+
+                // Create a test order if needed
+                if (orderId === "testOrder123") {
+                    const testOrder = {
+                        id: "testOrder123",
+                        billNo: "T123",
+                        date: new Date(),
+                        customer: { name: "Test Customer", phone: "1234567890" },
+                        items: [
+                            { title: "Test Item 1", price: 100, quantity: 2 },
+                            { title: "Test Item 2", price: 150, quantity: 1 }
+                        ],
+                        payMode: "CASH",
+                        total: 350,
+                        subTotal: 350,
+                        discount: 0
+                    };
+
+                    // Store test order in window for debugging
+                    window._testOrder = testOrder;
+
+                    // Use the SDK to save the test order if possible
+                    try {
+                        if (window.sdk && window.sdk.db) {
+                            await window.sdk.db.collection("Orders").doc("testOrder123").set(testOrder);
+                            console.log("Test order saved to database");
+                        }
+                    } catch (e) {
+                        console.warn("Could not save test order to database:", e);
+                    }
+                }
+
+                try {
+                    if (window.BluetoothPrinting) {
+                        console.log("BluetoothPrinting found, attempting to print...");
+                        await window.BluetoothPrinting.printBill(orderId);
+                        console.log("Print test completed successfully!");
+                        return true;
+                    } else {
+                        console.error("BluetoothPrinting not available for test");
+                        return false;
+                    }
+                } catch (e) {
+                    console.error("Print test failed:", e);
+                    return false;
+                }
+            };
+
+            console.log("Print test function available. Run window.printTest() to test printing.");
+        });
+    </script>
     <script type="text/babel" src="js/sdk.js"></script>
     <script type="text/babel" src="js/utils/UserSession.js"></script>
     <script type="text/babel" src="js/models/Role.js"></script>

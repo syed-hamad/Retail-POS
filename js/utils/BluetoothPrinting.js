@@ -78,58 +78,6 @@ class BluetoothPrinting {
     }
 
     /**
-     * Format text to fit the printer width
-     * @param {string} text - The text to format
-     * @param {Object} options - Formatting options
-     * @returns {string} Formatted text
-     * @private
-     */
-    formatText(text, options = {}) {
-        const {
-            align = 'left',  // left, center, right
-            bold = false,
-            doubleWidth = false,
-            doubleHeight = false
-        } = options;
-
-        // Calculate effective width based on text modifiers
-        let effectiveWidth = this.printerWidth;
-        if (doubleWidth) effectiveWidth = Math.floor(effectiveWidth / 2);
-
-        // Split text into words
-        const words = text.split(' ');
-        let lines = [];
-        let currentLine = '';
-
-        // Word wrap
-        for (const word of words) {
-            if (currentLine.length + word.length + 1 <= effectiveWidth) {
-                currentLine += (currentLine ? ' ' : '') + word;
-            } else {
-                if (currentLine) lines.push(currentLine);
-                currentLine = word;
-            }
-        }
-        if (currentLine) lines.push(currentLine);
-
-        // Apply alignment
-        lines = lines.map(line => {
-            switch (align) {
-                case 'center':
-                    const padding = Math.max(0, Math.floor((effectiveWidth - line.length) / 2));
-                    return ' '.repeat(padding) + line;
-                case 'right':
-                    const rightPad = Math.max(0, effectiveWidth - line.length);
-                    return ' '.repeat(rightPad) + line;
-                default: // left
-                    return line;
-            }
-        });
-
-        return lines.join('\n');
-    }
-
-    /**
      * Check if Web Bluetooth is supported by the browser
      */
     isSupported() {
@@ -1040,3 +988,23 @@ class BluetoothPrinting {
 
 // Create a singleton instance
 window.BluetoothPrinting = new BluetoothPrinting();
+
+// Global test function for direct console access
+window.testPrinting = async function (orderId) {
+    try {
+        console.log("Test printing function called with orderId:", orderId);
+        if (!window.BluetoothPrinting) {
+            console.error("BluetoothPrinting is not initialized!");
+            window.BluetoothPrinting = new BluetoothPrinting();
+            console.log("Created new BluetoothPrinting instance");
+        }
+
+        console.log("About to call printBill...");
+        await window.BluetoothPrinting.printBill(orderId);
+        console.log("Print bill completed successfully");
+        return true;
+    } catch (error) {
+        console.error("Error in test printing:", error);
+        return false;
+    }
+};
