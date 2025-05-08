@@ -738,7 +738,7 @@ class BluetoothPrinting {
             }
 
             // Format the bill data - build ESC/POS commands
-            const data = await this.formatBillData(orderData);
+            const data = this.formatBillData(orderData);
 
             // Send to printer
             await this.sendData(data);
@@ -856,7 +856,7 @@ class BluetoothPrinting {
      * @param {Object} order - The order data
      * @returns {Uint8Array} - Formatted printer commands
      */
-    async formatBillData(order) {
+    formatBillData(order) {
         // Simple ESC/POS command builder
         const commands = [];
 
@@ -926,23 +926,19 @@ class BluetoothPrinting {
         // Item details
         let subTotal = 0;
         if (order.items && order.items.length > 0) {
-            addText('Qty  Item                 Price  Amount');
+            addText('Qty  Item                 Amount');
             addLine();
 
-            order.items.forEach((item, index) => {
-                const quantity = item.quantity || item.qnt || 1;
-                const title = item.title || `Item ${index + 1}`;
-                const price = item.price || 0;
-                const amount = quantity * price;
+            order.items.forEach((item, i) => {
+                const amount = item.qnt * item.price;
                 subTotal += amount;
 
                 // Format as columns
-                const qtyStr = quantity.toString().padEnd(4);
-                const titleStr = title.substring(0, 18).padEnd(20);
-                const priceStr = price.toFixed(2).padStart(6);
-                const amountStr = amount.toFixed(2).padStart(8);
+                const qtyStr = item.qnt.toString().padEnd(4);
+                const titleStr = item.title.substring(0, 18).padEnd(20);
+                const amountStr = amount.toFixed(2);
 
-                addText(`${qtyStr}${titleStr}${priceStr}  ${amountStr}`);
+                addText(`${qtyStr}${titleStr}  ${amountStr}`);
             });
         } else {
             addText('No items');
@@ -951,23 +947,40 @@ class BluetoothPrinting {
         addLine();
 
         // Summary
-        addRightAlignedText(`Sub Total: ₹${order.subTotal?.toFixed(2) || subTotal.toFixed(2)}`);
+        addRightAlignedText(`Sub Total: ₹ ${subTotal.toFixed(2)}`);
 
-        if (order.discount && order.discount > 0) {
-            addRightAlignedText(`Discount: - ₹${order.discount.toFixed(2)}`);
+        // Track total starting from subtotal
+        let totalAmount = subTotal;
+
+        // Apply discount if present
+        let discountAmount = 0;
+        if (order.discount && parseFloat(order.discount) > 0) {
+            discountAmount = parseFloat(order.discount);
+            totalAmount -= discountAmount;
+            addRightAlignedText(`Discount: - ₹ ${discountAmount.toFixed(2)}`);
         }
 
         // Add charges if any
+        let totalCharges = 0;
         if (order.charges && order.charges.length > 0) {
             order.charges.forEach(charge => {
                 const chargeName = charge.name || 'Charge';
                 const chargeValue = parseFloat(charge.value) || 0;
-                addRightAlignedText(`${chargeName}: ₹${chargeValue.toFixed(2)}`);
+                totalCharges += chargeValue;
+                totalAmount += chargeValue;
+                addRightAlignedText(`${chargeName}: ₹ ${chargeValue.toFixed(2)}`);
             });
         }
 
         addLine();
-        addEmphasized(`TOTAL: ₹${order.total?.toFixed(2) || (subTotal - (order.discount || 0)).toFixed(2)}`);
+
+        // Use either the order's stored total or our calculated total without truncating any digits
+        const finalTotal = parseFloat(order.total) || totalAmount;
+
+        // Display total as centered and emphasized text
+        commands.push(0x1B, 0x45, 0x01); // Emphasize on
+        addCenteredText(`TOTAL: ₹ ${finalTotal.toFixed(2)}`);
+        commands.push(0x1B, 0x45, 0x00); // Emphasize off
 
         // Payment info
         addText(`Payment mode: ${order.payMode || 'CASH'}`);
