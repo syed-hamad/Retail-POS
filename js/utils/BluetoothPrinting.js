@@ -409,6 +409,21 @@ class BluetoothPrinting {
             throw new Error('Web Bluetooth is not supported in this browser. Please use Chrome or Edge.');
         }
 
+        // Check Bluetooth availability
+        if (typeof navigator.bluetooth.getAvailability === 'function') {
+            try {
+                const isBluetoothAvailable = await navigator.bluetooth.getAvailability();
+                if (!isBluetoothAvailable) {
+                    console.error("Bluetooth adapter is not available. Please ensure Bluetooth is turned on in your system settings and that your browser has permission to access it.");
+                    throw new Error('Bluetooth is not available on this device. Please turn on Bluetooth and grant browser permissions.');
+                }
+            } catch (availabilityError) {
+                console.error("Error checking Bluetooth availability:", availabilityError);
+                // We can still proceed, as getAvailability might not be supported or might fail for other reasons,
+                // but requestDevice will ultimately determine usability.
+            }
+        }
+
         // If already connected, show size modal and return
         if (this.connected && this.device && this.characteristic) {
             await this.showPrinterSizeModal();
@@ -427,7 +442,7 @@ class BluetoothPrinting {
             // Handle different user actions
             if (action === 'use-saved' && this.lastConnectedDevice) {
                 try {
-                    // Try to reconnect to the last connected device by ID
+                    console.info(`Attempting to reconnect to saved printer: ${this.lastConnectedDevice.name}. Ensure it's ON and discoverable.`);
                     this.device = await navigator.bluetooth.requestDevice({
                         filters: [{
                             name: this.lastConnectedDevice.name
@@ -448,9 +463,9 @@ class BluetoothPrinting {
                         ]
                     });
                 } catch (reconnectError) {
-                    console.log('Error reconnecting to saved printer, falling back to device selection:', reconnectError);
-
+                    console.warn('Error reconnecting to saved printer, falling back to new device selection:', reconnectError.message);
                     // Fallback to regular device selection if reconnection fails
+                    console.info("Attempting to select a new printer. Please ensure your Bluetooth printer is ON, in PAIRING/DISCOVERABLE mode, and close to your computer. Also, ensure Bluetooth is enabled on your computer and this website has Bluetooth permissions.");
                     try {
                         this.device = await navigator.bluetooth.requestDevice({
                             acceptAllDevices: true,
@@ -469,21 +484,20 @@ class BluetoothPrinting {
                             ]
                         });
                     } catch (deviceSelectError) {
-                        // This will catch when a user cancels the device selection dialog
+                        console.error('Error during printer selection (fallback from saved):', deviceSelectError);
                         if (deviceSelectError.name === "NotFoundError") {
-                            console.log('Device selection cancelled by user');
-                            throw new Error('Device selection cancelled by user');
+                            throw new Error('Printer selection cancelled or no compatible devices found. Ensure printer is discoverable and try again.');
+                        } else if (deviceSelectError.name === "SecurityError") {
+                             throw new Error('Bluetooth permission denied. Please allow Bluetooth access for this site in your browser settings.');
                         }
-                        throw deviceSelectError;
+                        throw new Error(`Printer selection failed: ${deviceSelectError.message}. Check Bluetooth settings and printer discoverability.`);
                     }
                 }
             } else if (action === 'select-new') {
-                // Request device without strict filtering to allow discovering all devices
+                console.info("Attempting to select a new printer. Please ensure your Bluetooth printer is ON, in PAIRING/DISCOVERABLE mode, and close to your computer. Also, ensure Bluetooth is enabled on your computer and this website has Bluetooth permissions.");
                 try {
                     this.device = await navigator.bluetooth.requestDevice({
-                        // Instead of filters, use acceptAllDevices to show all available devices
                         acceptAllDevices: true,
-                        // Include all possible printer-related services as optional
                         optionalServices: [
                             '000018f0-0000-1000-8000-00805f9b34fb',  // Common printer service
                             '00001101-0000-1000-8000-00805f9b34fb',  // Serial Port Profile
@@ -499,12 +513,13 @@ class BluetoothPrinting {
                         ]
                     });
                 } catch (deviceSelectError) {
-                    // This will catch when a user cancels the device selection dialog
+                    console.error('Error during new printer selection:', deviceSelectError);
                     if (deviceSelectError.name === "NotFoundError") {
-                        console.log('Device selection cancelled by user');
-                        throw new Error('Device selection cancelled by user');
+                        throw new Error('Printer selection cancelled or no compatible devices found. Ensure printer is discoverable and try again.');
+                    } else if (deviceSelectError.name === "SecurityError") {
+                         throw new Error('Bluetooth permission denied. Please allow Bluetooth access for this site in your browser settings.');
                     }
-                    throw deviceSelectError;
+                    throw new Error(`Printer selection failed: ${deviceSelectError.message}. Check Bluetooth settings and printer discoverability.`);
                 }
             } else {
                 throw new Error('Invalid action selected');
@@ -624,23 +639,38 @@ class BluetoothPrinting {
             throw new Error('Printer not connected. Call connect() first.');
         }
 
-        try {
-            // Chunk the data if needed (some Bluetooth implementations have max packet sizes)
-            const CHUNK_SIZE = 512;
-            for (let i = 0; i < data.length; i += CHUNK_SIZE) {
-                const chunk = data.slice(i, i + CHUNK_SIZE);
-                // Use writeWithoutResponse if available, otherwise use write
-                if (this.characteristic.properties.writeWithoutResponse) {
-                    await this.characteristic.writeValueWithoutResponse(chunk);
-                } else {
-                    await this.characteristic.writeValue(chunk);
+        const MAX_RETRIES = 3;
+        const RETRY_DELAY_MS = 300; // Increased retry delay
+        const INTER_CHUNK_DELAY_MS = 100; // New delay between chunks
+
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                const CHUNK_SIZE = (this.characteristic?.service?.device?.gatt?.server?.maxGATTCharacteristicWriteSize)
+                                   ? Math.min(this.characteristic.service.device.gatt.server.maxGATTCharacteristicWriteSize, 512) // Cap at 512 even if printer reports higher
+                                   : 512;
+                for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+                    const chunk = data.slice(i, i + CHUNK_SIZE);
+                    if (this.characteristic.properties.writeWithoutResponse) {
+                        await this.characteristic.writeValueWithoutResponse(chunk);
+                    } else {
+                        await this.characteristic.writeValue(chunk);
+                    }
+                    // Add a small delay between sending chunks
+                    if (data.length > CHUNK_SIZE && i < data.length - CHUNK_SIZE) { // Only delay if there are more chunks
+                        await new Promise(resolve => setTimeout(resolve, INTER_CHUNK_DELAY_MS));
+                    }
                 }
+                return true; // Success
+            } catch (error) {
+                console.warn(`Attempt ${attempt} to send data failed:`, error.message);
+                if (attempt === MAX_RETRIES) {
+                    console.error('Error sending data to printer after multiple retries:', error);
+                    throw error; // Rethrow error after max retries
+                }
+                await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * attempt));
             }
-            return true;
-        } catch (error) {
-            console.error('Error sending data to printer:', error);
-            throw error;
         }
+        throw new Error('Failed to send data to printer after multiple retries.');
     }
 
     /**
@@ -755,98 +785,109 @@ class BluetoothPrinting {
      * @returns {Uint8Array} - Formatted printer commands
      */
     async formatKOTData(order) {
-        // Simple ESC/POS command builder
-        // This is a minimal implementation - for production use a full ESC/POS library
         const commands = [];
+        const printerWidth = 32; // For 2-inch printers
 
-        // Helper to add text commands
-        const addText = (text) => {
-            commands.push(...this.encoder.encode(text + '\n'));
+        const addText = (text, addNewline = true) => {
+            commands.push(...this.encoder.encode(text + (addNewline ? '\n' : '')));
         };
 
-        // Helper to add center-aligned text
-        const addCenteredText = (text) => {
-            // ESC/POS center alignment command
-            commands.push(0x1B, 0x61, 0x01);
-            addText(text);
-            // ESC/POS left alignment command (reset)
-            commands.push(0x1B, 0x61, 0x00);
-        };
-
-        // Helper to add emphasized text
-        const addEmphasized = (text) => {
-            // ESC/POS emphasize command
-            commands.push(0x1B, 0x45, 0x01);
-            addText(text);
-            // ESC/POS emphasize off command
-            commands.push(0x1B, 0x45, 0x00);
-        };
-
-        // Helper to add double height text
-        const addDoubleHeight = (text) => {
-            // ESC/POS double height command
-            commands.push(0x1B, 0x21, 0x10);
-            addText(text);
-            // ESC/POS normal size command
-            commands.push(0x1B, 0x21, 0x00);
-        };
-
-        // Add a horizontal line
         const addLine = () => {
-            addText('--------------------------------');
+            addText('*'.repeat(printerWidth));
         };
 
-        // Initialize printer
-        commands.push(0x1B, 0x40); // ESC @
+        const truncate = (text, maxLength) => {
+            if (!text) return '';
+            return text.length > maxLength ? text.substring(0, maxLength) : text;
+        };
 
-        // Format the KOT header
-        addCenteredText('KITCHEN ORDER TICKET');
-        addCenteredText(window.UserSession?.seller?.businessName || 'Liquid POS');
-        addLine();
+        // Reset printer
+        commands.push(0x1B, 0x40); // Initialize printer
+        
+        // Set large base font
+        commands.push(0x1B, 0x21, 0x00); // Font A
+        commands.push(0x1B, 0x45, 0x01); // Bold ON
+        
+        // Top margin
+        commands.push(0x1B, 0x64, 2); // Feed 2 lines
 
-        // Order details
-        addEmphasized(`ORDER #: ${order.billNo || order.id?.substring(0, 6) || 'N/A'}`);
-        addText(`Table: ${order.tableId || 'N/A'}`);
-        addText(`Time: ${new Date().toLocaleString()}`);
-        if (order.sourceName) {
-            addText(`Source: ${order.sourceName}`);
+        // Table number (if exists) - MOST PROMINENT
+        if (order.tableId) {
+            commands.push(0x1B, 0x61, 0x01); // Center
+            commands.push(0x1D, 0x21, 0x33); // Quadruple height + double width
+            addText('TABLE ' + order.tableId);
+            addText(''); // Extra space
         }
 
-        addLine();
-        addEmphasized('ITEMS:');
+        // Order number - Large but not as large as table
+        commands.push(0x1B, 0x61, 0x01); // Center
+        commands.push(0x1D, 0x21, 0x22); // Double height + double width
+        const orderNum = order.billNo || order.id?.substring(0, 6) || 'N/A';
+        addText('ORDER #' + orderNum);
 
-        // Item details
+        // Time in large clear format
+        commands.push(0x1D, 0x21, 0x11); // Double height
+        const time = new Date().toLocaleTimeString([], { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: true 
+        });
+        addText(time);
+        
+        // Distinctive separator
+        addLine();
+        addText('');  // Extra space
+
+        // Items - THE MOST IMPORTANT PART
         if (order.items && order.items.length > 0) {
             order.items.forEach((item, index) => {
-                const quantity = item.quantity || item.qnt || 1;
-                const title = item.title || `Item ${index + 1}`;
-                addText(`${quantity}x ${title}`);
+                // Quantity in maximum size
+                const qty = item.quantity || item.qnt || 1;
+                commands.push(0x1B, 0x61, 0x00); // Left align
+                commands.push(0x1D, 0x21, 0x33); // Quadruple height + double width
+                addText(qty + 'x', false);
+                
+                // Item name in very large size
+                commands.push(0x1D, 0x21, 0x22); // Double height + double width
+                const title = truncate(item.title || 'Unknown Item', Math.floor((printerWidth - String(qty).length * 2) / 2));
+                addText(' ' + title);
 
-                // Add special instructions if any
+                // Special instructions for item
                 if (item.instructions) {
-                    commands.push(0x1B, 0x45, 0x00); // Emphasize off
-                    addText(`  Notes: ${item.instructions}`);
+                    commands.push(0x1D, 0x21, 0x11); // Double height
+                    addText('  ' + item.instructions.trim());
                 }
+
+                // Add separator between items
+                if (index < order.items.length - 1) {
+                    commands.push(0x1D, 0x21, 0x00); // Normal size
+                    addText('- - - - - - - -');
+                }
+                
+                // Space between items
+                addText('');
             });
-        } else {
-            addText('No items');
         }
 
-        // Add order instructions if any
+        // General instructions if any
         if (order.instructions) {
             addLine();
-            addEmphasized('SPECIAL INSTRUCTIONS:');
-            addText(order.instructions);
+            commands.push(0x1B, 0x61, 0x01); // Center
+            commands.push(0x1D, 0x21, 0x22); // Double height + double width
+            addText('NOTES');
+            
+            commands.push(0x1B, 0x61, 0x00); // Left align
+            commands.push(0x1D, 0x21, 0x11); // Double height
+            let notes = order.instructions.trim();
+            while (notes.length > 0) {
+                addText(truncate(notes, printerWidth));
+                notes = notes.substring(printerWidth);
+            }
         }
 
-        addLine();
-        addCenteredText('*Thank You*');
-
-        // Add feed before cutting
-        commands.push(0x1B, 0x64, 0x02); // Feed 2 lines
-
-        // Cut paper - full cut
-        commands.push(0x1D, 0x56, 0x00);
+        // Bottom margin and cut
+        commands.push(0x1B, 0x64, 4); // Feed 4 lines
+        commands.push(0x1D, 0x56, 0x41); // Partial cut
 
         return new Uint8Array(commands);
     }
@@ -857,143 +898,152 @@ class BluetoothPrinting {
      * @returns {Uint8Array} - Formatted printer commands
      */
     formatBillData(order) {
-        // Simple ESC/POS command builder
         const commands = [];
 
-        // Helper to add text commands
+        // Helper functions
         const addText = (text) => {
             commands.push(...this.encoder.encode(text + '\n'));
         };
 
-        // Helper to add center-aligned text
         const addCenteredText = (text) => {
-            // ESC/POS center alignment command
             commands.push(0x1B, 0x61, 0x01);
             addText(text);
-            // ESC/POS left alignment command (reset)
             commands.push(0x1B, 0x61, 0x00);
         };
 
-        // Helper to add emphasized text
-        const addEmphasized = (text) => {
-            // ESC/POS emphasize command
-            commands.push(0x1B, 0x45, 0x01);
-            addText(text);
-            // ESC/POS emphasize off command
-            commands.push(0x1B, 0x45, 0x00);
-        };
-
-        // Helper to add right-aligned text
-        const addRightAlignedText = (text) => {
-            // ESC/POS right alignment command
-            commands.push(0x1B, 0x61, 0x02);
-            addText(text);
-            // ESC/POS left alignment command (reset)
-            commands.push(0x1B, 0x61, 0x00);
-        };
-
-        // Add a horizontal line
         const addLine = () => {
-            addText('--------------------------------');
+            addText('================================');
         };
 
-        // Initialize printer
-        commands.push(0x1B, 0x40); // ESC @
+        // Initialize printer with maximum emphasis
+        commands.push(0x1B, 0x40); // Initialize
+        commands.push(0x1B, 0x45, 0x01); // Bold ON
+        commands.push(0x1B, 0x47, 0x01); // Double Strike ON
+
+        // Header
+        const seller = window.UserSession?.seller || {};
+        
+        // Business name in maximum size
+        commands.push(0x1D, 0x21, 0x31); // Double Height + Double Width
+        addCenteredText(seller.businessName || 'Your Business');
+        commands.push(0x1D, 0x21, 0x00);
 
         // Business details
-        const seller = window.UserSession?.seller || {};
-        addCenteredText(seller.businessName || '');
-        if (seller.phone) addCenteredText(`Phone: ${seller.phone}`);
-        if (seller.address) addCenteredText(`Address: ${seller.address}`);
-        if (seller.storeLink) addCenteredText(`Web: ${seller.storeLink}`);
-        if (seller.gstEnabled && seller.gstIN) addCenteredText(`GST: ${seller.gstIN}`);
-
-        addLine();
-
-        // Order details
-        addText(`Bill No: #${order.billNo || order.id?.substring(0, 6) || 'N/A'}`);
-        if (order.sourceName) addText(`Order from: ${order.sourceName}`);
-        addText(`Date: ${new Date(order.date?.toDate ? order.date.toDate() : order.date || new Date()).toLocaleString()}`);
-
-        if (order.custName) {
-            addText(`Customer: ${order.custName}`);
-            if (order.custPhone) addText(`Phone: ${order.custPhone}`);
+        commands.push(0x1B, 0x21, 0x08); // Emphasized
+        if (seller.address) addCenteredText(seller.address);
+        if (seller.phone) addCenteredText(`Ph: ${seller.phone}`);
+        if (seller.gstEnabled && seller.gstIN) {
+            addCenteredText('GSTIN:');
+            addCenteredText(seller.gstIN);
         }
+        commands.push(0x1B, 0x21, 0x00);
 
         addLine();
-        addEmphasized('ITEMS:');
 
-        // Item details
+        // Bill details in emphasized text
+        commands.push(0x1B, 0x21, 0x08);
+        addText(`Bill #: ${order.billNo || order.id?.substring(0, 6) || 'N/A'}`);
+        addText(`Date: ${new Date(order.date?.toDate ? order.date.toDate() : order.date || new Date()).toLocaleDateString()}`);
+        addText(`Time: ${new Date(order.date?.toDate ? order.date.toDate() : order.date || new Date()).toLocaleTimeString()}`);
+        if (order.customer?.name) {
+            addText(`Cust: ${order.customer.name}`);
+        }
+        commands.push(0x1B, 0x21, 0x00);
+
+        addLine();
+
+        // Items header
+        commands.push(0x1D, 0x21, 0x31); // Double Height + Double Width
+        addCenteredText('ITEMS');
+        commands.push(0x1D, 0x21, 0x00);
+
+        // Calculate totals
         let subTotal = 0;
-        if (order.items && order.items.length > 0) {
-            addText('Qty  Item                 Amount');
-            addLine();
+        let totalGST = 0;
+        let totalCharges = 0;
+        let totalDiscount = 0;
 
-            order.items.forEach((item, i) => {
-                const amount = item.qnt * item.price;
+        // Items list with running total calculation
+        if (order.items && order.items.length > 0) {
+            commands.push(0x1B, 0x21, 0x01); // Slightly emphasized
+            order.items.forEach(item => {
+                const qty = item.quantity || item.qnt || 1;
+                const price = parseFloat(item.price || 0);
+                const amount = qty * price;
                 subTotal += amount;
 
-                // Format as columns
-                const qtyStr = item.qnt.toString().padEnd(4);
-                const titleStr = item.title.substring(0, 18).padEnd(20);
-                const amountStr = amount.toFixed(2);
-
-                addText(`${qtyStr}${titleStr}  ${amountStr}`);
+                addText(item.title || 'Unknown Item');
+                addText(`${qty} x ${price.toFixed(2)} = ${amount.toFixed(2)}`);
             });
-        } else {
-            addText('No items');
+            commands.push(0x1B, 0x21, 0x00);
         }
 
         addLine();
 
-        // Summary
-        addRightAlignedText(`Sub Total: ₹ ${subTotal.toFixed(2)}`);
+        // Totals section with clear formatting
+        commands.push(0x1D, 0x21, 0x01); // Double Width for better readability
+        addText(`Sub Total: ${subTotal.toFixed(2)}`);
 
-        // Track total starting from subtotal
-        let totalAmount = subTotal;
-
-        // Apply discount if present
-        let discountAmount = 0;
-        if (order.discount && parseFloat(order.discount) > 0) {
-            discountAmount = parseFloat(order.discount);
-            totalAmount -= discountAmount;
-            addRightAlignedText(`Discount: - ₹ ${discountAmount.toFixed(2)}`);
+        // GST calculations if enabled
+        if (seller.gstEnabled) {
+            const gst = subTotal * 0.18;
+            totalGST = gst;
+            addText(`CGST (9%): ${(gst/2).toFixed(2)}`);
+            addText(`SGST (9%): ${(gst/2).toFixed(2)}`);
         }
 
-        // Add charges if any
-        let totalCharges = 0;
-        if (order.charges && order.charges.length > 0) {
+        // Additional charges
+        if (order.charges && Array.isArray(order.charges)) {
             order.charges.forEach(charge => {
-                const chargeName = charge.name || 'Charge';
-                const chargeValue = parseFloat(charge.value) || 0;
-                totalCharges += chargeValue;
-                totalAmount += chargeValue;
-                addRightAlignedText(`${chargeName}: ₹ ${chargeValue.toFixed(2)}`);
+                if (charge.value) {
+                    const chargeValue = parseFloat(charge.value);
+                    totalCharges += chargeValue;
+                    addText(`${charge.name}: ${chargeValue.toFixed(2)}`);
+                }
             });
         }
 
+        // Discount
+        if (order.discount && parseFloat(order.discount) > 0) {
+            totalDiscount = parseFloat(order.discount);
+            addText(`Discount: -${totalDiscount.toFixed(2)}`);
+        }
+
+        commands.push(0x1D, 0x21, 0x00);
         addLine();
 
-        // Use either the order's stored total or our calculated total without truncating any digits
-        const finalTotal = parseFloat(order.total) || totalAmount;
+        // Calculate final total
+        const grandTotal = subTotal + totalGST + totalCharges - totalDiscount;
 
-        // Display total as centered and emphasized text
-        commands.push(0x1B, 0x45, 0x01); // Emphasize on
-        addCenteredText(`TOTAL: ₹ ${finalTotal.toFixed(2)}`);
-        commands.push(0x1B, 0x45, 0x00); // Emphasize off
-
-        // Payment info
-        addText(`Payment mode: ${order.payMode || 'CASH'}`);
+        // Grand total in maximum size
+        commands.push(0x1D, 0x21, 0x31); // Double Height + Double Width
+        addCenteredText('TOTAL');
+        addCenteredText(`Rs. ${grandTotal.toFixed(2)}`);
+        commands.push(0x1D, 0x21, 0x00);
 
         addLine();
-        addCenteredText('Thank you!');
-        addCenteredText(`${new Date().toLocaleString()}`);
 
-        // Add feed before cutting
-        commands.push(0x1B, 0x64, 0x02); // Feed 2 lines
+        // Payment details
+        commands.push(0x1D, 0x21, 0x01); // Double Width
+        addText(`Payment: ${order.payMode || 'CASH'}`);
+        commands.push(0x1D, 0x21, 0x00);
 
-        // Cut paper - full cut
-        commands.push(0x1D, 0x56, 0x00);
+        // Footer
+        addLine();
+        commands.push(0x1D, 0x21, 0x11); // Double Height
+        addCenteredText('Thank You!');
+        addCenteredText('Visit Again');
+        commands.push(0x1D, 0x21, 0x00);
+
+        if (seller.website) {
+            addCenteredText(seller.website);
+        }
+
+        // Feed and Cut
+        commands.push(0x1B, 0x64, 0x04); // Feed 4 lines
+        commands.push(0x1D, 0x56, 0x00); // Full cut
+        commands.push(0x1B, 0x45, 0x00); // Bold OFF
+        commands.push(0x1B, 0x47, 0x00); // Double Strike OFF
 
         return new Uint8Array(commands);
     }

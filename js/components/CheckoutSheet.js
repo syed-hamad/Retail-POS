@@ -373,6 +373,10 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
 
     // Handle checkout
     const handleCheckout = async (mode) => {
+        let billPrintedSuccessfully = false;
+        let userCancelledBluetooth = false;
+
+        try {
         if (Object.keys(cart).length === 0) {
             showToast("Your cart is empty", "error");
             return;
@@ -392,7 +396,6 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
 
         setIsProcessing(true);
 
-        try {
             // Ensure orderId exists or create a new one
             const targetOrderId = orderId || window.sdk.db.collection("Orders").doc().id;
             const orderRef = window.sdk.db.collection("Orders").doc(targetOrderId);
@@ -598,80 +601,258 @@ function CheckoutSheet({ cart, clearCallback, tableId, checkout, orderId, priceV
                     showToast("Order completed!");
                 }
 
-                // After checkout is complete, automatically print the bill
+                // After checkout is complete, try Bluetooth printing first
                 if (window.BluetoothPrinting && window.BluetoothPrinting.isSupported()) {
                     try {
                         // Check if we already have a printer connected
                         const printerAlreadyConnected = window.BluetoothPrinting.connected && window.BluetoothPrinting.characteristic;
 
-                        // Show appropriate toast message
-                        if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                            if (!printerAlreadyConnected) {
-                                if (window.BluetoothPrinting.lastConnectedDevice) {
-                                    window.ModalManager.showToast(`Connecting to printer...`, { type: "info" });
-                                } else {
-                                    window.ModalManager.showToast("Select a printer to print bill", { type: "info" });
-                                }
-                            } else {
-                                window.ModalManager.showToast("Printing bill using connected printer...", { type: "info" });
-                            }
-                        } else {
-                            if (!printerAlreadyConnected) {
-                                if (window.BluetoothPrinting.lastConnectedDevice) {
+                        if (printerAlreadyConnected) {
+                            showToast("Printing bill using connected printer...", "info");
+                        } else if (window.BluetoothPrinting.lastConnectedDevice) {
                                     showToast(`Connecting to printer...`, "info");
                                 } else {
                                     showToast("Select a printer to print bill", "info");
-                                }
-                            } else {
-                                showToast("Printing bill using connected printer...", "info");
-                            }
                         }
 
-                        // Print the bill
+                        // Print the bill via Bluetooth
                         await window.BluetoothPrinting.printBill(targetOrderId);
-
-                        // Show success message
-                        if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                            window.ModalManager.showToast("Bill printed successfully", { type: "success" });
-                        } else {
-                            showToast("Bill printed successfully", "success");
-                        }
+                        showToast("Bill printed successfully via Bluetooth", "success");
+                        billPrintedSuccessfully = true;
                     } catch (btError) {
-                        console.error("Bluetooth printing failed:", btError);
-
-                        // Handle user cancellation errors
+                        console.error("Bluetooth bill printing failed:", btError);
                         if (btError.message.includes("Device selection cancelled") ||
                             btError.message.includes("No printer selected") ||
                             btError.message.includes("cancelled by user") ||
                             btError.name === "NotFoundError") {
+                            showToast("Bluetooth printing cancelled by user.", "info");
+                            userCancelledBluetooth = true;
+                            } else {
+                            showToast(`Bluetooth printing error: ${btError.message}. Falling back to browser print.`, "warning");
+                        }
+                    }
+                }
 
-                            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                window.ModalManager.showToast("Printing cancelled", { type: "info" });
-                            } else {
-                                showToast("Printing cancelled", "info");
-                            }
-                        }
-                        // If it's a connection error or unsupported device, show helpful message
-                        else if (btError.message.includes("No suitable service") ||
-                            btError.message.includes("No services found") ||
-                            btError.message.includes("not supported as a printer") ||
-                            btError.message.includes("cannot be used for printing") ||
-                            (btError.name === 'NetworkError' && btError.message.includes("Unsupported device"))) {
+                // Fallback to browser print if Bluetooth didn't succeed AND user didn't cancel
+                if (!billPrintedSuccessfully && !userCancelledBluetooth && (window.UserSession?.seller?.billEnabled !== false)) {
+                    console.log("Attempting fallback browser print for bill:", targetOrderId);
+                    try {
+                        const orderRef = window.sdk.db.collection("Orders").doc(targetOrderId);
+                        const orderDoc = await orderRef.get();
+                        if (!orderDoc.exists) throw new Error("Order not found for bill printing.");
+                        const orderData = orderDoc.data();
 
-                            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                window.ModalManager.showToast("Could not connect to printer. Please select a compatible thermal printer.", { type: "error" });
-                            } else {
-                                showToast("Could not connect to printer. Please select a compatible thermal printer.", "error");
-                            }
+                        // --- Bill HTML Formatting ---
+                        let billHtml = `
+                            <div style="font-family: 'Courier New', monospace; width: 58mm; margin: 0 auto; padding: 2px;">
+                                <!-- Logo Section -->
+                                ${window.UserSession?.seller?.logo ? 
+                                    `<div style="text-align: center; margin-bottom: 8px;">
+                                        <img src="${window.UserSession.seller.logo}" alt="Logo" style="max-width: 45mm; max-height: 15mm;">
+                                    </div>` : 
+                                    `<div style="text-align: center; margin-bottom: 8px; font-size: 24px;">
+                                        <i class="ph ph-storefront"></i>
+                                    </div>`
+                                }
+
+                                <!-- Header Section -->
+                                <div style="text-align: center; font-weight: 700;">
+                                    <div style="font-size: 14px; margin-bottom: 4px;">${window.UserSession?.seller?.gstEnabled ? 'TAX INVOICE' : 'BILL/RECEIPT'}</div>
+                                    <div style="font-size: 16px; margin-bottom: 4px;">${window.UserSession?.seller?.businessName || 'Your Business'}</div>
+                                    ${window.UserSession?.seller?.address ? 
+                                        `<div style="font-size: 10px; margin-bottom: 2px;">${window.UserSession.seller.address}</div>` : ''}
+                                    ${window.UserSession?.seller?.phone ? 
+                                        `<div style="font-size: 10px; margin-bottom: 2px;">Ph: ${window.UserSession.seller.phone}</div>` : ''}
+                                    ${window.UserSession?.seller?.gstEnabled && window.UserSession?.seller?.gstIN ? 
+                                        `<div style="font-size: 10px; margin-bottom: 2px;">GSTIN: ${window.UserSession.seller.gstIN}</div>` : ''}
+                                </div>
+                                
+                                <!-- Separator -->
+                                <div style="border-bottom: 1px dashed #000; margin: 8px 0;"></div>
+
+                                <!-- Bill Details -->
+                                <div style="font-size: 12px; font-weight: 600;">
+                                    <div style="margin-bottom: 4px;">Bill No: ${orderData.billNo || orderData.id?.substring(0,8) || 'N/A'}</div>
+                                    <div style="margin-bottom: 4px;">Date: ${new Date(orderData.date?.toDate ? orderData.date.toDate() : orderData.date || new Date()).toLocaleDateString()}</div>
+                                    <div style="margin-bottom: 4px;">Time: ${new Date(orderData.date?.toDate ? orderData.date.toDate() : orderData.date || new Date()).toLocaleTimeString()}</div>
+                                    ${orderData.customer?.name ? 
+                                        `<div style="margin-bottom: 4px;">Customer: ${orderData.customer.name}</div>` : ''}
+                                    ${orderData.tableId ? 
+                                        `<div style="margin-bottom: 4px;">Table: ${orderData.tableId}</div>` : ''}
+                                </div>
+                                
+                                <!-- Separator -->
+                                <div style="border-bottom: 1px dashed #000; margin: 8px 0;"></div>
+
+                                <!-- Items Section -->
+                                <div style="font-size: 14px; font-weight: 700; text-align: center; margin-bottom: 8px;">ITEMS</div>`;
+
+                        let calculatedSubTotal = 0;
+                        let totalTaxableAmount = 0;
+                        let totalCGST = 0;
+                        let totalSGST = 0;
+
+                        if (orderData.items && orderData.items.length > 0) {
+                            orderData.items.forEach(item => {
+                                const quantity = parseFloat(item.quantity || item.qnt || 1);
+                                const price = parseFloat(item.price || 0);
+                                const amount = quantity * price;
+                                calculatedSubTotal += amount;
+
+                                // Calculate tax if GST is enabled
+                                if (window.UserSession?.seller?.gstEnabled) {
+                                    const taxableAmount = amount;
+                                    totalTaxableAmount += taxableAmount;
+                                    const cgst = taxableAmount * 0.09;
+                                    const sgst = taxableAmount * 0.09;
+                                    totalCGST += cgst;
+                                    totalSGST += sgst;
+                                }
+
+                                billHtml += `
+                                    <div style="font-size: 12px; margin-bottom: 8px;">
+                                        <div style="font-weight: 600;">${item.title || 'Unknown Item'}</div>
+                                        <div style="display: flex; justify-content: space-between;">
+                                            <span>${quantity} x ${price.toFixed(2)}</span>
+                                            <span style="font-weight: 600;">${amount.toFixed(2)}</span>
+                                        </div>
+                                    </div>`;
+                            });
                         }
-                        // Generic error case
-                        else {
-                            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                window.ModalManager.showToast(`Printing error: ${btError.message}`, { type: "error" });
-                            } else {
-                                showToast(`Printing error: ${btError.message}`, "error");
-                            }
+
+                        // Bill Summary
+                        billHtml += `
+                            <div style="border-bottom: 1px dashed #000; margin: 8px 0;"></div>
+                            <div style="font-size: 12px; font-weight: 600;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                    <span>Sub Total:</span>
+                                    <span>${calculatedSubTotal.toFixed(2)}</span>
+                                </div>`;
+
+                        // Add GST details if enabled
+                        if (window.UserSession?.seller?.gstEnabled) {
+                            billHtml += `
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                    <span>CGST (9%):</span>
+                                    <span>${totalCGST.toFixed(2)}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                    <span>SGST (9%):</span>
+                                    <span>${totalSGST.toFixed(2)}</span>
+                                </div>`;
                         }
+
+                        // Add other charges
+                        if (orderData.charges && Array.isArray(orderData.charges)) {
+                            orderData.charges.forEach(charge => {
+                                if (charge.value && parseFloat(charge.value) !== 0) {
+                                    billHtml += `
+                                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                            <span>${charge.name || 'Charge'}:</span>
+                                            <span>${parseFloat(charge.value).toFixed(2)}</span>
+                                        </div>`;
+                                }
+                            });
+                        }
+
+                        // Add discount if any
+                        if (orderData.discount && parseFloat(orderData.discount) > 0) {
+                            billHtml += `
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 4px; color: #22C55E;">
+                                    <span>Discount:</span>
+                                    <span>-${parseFloat(orderData.discount).toFixed(2)}</span>
+                                </div>`;
+                        }
+
+                        // Final total
+                        billHtml += `
+                            <div style="border-top: 2px solid #000; border-bottom: 2px solid #000; margin: 8px 0; padding: 8px 0;">
+                                <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: 700;">
+                                    <span>TOTAL:</span>
+                                    <span>₹${orderData.total?.toFixed(2)}</span>
+                                </div>
+                            </div>
+
+                            <!-- Payment Details -->
+                            <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px;">
+                                <div>Payment Mode: ${mode || 'N/A'}</div>
+                                ${orderData.notes ? `<div style="margin-top: 4px;">${orderData.notes}</div>` : ''}
+                            </div>
+
+                            <!-- Footer -->
+                            <div style="text-align: center; margin-top: 12px;">
+                                <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">Thank You!</div>
+                                <div style="font-size: 12px; margin-bottom: 4px;">Visit Again</div>
+                                ${window.UserSession?.seller?.website ? 
+                                    `<div style="font-size: 10px;">${window.UserSession.seller.website}</div>` : ''}
+                            </div>
+                        </div>`;
+
+                        const printFrame = document.createElement('iframe');
+                        Object.assign(printFrame.style, {
+                            position: 'fixed',
+                            top: '-9999px',
+                            left: '-9999px',
+                            width: '0',
+                            height: '0',
+                            border: '0'
+                        });
+                        document.body.appendChild(printFrame);
+                        printFrame.contentDocument.open();
+                        printFrame.contentDocument.write(`
+                            <html>
+                                <head>
+                                    <title>Print Bill</title>
+                                    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+                                    <style>
+                                        @media print {
+                                            @page { 
+                                                size: 58mm auto;
+                                                margin: 0mm;
+                                                padding: 0mm;
+                                            }
+                                            body { 
+                                                margin: 0;
+                                                padding: 0;
+                                                color: #000;
+                                                background: #fff;
+                                                width: 58mm;
+                                            }
+                                            * {
+                                                font-family: 'Inter', 'Courier New', monospace;
+                                                line-height: 1.2;
+                                                -webkit-print-color-adjust: exact;
+                                                print-color-adjust: exact;
+                                            }
+                                        }
+                                    </style>
+                                </head>
+                                <body>${billHtml}</body>
+                            </html>
+                        `);
+                        printFrame.contentDocument.close();
+
+                        const doPrint = () => {
+                            try {
+                                printFrame.contentWindow.focus();
+                                printFrame.contentWindow.print();
+                                billPrintedSuccessfully = true;
+                                showToast("Bill sent to browser print dialog", "success");
+                            } catch (printError) {
+                                console.error("Error triggering browser print:", printError);
+                                showToast("Could not open print dialog. Please check browser pop-up settings.", "error");
+                            }
+                            setTimeout(() => document.body.contains(printFrame) && document.body.removeChild(printFrame), 1500);
+                        };
+
+                        if (printFrame.contentWindow.document.readyState === 'complete') {
+                            doPrint();
+                        } else {
+                            printFrame.onload = doPrint;
+                        }
+                    } catch (fallbackErr) {
+                        console.error("Error during fallback bill printing:", fallbackErr);
+                        showToast(`Fallback bill printing failed: ${fallbackErr.message}`, "error");
                     }
                 }
             } else {

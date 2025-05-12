@@ -1678,10 +1678,96 @@ function OrderView({ order, tableId, variant }) {
 
             // Traditional KOT printing (fallback)
             if (window.UserSession?.seller?.kotEnabled) {
-                window.sdk.kot.print(order.id);
-                showToast('KOT Printed successfully', 'success');
+                try {
+                    console.log("Attempting fallback KOT printing for order:", order.id);
+                    const orderRef = window.sdk.db.collection("Orders").doc(order.id);
+                    const orderDoc = await orderRef.get();
+                    if (!orderDoc.exists) {
+                        throw new Error("Order not found for fallback printing.");
+                    }
+                    const orderData = orderDoc.data();
+
+                    let kotHtml = `
+                        <div style="font-family: 'Courier New', Courier, monospace; font-size: 12px; width: 280px; margin: 0 auto; padding: 10px;">
+                            <h2 style="text-align: center; margin: 0 0 5px 0;">KITCHEN ORDER TICKET</h2>
+                            <p style="text-align: center; margin: 0 0 10px 0; border-bottom: 1px dashed #000; padding-bottom: 5px;">
+                                ${window.UserSession?.seller?.businessName || 'Your Business'}
+                            </p>
+                            <p><strong>Order #:</strong> ${orderData.billNo || orderData.id?.substring(0, 6) || 'N/A'}</p>
+                            ${orderData.tableId ? `<p><strong>Table:</strong> ${orderData.tableId}</p>` : ''}
+                            <p><strong>Time:</strong> ${new Date(orderData.date?.toDate ? orderData.date.toDate() : orderData.date || new Date()).toLocaleTimeString()}</p>
+                            ${orderData.sourceName ? `<p><strong>Source:</strong> ${orderData.sourceName}</p>` : ''}
+                            <hr style="border: none; border-top: 1px dashed #000; margin: 10px 0;" />
+                            <p style="font-weight: bold; margin-bottom: 5px;">ITEMS:</p>
+                    `;
+
+                    if (orderData.items && orderData.items.length > 0) {
+                        orderData.items.forEach(item => {
+                            const quantity = item.quantity || item.qnt || 1;
+                            const title = item.title || 'Unknown Item';
+                            kotHtml += `<div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                                            <span>${quantity}x ${title}</span>
+                                        </div>`;
+                            if (item.instructions) {
+                                kotHtml += `<div style="font-size: 10px; padding-left: 15px; margin-bottom: 3px;"><em>Notes: ${item.instructions}</em></div>`;
+                            }
+                        });
             } else {
-                console.log('Print KOT for order:', order.id);
+                        kotHtml += "<p>No items</p>";
+                    }
+
+                    if (orderData.instructions) {
+                        kotHtml += `<hr style="border: none; border-top: 1px dashed #000; margin: 10px 0;" />`;
+                        kotHtml += `<p style="font-weight: bold; margin-bottom: 5px;">SPECIAL INSTRUCTIONS:</p>`;
+                        kotHtml += `<p>${orderData.instructions}</p>`;
+                    }
+
+                    kotHtml += `<hr style="border: none; border-top: 1px dashed #000; margin: 10px 0;" />`;
+                    kotHtml += `<p style="text-align: center; margin-top: 10px;">* End of KOT *</p>`;
+                    kotHtml += `</div>`;
+
+                    const printFrame = document.createElement('iframe');
+                    printFrame.style.position = 'fixed';
+                    printFrame.style.top = '-9999px'; // Position off-screen
+                    printFrame.style.left = '-9999px';
+                    printFrame.style.width = '0'; // Minimize impact
+                    printFrame.style.height = '0';
+                    printFrame.style.border = '0';
+                    document.body.appendChild(printFrame);
+
+                    printFrame.contentDocument.open();
+                    printFrame.contentDocument.write('<html><head><title>Print KOT</title>');
+                    printFrame.contentDocument.write('<style> body { margin: 0; padding: 0; color: #000; background: #fff; } @media print { @page { size: 80mm auto; margin: 3mm; } html, body { width: 74mm; } h2, p { margin: 0 0 3px 0; } hr { margin: 5px 0; } } </style>');
+                    printFrame.contentDocument.write('</head><body>');
+                    printFrame.contentDocument.write(kotHtml);
+                    printFrame.contentDocument.write('</body></html>');
+                    printFrame.contentDocument.close();
+
+                    // Ensure content is loaded before printing
+                    printFrame.onload = () => {
+                        printFrame.contentWindow.focus();
+                        printFrame.contentWindow.print();
+                        // More robust cleanup
+                        setTimeout(() => {
+                            if (document.body.contains(printFrame)) {
+                                document.body.removeChild(printFrame);
+                            }
+                        }, 1000); // Delay to ensure print dialog is processed
+                    };
+                     // For browsers that might not fire onload for dynamically written iframes promptly
+                    if (printFrame.contentWindow.document.readyState === 'complete') {
+                        printFrame.onload();
+                    }
+
+
+                    showToast('KOT sent to browser print dialog', 'success');
+
+                } catch (fallbackError) {
+                    console.error('Error during fallback KOT printing:', fallbackError);
+                    showToast(`Fallback KOT printing failed: ${fallbackError.message}`, 'error');
+                }
+            } else {
+                console.log('Print KOT for order (simulation - KOTs not enabled or no fallback defined):', order.id);
                 showToast('KOT Printed successfully (simulation)', 'success');
             }
         } catch (err) {
@@ -1691,63 +1777,144 @@ function OrderView({ order, tableId, variant }) {
     };
 
     const handlePrintBill = async () => {
+        let billPrintedSuccessfully = false;
+        let userCancelledBluetooth = false;
+
         try {
             // Try Bluetooth printing first if available
             if (window.BluetoothPrinting && window.BluetoothPrinting.isSupported()) {
                 try {
-                    // Check if we already have a printer connected
                     const printerAlreadyConnected = window.BluetoothPrinting.connected && window.BluetoothPrinting.characteristic;
-
                     if (printerAlreadyConnected) {
                         showToast("Printing bill using connected printer...", "info");
                     } else if (window.BluetoothPrinting.lastConnectedDevice) {
-                        showToast(`Connecting to printer...`, "info");
+                        showToast(`Connecting to printer ${window.BluetoothPrinting.lastConnectedDevice.name}...`, "info");
                     } else {
                         showToast("Select a printer to print bill", "info");
                     }
 
                     await window.BluetoothPrinting.printBill(order.id);
-                    showToast("Bill printed successfully", "success");
-
-                    // Refresh the page after successful printing
-                    if (window.refreshOrders && typeof window.refreshOrders === 'function') {
-                        window.refreshOrders();
-                    } else if (window.refreshData && typeof window.refreshData === 'function') {
-                        window.refreshData();
-                    }
-
-                    return true; // Exit if Bluetooth printing succeeds
+                    showToast("Bill printed successfully via Bluetooth", "success");
+                    billPrintedSuccessfully = true;
                 } catch (btError) {
-                    console.error("Bluetooth printing failed:", btError);
-
-                    // Handle user cancellation errors
+                    console.error("Bluetooth bill printing failed:", btError);
                     if (btError.message.includes("Device selection cancelled") ||
                         btError.message.includes("No printer selected") ||
                         btError.message.includes("cancelled by user") ||
                         btError.name === "NotFoundError") {
-                        showToast("Printing cancelled", "info");
-                        return false;
+                        showToast("Bluetooth printing cancelled by user.", "info");
+                        userCancelledBluetooth = true; // Mark that user actively cancelled
+                        // Do not automatically fall back if user explicitly cancelled.
+                        // UI should ideally give option to print later or complete without printing.
+                    } else {
+                        showToast(`Bluetooth printing error: ${btError.message}. Falling back to browser print.`, "warning");
                     }
-
-                    // If it's a connection error or unsupported device, show helpful message
-                    if (btError.message.includes("No suitable service") ||
-                        btError.message.includes("No services found") ||
-                        btError.message.includes("not supported as a printer") ||
-                        btError.message.includes("cannot be used for printing") ||
-                        (btError.name === 'NetworkError' && btError.message.includes("Unsupported device"))) {
-                        showToast("Could not connect to printer. Please select a compatible thermal printer.", "error");
-                        return false;
-                    }
-
-                    // Generic error case
-                    showToast(`Printing error: ${btError.message}`, "error");
-
-                    // Fall through to update order status for other errors
-                    showToast("Bluetooth printing failed, marking order as completed", "warning");
                 }
             }
 
-            // Update order status to COMPLETED
+            // Fallback to browser print if Bluetooth didn't succeed AND user didn't cancel Bluetooth
+            if (!billPrintedSuccessfully && !userCancelledBluetooth && (window.UserSession?.seller?.billEnabled !== false)) {
+                console.log("Attempting fallback browser print for bill:", order.id);
+                try {
+                    const orderRef = window.sdk.db.collection("Orders").doc(order.id);
+                    const orderDoc = await orderRef.get();
+                    if (!orderDoc.exists) throw new Error("Order not found for bill printing.");
+                    const orderData = orderDoc.data();
+
+                    // --- Bill HTML Formatting ---
+                    let billHtml = `<div style="font-family: 'Courier New', monospace; font-size: 11px; width: 280px; margin: 0 auto; padding: 5px;">
+                        <h2 style="text-align: center; margin: 0 0 5px 0; font-size: 14px;">${window.UserSession?.seller?.gstEnabled ? 'TAX INVOICE' : 'BILL/RECEIPT'}</h2>
+                        <p style="text-align: center; margin:0; font-size: 12px;"><strong>${window.UserSession?.seller?.businessName || 'Your Business'}</strong></p>
+                        ${window.UserSession?.seller?.address ? `<p style="text-align: center; font-size: 9px; margin:0;">${window.UserSession.seller.address}</p>` : ''}
+                        ${window.UserSessin?.seller?.phone ? `<p style="text-align: center; font-size: 9px; margin:0;">Ph: ${window.UserSession.seller.phone}</p>` : ''}
+                        ${window.UserSession?.seller?.gstEnabled && window.UserSession?.seller?.gstIN ? `<p style="text-align: center; font-size: 9px; margin:0;">GSTIN: ${window.UserSession.seller.gstIN}</p>` : ''}
+                        <hr style="border:none; border-top: 1px dashed #000; margin: 4px 0;" />
+                        <div style="display:flex; justify-content:space-between; font-size:10px;"><span>Bill: ${orderData.billNo || orderData.id?.substring(0,8) || 'N/A'}</span><span>${new Date(orderData.date?.toDate ? orderData.date.toDate() : orderData.date || new Date()).toLocaleDateString()}</span></div>
+                        <div style="font-size:10px;">Time: ${new Date(orderData.date?.toDate ? orderData.date.toDate() : orderData.date || new Date()).toLocaleTimeString()}</div>
+                        ${orderData.customer?.name ? `<p style="font-size:10px;">Cust: ${orderData.customer.name}</p>` : ''}
+                        ${orderData.tableId ? `<p style="font-size:10px;">Table: ${orderData.tableId}</p>` : ''}
+                        <hr style="border:none; border-top: 1px dashed #000; margin: 4px 0;" />
+                        <table style="width: 100%; font-size: 10px; border-collapse: collapse;">
+                            <thead><tr style="border-bottom: 1px dashed #000;"><th style="text-align:left; padding-bottom:2px;">Item</th><th style="text-align:right; padding-bottom:2px;">Qty</th><th style="text-align:right; padding-bottom:2px;">Rate</th><th style="text-align:right; padding-bottom:2px;">Amount</th></tr></thead><tbody>`;
+
+                    let calculatedSubTotal = 0;
+                    if (orderData.items && orderData.items.length > 0) {
+                        orderData.items.forEach(item => {
+                            const quantity = parseFloat(item.quantity || item.qnt || 1);
+                            const price = parseFloat(item.price || 0);
+                            const amount = quantity * price;
+                            calculatedSubTotal += amount;
+                            billHtml += `<tr style="vertical-align:top;">
+                                            <td style="padding:2px 0;">${item.title || 'Unknown Item'}</td>
+                                            <td style="text-align:right; padding:2px 0;">${quantity}</td>
+                                            <td style="text-align:right; padding:2px 0;">${price.toFixed(2)}</td>
+                                            <td style="text-align:right; padding:2px 0;">${amount.toFixed(2)}</td>
+                                         </tr>`;
+                        });
+                    }
+                    billHtml += `</tbody></table><hr style="border:none; border-top: 1px dashed #000; margin: 4px 0;" />`;
+                    
+                    const subTotalForDisplay = orderData.subTotal?.toFixed(2) || calculatedSubTotal.toFixed(2);
+                    billHtml += `<div style="display:flex; justify-content:space-between; font-size:10px;"><span>Subtotal:</span><span>${subTotalForDisplay}</span></div>`;
+                    
+                    let totalAmount = parseFloat(orderData.subTotal || calculatedSubTotal);
+                    if (orderData.discount && parseFloat(orderData.discount) > 0) {
+                        const discountVal = parseFloat(orderData.discount);
+                        billHtml += `<div style="display:flex; justify-content:space-between; font-size:10px;"><span>Discount:</span><span>-${discountVal.toFixed(2)}</span></div>`;
+                        // totalAmount -= discountVal; // Assuming discount is already applied in orderData.total
+                    }
+
+                    if (orderData.charges && Array.isArray(orderData.charges)) {
+                        orderData.charges.forEach(charge => {
+                            const chargeName = charge.name || 'Charge';
+                            const chargeValue = parseFloat(charge.value) || 0;
+                            if (chargeValue !== 0) {
+                                billHtml += `<div style="display:flex; justify-content:space-between; font-size:10px;"><span>${chargeName}:</span><span>${chargeValue.toFixed(2)}</span></div>`;
+                            }
+                        });
+                    }
+
+                    billHtml += `<hr style="border:none; border-top: 1px solid #000; margin: 4px 0;" />`;
+                    billHtml += `<div style="display:flex; justify-content:space-between; font-weight:bold; font-size: 12px;"><span>TOTAL:</span><span>${orderData.total?.toFixed(2)}</span></div>`; // Use orderData.total directly
+                    billHtml += `<hr style="border:none; border-top: 1px solid #000; margin: 4px 0;" />`;
+                    billHtml += `<p style="font-size:10px;"><strong>Mode:</strong> ${orderData.payMode || 'N/A'}</p>`;
+                    if(orderData.notes) billHtml += `<p style="font-size:9px;">Notes: ${orderData.notes}</p>`;
+                    billHtml += `<p style="text-align:center; font-size:9px; margin-top:8px;">Thank you! Visit Again!</p></div>`;
+                    // --- End Bill HTML Formatting ---
+
+                    const printFrame = document.createElement('iframe');
+                    Object.assign(printFrame.style, { position: 'fixed', top: '-9999px', left: '-9999px', width: '0', height: '0', border: '0' });
+                    document.body.appendChild(printFrame);
+                    printFrame.contentDocument.open();
+                    printFrame.contentDocument.write('<html><head><title>Print Bill</title><style>body{margin:0;padding:0;color:#000;background:#fff} @media print{@page{size:80mm auto;margin:3mm} html,body{width:74mm; font-size: 10px;} h2,p,div,span,th,td{margin:0 0 2px 0; padding:0;} table{width:100%;} hr{margin:3px 0;}}</style></head><body>' + billHtml + '</body></html>');
+                    printFrame.contentDocument.close();
+                    
+                    const doPrint = () => {
+                        try {
+                            printFrame.contentWindow.focus();
+                            printFrame.contentWindow.print();
+                            billPrintedSuccessfully = true;
+                            showToast("Bill sent to browser print dialog", "success");
+                        } catch (printError) {
+                            console.error("Error triggering browser print:", printError);
+                            showToast("Could not open print dialog. Please check browser pop-up settings.", "error");
+                        }
+                        setTimeout(() => document.body.contains(printFrame) && document.body.removeChild(printFrame), 1500);
+                    };
+
+                    if (printFrame.contentWindow.document.readyState === 'complete') {
+                        doPrint();
+                    } else {
+                        printFrame.onload = doPrint;
+                    }
+                } catch (fallbackErr) {
+                    console.error("Error during fallback bill printing:", fallbackErr);
+                    showToast(`Fallback bill printing failed: ${fallbackErr.message}`, "error");
+                }
+            }
+
+            // Only complete order if it wasn't a user cancellation of Bluetooth and print was attempted or bill printing is disabled
+            if (!userCancelledBluetooth) {
             const orderRef = window.sdk.db.collection("Orders").doc(order.id);
             await orderRef.update({
                 status: window.sdk.FieldValue.arrayUnion({
@@ -1757,22 +1924,22 @@ function OrderView({ order, tableId, variant }) {
                 currentStatus: {
                     label: "COMPLETED",
                     date: new Date()
-                }
-            });
+                    },
+                    printed: billPrintedSuccessfully // Optionally track if bill was printed
+                });
+                showToast("Order marked as COMPLETED", "info");
 
-            showToast("Order completed 👍", "success");
-
-            // Refresh the page after updating the order
-            if (window.refreshOrders && typeof window.refreshOrders === 'function') {
-                window.refreshOrders();
-            } else if (window.refreshData && typeof window.refreshData === 'function') {
-                window.refreshData();
+                if (window.refreshOrders) window.refreshOrders();
+                else if (window.refreshData) window.refreshData();
+                return billPrintedSuccessfully;
+            } else {
+                // User cancelled Bluetooth, don't complete order automatically
+                return false; 
             }
 
-            return true;
         } catch (err) {
-            console.error('Error printing bill or completing order:', err);
-            showToast(`Failed: ${err.message}`, 'error');
+            console.error('Error in handlePrintBill process:', err);
+            showToast(`Operation failed: ${err.message}`, 'error');
             return false;
         }
     };
