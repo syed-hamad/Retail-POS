@@ -20,8 +20,9 @@ class BluetoothPrinting {
         this.characteristic = null;
         this.encoder = new TextEncoder();
 
-        // Add printer width configuration after printerSizes is initialized
-        this.printerWidth = this.getSavedPrinterWidth() || 48; // Default to 48 characters (standard 3-inch)
+        // Initialize printer width after printerSizes is defined
+        const size = this.getSavedPrinterWidth();
+        this.printerWidth = size || this.printerSizes['3inch']; // Default to 48 characters (standard 3-inch)
 
         // Try to restore the last successful connection info from localStorage
         this.lastConnectedDevice = this.getSavedPrinter();
@@ -36,9 +37,13 @@ class BluetoothPrinting {
      */
     setPrinterSize(size) {
         if (this.printerSizes && this.printerSizes[size]) {
+            // Update the instance property with the numeric value
             this.printerWidth = this.printerSizes[size];
+            // Save the size identifier to localStorage
             this.savePrinterWidth(size);
+            console.log(`Printer size set to ${size} (${this.printerWidth} characters)`);
         } else {
+            console.error('Invalid printer size. Supported sizes are: 2inch, 3inch, 4inch');
             throw new Error('Invalid printer size. Supported sizes are: 2inch, 3inch, 4inch');
         }
     }
@@ -68,8 +73,13 @@ class BluetoothPrinting {
             }
 
             const size = localStorage.getItem('printerWidth');
-            // Add null check for size and this.printerSizes[size]
-            return (size && this.printerSizes[size]) ? this.printerSizes[size] : this.printerSizes['3inch'];
+            // If size exists and it's a valid key in printerSizes, return the numeric value
+            if (size && this.printerSizes[size]) {
+                return this.printerSizes[size];
+            }
+
+            // Default to 3-inch (48 characters)
+            return this.printerSizes['3inch'];
         } catch (error) {
             console.error('Error retrieving saved printer width:', error);
             // Ensure safe fallback even if this.printerSizes is undefined
@@ -488,7 +498,7 @@ class BluetoothPrinting {
                         if (deviceSelectError.name === "NotFoundError") {
                             throw new Error('Printer selection cancelled or no compatible devices found. Ensure printer is discoverable and try again.');
                         } else if (deviceSelectError.name === "SecurityError") {
-                             throw new Error('Bluetooth permission denied. Please allow Bluetooth access for this site in your browser settings.');
+                            throw new Error('Bluetooth permission denied. Please allow Bluetooth access for this site in your browser settings.');
                         }
                         throw new Error(`Printer selection failed: ${deviceSelectError.message}. Check Bluetooth settings and printer discoverability.`);
                     }
@@ -517,7 +527,7 @@ class BluetoothPrinting {
                     if (deviceSelectError.name === "NotFoundError") {
                         throw new Error('Printer selection cancelled or no compatible devices found. Ensure printer is discoverable and try again.');
                     } else if (deviceSelectError.name === "SecurityError") {
-                         throw new Error('Bluetooth permission denied. Please allow Bluetooth access for this site in your browser settings.');
+                        throw new Error('Bluetooth permission denied. Please allow Bluetooth access for this site in your browser settings.');
                     }
                     throw new Error(`Printer selection failed: ${deviceSelectError.message}. Check Bluetooth settings and printer discoverability.`);
                 }
@@ -646,8 +656,8 @@ class BluetoothPrinting {
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
                 const CHUNK_SIZE = (this.characteristic?.service?.device?.gatt?.server?.maxGATTCharacteristicWriteSize)
-                                   ? Math.min(this.characteristic.service.device.gatt.server.maxGATTCharacteristicWriteSize, 512) // Cap at 512 even if printer reports higher
-                                   : 512;
+                    ? Math.min(this.characteristic.service.device.gatt.server.maxGATTCharacteristicWriteSize, 512) // Cap at 512 even if printer reports higher
+                    : 512;
                 for (let i = 0; i < data.length; i += CHUNK_SIZE) {
                     const chunk = data.slice(i, i + CHUNK_SIZE);
                     if (this.characteristic.properties.writeWithoutResponse) {
@@ -674,45 +684,67 @@ class BluetoothPrinting {
     }
 
     /**
+     * Ensure printer is connected, trying silent reconnect first and then user-prompted connection if needed
+     * @returns {Promise<boolean>} True if connection succeeded
+     * @private
+     */
+    async ensurePrinterConnection() {
+        if (!this.connected) {
+            // First try silent reconnect if we have a saved printer
+            const silentReconnected = await this.attemptSilentReconnect();
+
+            // If silent reconnect fails, try regular connection with user interaction
+            if (!silentReconnected) {
+                try {
+                    await this.connect();
+                } catch (connectError) {
+                    // Handle user cancellation with a specific error
+                    if (connectError.message.includes("Device selection cancelled") ||
+                        connectError.message.includes("cancelled by user")) {
+                        throw new Error("Printing cancelled: No printer selected");
+                    }
+                    // Handle unsupported device errors with a friendly message
+                    if (connectError.name === 'NetworkError' ||
+                        connectError.message.includes('not supported as a printer') ||
+                        connectError.message.includes('Unsupported device')) {
+                        throw new Error("This device cannot be used for printing. Please select a compatible Bluetooth printer.");
+                    }
+                    throw connectError;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Fetch order data from Firestore
+     * @param {string} orderId - The ID of the order to fetch
+     * @returns {Promise<Object>} The order data
+     * @private
+     */
+    async getOrderData(orderId) {
+        const orderRef = window.sdk.db.collection("Orders").doc(orderId);
+        const orderDoc = await orderRef.get();
+        const orderData = orderDoc.data();
+
+        if (!orderData) {
+            throw new Error("Order not found");
+        }
+
+        return orderData;
+    }
+
+    /**
      * Print a KOT (Kitchen Order Ticket) for a specific order
      * @param {string} orderId - The ID of the order to print
      */
     async printKOT(orderId) {
         try {
             // Fetch order data
-            const orderRef = window.sdk.db.collection("Orders").doc(orderId);
-            const orderDoc = await orderRef.get();
-            const orderData = orderDoc.data();
-
-            if (!orderData) {
-                throw new Error("Order not found");
-            }
+            const orderData = await this.getOrderData(orderId);
 
             // Connect to printer if not already connected
-            if (!this.connected) {
-                // First try silent reconnect if we have a saved printer
-                const silentReconnected = await this.attemptSilentReconnect();
-
-                // If silent reconnect fails, try regular connection with user interaction
-                if (!silentReconnected) {
-                    try {
-                        await this.connect();
-                    } catch (connectError) {
-                        // Handle user cancellation with a specific error
-                        if (connectError.message.includes("Device selection cancelled") ||
-                            connectError.message.includes("cancelled by user")) {
-                            throw new Error("Printing cancelled: No printer selected");
-                        }
-                        // Handle unsupported device errors with a friendly message
-                        if (connectError.name === 'NetworkError' ||
-                            connectError.message.includes('not supported as a printer') ||
-                            connectError.message.includes('Unsupported device')) {
-                            throw new Error("This device cannot be used for printing. Please select a compatible Bluetooth printer.");
-                        }
-                        throw connectError;
-                    }
-                }
-            }
+            await this.ensurePrinterConnection();
 
             // Format the KOT data - build ESC/POS commands
             const data = await this.formatKOTData(orderData);
@@ -733,39 +765,10 @@ class BluetoothPrinting {
     async printBill(orderId) {
         try {
             // Fetch order data
-            const orderRef = window.sdk.db.collection("Orders").doc(orderId);
-            const orderDoc = await orderRef.get();
-            const orderData = orderDoc.data();
-
-            if (!orderData) {
-                throw new Error("Order not found");
-            }
+            const orderData = await this.getOrderData(orderId);
 
             // Connect to printer if not already connected
-            if (!this.connected) {
-                // First try silent reconnect if we have a saved printer
-                const silentReconnected = await this.attemptSilentReconnect();
-
-                // If silent reconnect fails, try regular connection with user interaction
-                if (!silentReconnected) {
-                    try {
-                        await this.connect();
-                    } catch (connectError) {
-                        // Handle user cancellation with a specific error
-                        if (connectError.message.includes("Device selection cancelled") ||
-                            connectError.message.includes("cancelled by user")) {
-                            throw new Error("Printing cancelled: No printer selected");
-                        }
-                        // Handle unsupported device errors with a friendly message
-                        if (connectError.name === 'NetworkError' ||
-                            connectError.message.includes('not supported as a printer') ||
-                            connectError.message.includes('Unsupported device')) {
-                            throw new Error("This device cannot be used for printing. Please select a compatible Bluetooth printer.");
-                        }
-                        throw connectError;
-                    }
-                }
-            }
+            await this.ensurePrinterConnection();
 
             // Format the bill data - build ESC/POS commands
             const data = this.formatBillData(orderData);
@@ -780,90 +783,190 @@ class BluetoothPrinting {
     }
 
     /**
-     * Format order data into ESC/POS commands for a KOT
-     * @param {Object} order - The order data
-     * @returns {Uint8Array} - Formatted printer commands
+     * Initialize common printer formatter elements
+     * @param {boolean} [useCentered=false] - Whether to include centered text helper
+     * @returns {Object} Object with commands array and helper functions
+     * @private
      */
-    async formatKOTData(order) {
+    createPrinterFormatter(useCentered = false) {
         const commands = [];
-        const printerWidth = 32; // For 2-inch printers
+        const printerWidth = this.printerWidth;
 
+        // Get printer size name for better readability in code
+        const getPrinterSizeName = () => {
+            for (const [sizeName, width] of Object.entries(this.printerSizes)) {
+                if (width === printerWidth) {
+                    return sizeName;
+                }
+            }
+            return '3inch'; // Default fallback
+        };
+
+        const printerSizeName = getPrinterSizeName();
+
+        // Common helper functions
         const addText = (text, addNewline = true) => {
             commands.push(...this.encoder.encode(text + (addNewline ? '\n' : '')));
         };
 
         const addLine = () => {
-            addText('*'.repeat(printerWidth));
+            addText('-'.repeat(printerWidth));
         };
+
+        // Optional centered text helper for bill receipts
+        const addCenteredText = useCentered ? (text) => {
+            commands.push(0x1B, 0x61, 0x01); // Center
+            addText(text);
+            commands.push(0x1B, 0x61, 0x00); // Left align
+        } : null;
 
         const truncate = (text, maxLength) => {
             if (!text) return '';
             return text.length > maxLength ? text.substring(0, maxLength) : text;
         };
 
-        // Reset printer
+        // Helper for formatting order/bill number consistently
+        const formatOrderNumber = (order) => {
+            return order.billNo || order.id?.substring(0, 6) || 'N/A';
+        };
+
+        // Helper for formatting date and time
+        const formatDateTime = (date, timeOnly = false) => {
+            const dateObj = date?.toDate ? date.toDate() : (date || new Date());
+
+            if (timeOnly) {
+                return dateObj.toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: true
+                });
+            }
+
+            return {
+                date: dateObj.toLocaleDateString(),
+                time: dateObj.toLocaleTimeString()
+            };
+        };
+
+        // Text size definitions based on printer width
+        const createTextSizes = (forBill = false) => {
+            if (forBill) {
+                return {
+                    NORMAL: 0x00,
+                    HEADER: printerSizeName === '2inch' ? 0x00 : 0x31, // Normal for 2-inch, Double height + Double width for larger
+                    SUBHEADER: printerSizeName === '2inch' ? 0x00 : 0x11, // Normal for 2-inch, Double height for larger
+                    TOTAL: printerSizeName === '2inch' ? 0x00 : 0x31, // Normal for 2-inch, Double height + Double width for larger
+                    FOOTER: printerSizeName === '2inch' ? 0x00 : 0x11 // Normal for 2-inch, Double height for larger
+                };
+            } else {
+                return {
+                    NORMAL: 0x00,
+                    TABLE: printerSizeName === '2inch' ? 0x01 : 0x33, // Double width for 2-inch, Quadruple height + double width for larger
+                    ORDER: printerSizeName === '2inch' ? 0x00 : 0x22, // Normal for 2-inch, Double height + Double width for larger
+                    QUANTITY: printerSizeName === '2inch' ? 0x00 : 0x33, // Normal for 2-inch, Quadruple height + double width for larger
+                    ITEM: printerSizeName === '2inch' ? 0x00 : 0x22, // Normal for 2-inch, Double height + Double width for larger
+                    NOTES_HEADER: printerSizeName === '2inch' ? 0x00 : 0x22 // Normal for 2-inch, Double height + Double width for larger
+                };
+            }
+        };
+
+        // Initialize printer
         commands.push(0x1B, 0x40); // Initialize printer
-        
-        // Set large base font
+
+        // Set base font and turn bold on
         commands.push(0x1B, 0x21, 0x00); // Font A
         commands.push(0x1B, 0x45, 0x01); // Bold ON
-        
-        // Top margin
-        commands.push(0x1B, 0x64, 2); // Feed 2 lines
 
-        // Table number (if exists) - MOST PROMINENT
+        return {
+            commands,
+            printerWidth,
+            printerSizeName,
+            addText,
+            addLine,
+            addCenteredText,
+            truncate,
+            formatOrderNumber,
+            formatDateTime,
+            createTextSizes
+        };
+    }
+
+    /**
+     * Format order data into ESC/POS commands for a KOT
+     * @param {Object} order - The order data
+     * @returns {Uint8Array} - Formatted printer commands
+     */
+    async formatKOTData(order) {
+        // Use common formatter with basic options (no centered text)
+        const {
+            commands,
+            printerWidth,
+            printerSizeName,
+            addText,
+            addLine,
+            truncate,
+            formatOrderNumber,
+            formatDateTime,
+            createTextSizes
+        } = this.createPrinterFormatter();
+
+        // Define text size constants based on printer width
+        const TEXT_SIZE = createTextSizes();
+
+        // Top margin
+        commands.push(0x1B, 0x64, 1); // Feed 1 line for 2-inch
+
+        // Table number (if exists)
         if (order.tableId) {
             commands.push(0x1B, 0x61, 0x01); // Center
-            commands.push(0x1D, 0x21, 0x33); // Quadruple height + double width
+            commands.push(0x1D, 0x21, TEXT_SIZE.TABLE);
             addText('TABLE ' + order.tableId);
             addText(''); // Extra space
         }
 
-        // Order number - Large but not as large as table
+        // Order number
         commands.push(0x1B, 0x61, 0x01); // Center
-        commands.push(0x1D, 0x21, 0x22); // Double height + double width
-        const orderNum = order.billNo || order.id?.substring(0, 6) || 'N/A';
+        commands.push(0x1D, 0x21, TEXT_SIZE.ORDER);
+        const orderNum = formatOrderNumber(order);
         addText('ORDER #' + orderNum);
 
-        // Time in large clear format
-        commands.push(0x1D, 0x21, 0x11); // Double height
-        const time = new Date().toLocaleTimeString([], { 
-            hour: '2-digit', 
-            minute: '2-digit',
-            hour12: true 
-        });
+        // Time in clear format
+        commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL); // Normal for all printers
+        const time = formatDateTime(order.date, true);
         addText(time);
-        
+
         // Distinctive separator
         addLine();
-        addText('');  // Extra space
 
-        // Items - THE MOST IMPORTANT PART
+        // Items section
         if (order.items && order.items.length > 0) {
             order.items.forEach((item, index) => {
-                // Quantity in maximum size
+                // Quantity
                 const qty = item.quantity || item.qnt || 1;
                 commands.push(0x1B, 0x61, 0x00); // Left align
-                commands.push(0x1D, 0x21, 0x33); // Quadruple height + double width
+                commands.push(0x1D, 0x21, TEXT_SIZE.QUANTITY);
                 addText(qty + 'x', false);
-                
-                // Item name in very large size
-                commands.push(0x1D, 0x21, 0x22); // Double height + double width
-                const title = truncate(item.title || 'Unknown Item', Math.floor((printerWidth - String(qty).length * 2) / 2));
+
+                // Item name
+                commands.push(0x1D, 0x21, TEXT_SIZE.ITEM);
+                // Adjust title width based on printer size
+                const qtyLength = String(qty).length;
+                const titleMaxWidth = printerWidth - (printerSizeName === '2inch' ? qtyLength + 2 : qtyLength * 2 + 2);
+                const title = truncate(item.title || 'Unknown Item', Math.floor(titleMaxWidth));
                 addText(' ' + title);
 
                 // Special instructions for item
                 if (item.instructions) {
-                    commands.push(0x1D, 0x21, 0x11); // Double height
+                    commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL); // Normal size for all printers
                     addText('  ' + item.instructions.trim());
                 }
 
                 // Add separator between items
                 if (index < order.items.length - 1) {
-                    commands.push(0x1D, 0x21, 0x00); // Normal size
+                    commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL); // Normal size
                     addText('- - - - - - - -');
                 }
-                
+
                 // Space between items
                 addText('');
             });
@@ -873,11 +976,11 @@ class BluetoothPrinting {
         if (order.instructions) {
             addLine();
             commands.push(0x1B, 0x61, 0x01); // Center
-            commands.push(0x1D, 0x21, 0x22); // Double height + double width
+            commands.push(0x1D, 0x21, TEXT_SIZE.NOTES_HEADER);
             addText('NOTES');
-            
+
             commands.push(0x1B, 0x61, 0x00); // Left align
-            commands.push(0x1D, 0x21, 0x11); // Double height
+            commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL); // Normal size for all printers
             let notes = order.instructions.trim();
             while (notes.length > 0) {
                 addText(truncate(notes, printerWidth));
@@ -886,7 +989,7 @@ class BluetoothPrinting {
         }
 
         // Bottom margin and cut
-        commands.push(0x1B, 0x64, 4); // Feed 4 lines
+        commands.push(0x1B, 0x64, 3); // Feed 3 lines
         commands.push(0x1D, 0x56, 0x41); // Partial cut
 
         return new Uint8Array(commands);
@@ -898,38 +1001,31 @@ class BluetoothPrinting {
      * @returns {Uint8Array} - Formatted printer commands
      */
     formatBillData(order) {
-        const commands = [];
+        // Use common formatter with centered text option enabled
+        const {
+            commands,
+            printerSizeName,
+            addText,
+            addLine,
+            addCenteredText,
+            formatOrderNumber,
+            formatDateTime,
+            createTextSizes
+        } = this.createPrinterFormatter(true);
 
-        // Helper functions
-        const addText = (text) => {
-            commands.push(...this.encoder.encode(text + '\n'));
-        };
-
-        const addCenteredText = (text) => {
-            commands.push(0x1B, 0x61, 0x01);
-            addText(text);
-            commands.push(0x1B, 0x61, 0x00);
-        };
-
-        const addLine = () => {
-            addText('================================');
-        };
-
-        // Initialize printer with maximum emphasis
-        commands.push(0x1B, 0x40); // Initialize
-        commands.push(0x1B, 0x45, 0x01); // Bold ON
-        commands.push(0x1B, 0x47, 0x01); // Double Strike ON
+        // Define text size constants based on printer width
+        const TEXT_SIZE = createTextSizes(true);
 
         // Header
         const seller = window.UserSession?.seller || {};
-        
-        // Business name in maximum size
-        commands.push(0x1D, 0x21, 0x31); // Double Height + Double Width
+
+        // Business name
+        commands.push(0x1D, 0x21, TEXT_SIZE.HEADER);
         addCenteredText(seller.businessName || 'Your Business');
-        commands.push(0x1D, 0x21, 0x00);
+        commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL);
 
         // Business details
-        commands.push(0x1B, 0x21, 0x08); // Emphasized
+        commands.push(0x1B, 0x21, 0x00); // Normal for all printers
         if (seller.address) addCenteredText(seller.address);
         if (seller.phone) addCenteredText(`Ph: ${seller.phone}`);
         if (seller.gstEnabled && seller.gstIN) {
@@ -940,22 +1036,24 @@ class BluetoothPrinting {
 
         addLine();
 
-        // Bill details in emphasized text
-        commands.push(0x1B, 0x21, 0x08);
-        addText(`Bill #: ${order.billNo || order.id?.substring(0, 6) || 'N/A'}`);
-        addText(`Date: ${new Date(order.date?.toDate ? order.date.toDate() : order.date || new Date()).toLocaleDateString()}`);
-        addText(`Time: ${new Date(order.date?.toDate ? order.date.toDate() : order.date || new Date()).toLocaleTimeString()}`);
+        // Bill details in normal text
+        const orderNum = formatOrderNumber(order);
+        addText(`Bill #: ${orderNum}`);
+
+        const dateTime = formatDateTime(order.date);
+        addText(`Date: ${dateTime.date}`);
+        addText(`Time: ${dateTime.time}`);
+
         if (order.customer?.name) {
             addText(`Cust: ${order.customer.name}`);
         }
-        commands.push(0x1B, 0x21, 0x00);
 
         addLine();
 
         // Items header
-        commands.push(0x1D, 0x21, 0x31); // Double Height + Double Width
+        commands.push(0x1D, 0x21, TEXT_SIZE.HEADER);
         addCenteredText('ITEMS');
-        commands.push(0x1D, 0x21, 0x00);
+        commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL);
 
         // Calculate totals
         let subTotal = 0;
@@ -965,7 +1063,7 @@ class BluetoothPrinting {
 
         // Items list with running total calculation
         if (order.items && order.items.length > 0) {
-            commands.push(0x1B, 0x21, 0x01); // Slightly emphasized
+            commands.push(0x1B, 0x21, 0x00); // Normal size
             order.items.forEach(item => {
                 const qty = item.quantity || item.qnt || 1;
                 const price = parseFloat(item.price || 0);
@@ -975,21 +1073,21 @@ class BluetoothPrinting {
                 addText(item.title || 'Unknown Item');
                 addText(`${qty} x ${price.toFixed(2)} = ${amount.toFixed(2)}`);
             });
-            commands.push(0x1B, 0x21, 0x00);
         }
 
         addLine();
 
         // Totals section with clear formatting
-        commands.push(0x1D, 0x21, 0x01); // Double Width for better readability
+        // Normal size for all printers
+        commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL);
         addText(`Sub Total: ${subTotal.toFixed(2)}`);
 
         // GST calculations if enabled
         if (seller.gstEnabled) {
             const gst = subTotal * 0.18;
             totalGST = gst;
-            addText(`CGST (9%): ${(gst/2).toFixed(2)}`);
-            addText(`SGST (9%): ${(gst/2).toFixed(2)}`);
+            addText(`CGST (9%): ${(gst / 2).toFixed(2)}`);
+            addText(`SGST (9%): ${(gst / 2).toFixed(2)}`);
         }
 
         // Additional charges
@@ -1009,31 +1107,29 @@ class BluetoothPrinting {
             addText(`Discount: -${totalDiscount.toFixed(2)}`);
         }
 
-        commands.push(0x1D, 0x21, 0x00);
         addLine();
 
         // Calculate final total
         const grandTotal = subTotal + totalGST + totalCharges - totalDiscount;
 
-        // Grand total in maximum size
-        commands.push(0x1D, 0x21, 0x31); // Double Height + Double Width
+        // Grand total
+        commands.push(0x1D, 0x21, TEXT_SIZE.TOTAL);
         addCenteredText('TOTAL');
         addCenteredText(`Rs. ${grandTotal.toFixed(2)}`);
-        commands.push(0x1D, 0x21, 0x00);
+        commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL);
 
         addLine();
 
-        // Payment details
-        commands.push(0x1D, 0x21, 0x01); // Double Width
+        // Payment details - normal size for all printers
+        commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL);
         addText(`Payment: ${order.payMode || 'CASH'}`);
-        commands.push(0x1D, 0x21, 0x00);
 
         // Footer
         addLine();
-        commands.push(0x1D, 0x21, 0x11); // Double Height
+        commands.push(0x1D, 0x21, TEXT_SIZE.FOOTER);
         addCenteredText('Thank You!');
         addCenteredText('Visit Again');
-        commands.push(0x1D, 0x21, 0x00);
+        commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL);
 
         if (seller.website) {
             addCenteredText(seller.website);
@@ -1043,7 +1139,6 @@ class BluetoothPrinting {
         commands.push(0x1B, 0x64, 0x04); // Feed 4 lines
         commands.push(0x1D, 0x56, 0x00); // Full cut
         commands.push(0x1B, 0x45, 0x00); // Bold OFF
-        commands.push(0x1B, 0x47, 0x00); // Double Strike OFF
 
         return new Uint8Array(commands);
     }
