@@ -649,6 +649,9 @@ class BluetoothPrinting {
             throw new Error('Printer not connected. Call connect() first.');
         }
 
+        // print byte size
+        console.log("DATA SIZE",data.byteLength);
+
         const MAX_RETRIES = 3;
         const RETRY_DELAY_MS = 300; // Increased retry delay
         const INTER_CHUNK_DELAY_MS = 100; // New delay between chunks
@@ -656,8 +659,8 @@ class BluetoothPrinting {
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
                 const CHUNK_SIZE = (this.characteristic?.service?.device?.gatt?.server?.maxGATTCharacteristicWriteSize)
-                    ? Math.min(this.characteristic.service.device.gatt.server.maxGATTCharacteristicWriteSize, 512) // Cap at 512 even if printer reports higher
-                    : 512;
+                    ? Math.min(this.characteristic.service.device.gatt.server.maxGATTCharacteristicWriteSize, 200) // Cap at 200 even if printer reports higher
+                    : 200;
                 for (let i = 0; i < data.length; i += CHUNK_SIZE) {
                     const chunk = data.slice(i, i + CHUNK_SIZE);
                     if (this.characteristic.properties.writeWithoutResponse) {
