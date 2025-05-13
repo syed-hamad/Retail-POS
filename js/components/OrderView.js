@@ -295,115 +295,13 @@ function OrderView({ order, tableId, variant, onClose }) {
             {/* Action Buttons */}
             <div className="flex gap-2 mt-4">
                 <button
-                    onClick={async () => {
-                        try {
-                            // Try Bluetooth printing first if available
-                            if (window.BluetoothPrinting && window.BluetoothPrinting.isSupported()) {
-                                try {
-                                    // Check if we already have a printer connected
-                                    const printerAlreadyConnected = window.BluetoothPrinting.connected && window.BluetoothPrinting.characteristic;
-
-                                    if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                        if (!printerAlreadyConnected) {
-                                            if (window.BluetoothPrinting.lastConnectedDevice) {
-                                                window.ModalManager.showToast(`Connecting to printer...`, { type: "info" });
-                                            } else {
-                                                window.ModalManager.showToast("Select a printer to print KOT", { type: "info" });
-                                            }
-                                        } else {
-                                            window.ModalManager.showToast("Printing KOT using connected printer...", { type: "info" });
-                                        }
-                                    } else {
-                                        if (!printerAlreadyConnected) {
-                                            if (window.BluetoothPrinting.lastConnectedDevice) {
-                                                showToast(`Connecting to printer...`, "info");
-                                            } else {
-                                                showToast("Select a printer to print KOT", "info");
-                                            }
-                                        } else {
-                                            showToast("Printing KOT using connected printer...", "info");
-                                        }
-                                    }
-
-                                    await window.BluetoothPrinting.printKOT(order.id);
-
-                                    if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                        window.ModalManager.showToast("KOT printed successfully", { type: "success" });
-                                    } else {
-                                        showToast("KOT printed successfully", "success");
-                                    }
-                                    return; // Exit if Bluetooth printing succeeds
-                                } catch (btError) {
-                                    console.error("Bluetooth printing failed:", btError);
-
-                                    // Handle user cancellation errors
-                                    if (btError.message.includes("Device selection cancelled") ||
-                                        btError.message.includes("No printer selected") ||
-                                        btError.message.includes("cancelled by user") ||
-                                        btError.name === "NotFoundError") {
-
-                                        if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                            window.ModalManager.showToast("Printing cancelled", { type: "info" });
-                                        } else {
-                                            showToast("Printing cancelled", "info");
-                                        }
-                                        return;
-                                    }
-
-                                    // If it's a connection error or unsupported device, show helpful message
-                                    if (btError.message.includes("No suitable service") ||
-                                        btError.message.includes("No services found") ||
-                                        btError.message.includes("not supported as a printer") ||
-                                        btError.message.includes("cannot be used for printing") ||
-                                        (btError.name === 'NetworkError' && btError.message.includes("Unsupported device"))) {
-
-                                        if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                            window.ModalManager.showToast("Could not connect to printer. Please select a compatible thermal printer.", { type: "error" });
-                                        } else {
-                                            showToast("Could not connect to printer. Please select a compatible thermal printer.", "error");
-                                        }
-                                        return;
-                                    }
-
-                                    // Generic error case
-                                    if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                        window.ModalManager.showToast(`Printing error: ${btError.message}`, { type: "error" });
-                                    } else {
-                                        showToast(`Printing error: ${btError.message}`, "error");
-                                    }
-
-                                    // Fall through to traditional printing for other errors
-                                    if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                        window.ModalManager.showToast("Bluetooth printing failed, falling back to standard printing", { type: "warning" });
-                                    } else {
-                                        showToast("Bluetooth printing failed, falling back to standard printing", "warning");
-                                    }
-                                }
-                            }
-
-                            // Traditional KOT printing (fallback)
-                            if (window.UserSession?.seller?.kotEnabled) {
-                                window.sdk.kot.print(order.id);
-                                if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                    window.ModalManager.showToast("KOT printed successfully", { type: "success" });
-                                } else {
-                                    showToast("KOT printed successfully", "success");
-                                }
-                            } else {
-                                console.log("KOT printed for order:", order.id);
-                                if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                    window.ModalManager.showToast("KOT printed successfully (simulation)", { type: "success" });
-                                } else {
-                                    showToast("KOT printed successfully (simulation)", "success");
-                                }
-                            }
-                        } catch (error) {
-                            console.error("Error printing KOT:", error);
-                            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                window.ModalManager.showToast(`Failed to print KOT: ${error.message}`, { type: "error" });
-                            } else {
-                                showToast(`Failed to print KOT: ${error.message}`, "error");
-                            }
+                    onClick={() => {
+                        // Use the centralized BluetoothPrinting method for KOT printing
+                        if (window.BluetoothPrinting) {
+                            window.BluetoothPrinting.printKOT(order.id);
+                        } else {
+                            console.error("BluetoothPrinting not available");
+                            showToast("Printing service not available", "error");
                         }
                     }}
                     className="flex-1 py-2.5 border border-red-500 text-red-500 rounded-lg font-medium hover:bg-red-50 transition-colors"

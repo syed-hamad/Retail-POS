@@ -29,6 +29,629 @@ class BluetoothPrinting {
 
         // Track attempts to auto-reconnect to prevent infinite loops
         this.reconnectAttempted = false;
+        
+        // Cache for loaded logo images
+        this.imageCache = new Map();
+    }
+
+    /**
+     * Helper method to show toast notifications via ModalManager or fallback function
+     * @param {string} message - The message to show
+     * @param {string} [type='info'] - The type of toast (success, error, warning, info)
+     * @private
+     */
+    _showToast(message, type = 'info') {
+        if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+            window.ModalManager.showToast(message, { type });
+        } else if (typeof window.showToast === 'function') {
+            window.showToast(message, type);
+        } else {
+            console.log(`[Toast ${type}]: ${message}`);
+        }
+    }
+
+    /**
+     * Handle printer connection errors with appropriate user feedback
+     * @param {Error} error - The error to handle
+     * @returns {string} - Classification of the error
+     * @private
+     */
+    _handlePrinterError(error) {
+        console.error('Printer error:', error);
+        
+        // User cancelled the connection
+        if (error.message?.includes("cancelled") || 
+            error.message?.includes("No printer selected") ||
+            error.name === "NotFoundError") {
+            this._showToast("Printing cancelled by user", "info");
+            return "user_cancelled";
+        } 
+        
+        // Incompatible device errors
+        if (error.message?.includes("No suitable service") ||
+            error.message?.includes("No services found") ||
+            error.message?.includes("not supported as a printer") ||
+            error.message?.includes("cannot be used for printing") ||
+            (error.name === 'NetworkError' && error.message?.includes("Unsupported device"))) {
+            this._showToast("Could not connect to printer. Please select a compatible thermal printer.", "error");
+            return "incompatible_device";
+        }
+        
+        // Generic connection errors
+        if (error.name === "NetworkError" || 
+            error.message?.includes("disconnected") ||
+            error.message?.includes("connection") ||
+            error.message?.includes("GATT")) {
+            this._showToast(`Printer connection error: ${error.message}`, "error");
+            return "connection_error";
+        }
+        
+        // Generic errors
+        this._showToast(`Printing error: ${error.message}`, "error");
+        return "other_error";
+    }
+
+    /**
+     * Generate HTML for a receipt or KOT based on order data
+     * This centralized method generates consistent HTML for both browser printing and Bluetooth printing
+     * @param {Object} orderData - The order data object
+     * @param {string} type - 'bill' or 'kot' to determine the type of receipt
+     * @param {string} [paymentMode] - Optional payment mode for bills
+     * @returns {string} HTML content for the receipt
+     */
+    generateReceiptHTML(orderData, type, paymentMode) {
+        const seller = window.UserSession?.seller || {};
+        const isKOT = type.toLowerCase() === 'kot';
+        const isBill = type.toLowerCase() === 'bill';
+        const paperWidth = '58mm'; // Standard thermal paper width
+
+        let html = `
+            <div style="font-family: 'Courier New', monospace; width: ${paperWidth}; margin: 0 auto; padding: 2px;">`;
+
+        // Logo Section (for bills only)
+        if (isBill) {
+            html += `
+                <!-- Logo Section -->
+                ${seller.logo ? 
+                    `<div style="text-align: center; margin-bottom: 8px;">
+                        <img src="${seller.logo}" alt="Logo" style="max-width: 45mm; max-height: 15mm;">
+                    </div>` : 
+                    `<div style="text-align: center; margin-bottom: 8px; font-size: 24px;">
+                        <i class="ph ph-storefront"></i>
+                    </div>`
+                }`;
+        }
+
+        // Header Section
+        html += `
+            <!-- Header Section -->
+            <div style="text-align: center; font-weight: 700;">`;
+        
+        if (isBill) {
+            html += `
+                <div style="font-size: 14px; margin-bottom: 4px;">${seller.gstEnabled ? 'TAX INVOICE' : 'BILL/RECEIPT'}</div>
+                <div style="font-size: 16px; margin-bottom: 4px;">${seller.businessName || 'Your Business'}</div>
+                ${seller.address ? 
+                    `<div style="font-size: 10px; margin-bottom: 2px;">${seller.address}</div>` : ''}
+                ${seller.phone ? 
+                    `<div style="font-size: 10px; margin-bottom: 2px;">Ph: ${seller.phone}</div>` : ''}
+                ${seller.gstEnabled && seller.gstIN ? 
+                    `<div style="font-size: 10px; margin-bottom: 2px;">GSTIN: ${seller.gstIN}</div>` : ''}`;
+        } else if (isKOT) {
+            html += `
+                <div style="font-size: 20px; margin-bottom: 4px; font-weight: 800;">KOT</div>`;
+            
+            // Table info for KOT (if available)
+            if (orderData.tableId) {
+                html += `
+                    <div style="font-size: 18px; margin-bottom: 4px;">TABLE ${orderData.tableId}</div>`;
+            }
+        }
+        
+        html += `</div>`;
+
+        // Separator
+        html += `<div style="border-bottom: 1px dashed #000; margin: 8px 0;"></div>`;
+
+        // Order details
+        html += `
+            <!-- Order Details -->
+            <div style="font-size: 12px; font-weight: 600;">
+                <div style="margin-bottom: 4px;">${isKOT ? 'KOT' : 'Bill'} #: ${orderData.billNo || orderData.id?.substring(0,8) || 'N/A'}</div>
+                <div style="margin-bottom: 4px;">Date: ${new Date(orderData.date?.toDate ? orderData.date.toDate() : orderData.date || new Date()).toLocaleDateString()}</div>
+                <div style="margin-bottom: 4px;">Time: ${new Date(orderData.date?.toDate ? orderData.date.toDate() : orderData.date || new Date()).toLocaleTimeString()}</div>
+                ${orderData.custName || orderData.customer?.name ? 
+                    `<div style="margin-bottom: 4px;">Customer: ${orderData.custName || orderData.customer?.name}</div>` : ''}
+                ${orderData.tableId ? 
+                    `<div style="margin-bottom: 4px;">Table: ${orderData.tableId}</div>` : ''}
+            </div>`;
+
+        // Separator
+        html += `<div style="border-bottom: 1px dashed #000; margin: 8px 0;"></div>`;
+
+        // Items Section
+        html += `
+            <!-- Items Section -->
+            <div style="font-size: 14px; font-weight: 700; text-align: center; margin-bottom: 8px;">ITEMS</div>`;
+
+        // Initialize totals for bills
+        let calculatedSubTotal = 0;
+        let totalTaxableAmount = 0;
+        let totalCGST = 0;
+        let totalSGST = 0;
+
+        if (orderData.items && orderData.items.length > 0) {
+            orderData.items.forEach(item => {
+                const quantity = parseFloat(item.quantity || item.qnt || 1);
+                const price = parseFloat(item.price || 0);
+                const amount = quantity * price;
+                
+                if (isBill) {
+                    calculatedSubTotal += amount;
+
+                    // Calculate tax if GST is enabled
+                    if (seller.gstEnabled) {
+                        const taxableAmount = amount;
+                        totalTaxableAmount += taxableAmount;
+                        const cgst = taxableAmount * 0.09;
+                        const sgst = taxableAmount * 0.09;
+                        totalCGST += cgst;
+                        totalSGST += sgst;
+                    }
+
+                    html += `
+                        <div style="font-size: 12px; margin-bottom: 8px;">
+                            <div style="font-weight: 600;">${item.title || 'Unknown Item'}</div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span>${quantity} x ${price.toFixed(2)}</span>
+                                <span style="font-weight: 600;">${amount.toFixed(2)}</span>
+                            </div>
+                        </div>`;
+                } else if (isKOT) {
+                    // KOT format - emphasize quantity more for kitchen staff
+                    html += `
+                        <div style="font-size: 14px; margin-bottom: 12px; display: flex;">
+                            <div style="font-size: 18px; font-weight: 700; margin-right: 8px; min-width: 30px;">${quantity}x</div>
+                            <div style="font-weight: 600;">${item.title || 'Unknown Item'}</div>
+                        </div>`;
+                    
+                    // Add item-specific instructions if any
+                    if (item.instructions) {
+                        html += `
+                            <div style="font-size: 12px; margin: -8px 0 12px 38px; font-style: italic;">
+                                ${item.instructions.trim()}
+                            </div>`;
+                    }
+                }
+            });
+        }
+
+        // For Bills only: add totals section
+        if (isBill) {
+            html += `
+                <div style="border-bottom: 1px dashed #000; margin: 8px 0;"></div>
+                <div style="font-size: 12px; font-weight: 600;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span>Sub Total:</span>
+                        <span>${calculatedSubTotal.toFixed(2)}</span>
+                    </div>`;
+
+            // Add GST details if enabled
+            if (seller.gstEnabled) {
+                html += `
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span>CGST (9%):</span>
+                        <span>${totalCGST.toFixed(2)}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span>SGST (9%):</span>
+                        <span>${totalSGST.toFixed(2)}</span>
+                    </div>`;
+            }
+
+            // Add other charges
+            if (orderData.charges && Array.isArray(orderData.charges)) {
+                orderData.charges.forEach(charge => {
+                    if (charge.value && parseFloat(charge.value) !== 0) {
+                        html += `
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span>${charge.name || 'Charge'}:</span>
+                                <span>${parseFloat(charge.value).toFixed(2)}</span>
+                            </div>`;
+                    }
+                });
+            }
+
+            // Add discount if any
+            if (orderData.discount && parseFloat(orderData.discount) > 0) {
+                html += `
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px; color: #22C55E;">
+                        <span>Discount:</span>
+                        <span>-${parseFloat(orderData.discount).toFixed(2)}</span>
+                    </div>`;
+            }
+
+            // Calculate final total - this is a simplification, in practice we should use the order's total or calculate properly
+            const grandTotal = orderData.total || calculatedSubTotal + totalCGST + totalSGST - (parseFloat(orderData.discount) || 0);
+
+            // Final total
+            html += `
+                <div style="border-top: 2px solid #000; border-bottom: 2px solid #000; margin: 8px 0; padding: 8px 0;">
+                    <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: 700;">
+                        <span>TOTAL:</span>
+                        <span>₹${typeof grandTotal === 'number' ? grandTotal.toFixed(2) : grandTotal}</span>
+                    </div>
+                </div>
+
+                <!-- Payment Details -->
+                <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px;">
+                    <div>Payment Mode: ${paymentMode || orderData.payMode || 'CASH'}</div>
+                    ${orderData.notes ? `<div style="margin-top: 4px;">${orderData.notes}</div>` : ''}
+                </div>`;
+
+            // Footer for bills
+            html += `
+                <!-- Footer -->
+                <div style="text-align: center; margin-top: 12px;">
+                    <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">Thank You!</div>
+                    <div style="font-size: 12px; margin-bottom: 4px;">Visit Again</div>
+                    ${seller.website ? 
+                        `<div style="font-size: 10px;">${seller.website}</div>` : ''}
+                </div>`;
+        } else if (isKOT) {
+            // Special instructions for KOT
+            if (orderData.instructions) {
+                html += `
+                    <div style="border-bottom: 1px dashed #000; margin: 8px 0;"></div>
+                    <div style="font-size: 14px; font-weight: 700; text-align: center; margin-bottom: 4px;">NOTES</div>
+                    <div style="font-size: 12px; margin-bottom: 8px;">
+                        ${orderData.instructions.trim()}
+                    </div>`;
+            }
+        }
+
+        // Close main container
+        html += `</div>`;
+
+        return html;
+    }
+
+    /**
+     * Create a printable HTML document with proper styling
+     * @param {string} contentHtml - The inner HTML content
+     * @returns {string} Complete HTML document ready for printing
+     */
+    createPrintableHTML(contentHtml) {
+        return `
+            <html>
+                <head>
+                    <title>Print</title>
+                    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+                    <link href="https://cdn.jsdelivr.net/npm/phosphor-icons@1.4.2/src/css/icons.min.css" rel="stylesheet">
+                    <style>
+                        @media print {
+                            @page { 
+                                size: 58mm auto;
+                                margin: 0mm;
+                                padding: 0mm;
+                            }
+                            body { 
+                                margin: 0;
+                                padding: 0;
+                                color: #000;
+                                background: #fff;
+                                width: 58mm;
+                            }
+                            * {
+                                font-family: 'Inter', 'Courier New', monospace;
+                                line-height: 1.2;
+                                -webkit-print-color-adjust: exact;
+                                print-color-adjust: exact;
+                            }
+                        }
+                    </style>
+                </head>
+                <body>${contentHtml}</body>
+            </html>
+        `;
+    }
+
+    /**
+     * Browser-based print function using hidden iframe
+     * @param {string} htmlContent - The HTML content to print
+     * @param {boolean} autoPrint - Whether to attempt auto-printing without dialog
+     * @returns {Promise<boolean>} True if printing was successful
+     */
+    async browserPrint(htmlContent, autoPrint = false) {
+        return new Promise((resolve, reject) => {
+            try {
+                const printFrame = document.createElement('iframe');
+                Object.assign(printFrame.style, {
+                    position: 'fixed',
+                    top: '-9999px',
+                    left: '-9999px',
+                    width: '0',
+                    height: '0',
+                    border: '0'
+                });
+                
+                document.body.appendChild(printFrame);
+                printFrame.contentDocument.open();
+                printFrame.contentDocument.write(this.createPrintableHTML(htmlContent));
+                printFrame.contentDocument.close();
+
+                const doPrint = () => {
+                    try {
+                        // If autoPrint is enabled, try to use techniques that might suppress the dialog
+                        if (autoPrint && window.navigator.userAgent.indexOf("Chrome") > -1) {
+                            try {
+                                printFrame.contentWindow.focus();
+                                printFrame.contentWindow.document.execCommand('print', false, null);
+                                resolve(true);
+                            } catch (execErr) {
+                                // Fall back to regular print if execCommand fails
+                                console.warn("ExecCommand print failed, falling back:", execErr);
+                                printFrame.contentWindow.print();
+                                resolve(true);
+                            }
+                        } else {
+                            // Regular print dialog for non-Chrome browsers or when autoPrint is disabled
+                            printFrame.contentWindow.focus();
+                            printFrame.contentWindow.print();
+                            resolve(true);
+                        }
+                    } catch (printError) {
+                        console.error("Error triggering browser print:", printError);
+                        reject(new Error("Could not open print dialog. Please check browser pop-up settings."));
+                    }
+                    
+                    // Clean up the iframe after printing
+                    setTimeout(() => {
+                        if (document.body.contains(printFrame)) {
+                            document.body.removeChild(printFrame);
+                        }
+                    }, 1500);
+                };
+
+                if (printFrame.contentWindow.document.readyState === 'complete') {
+                    doPrint();
+                } else {
+                    printFrame.onload = doPrint;
+                }
+            } catch (error) {
+                console.error("Error setting up browser print:", error);
+                reject(error);
+            }
+        });
+    }
+
+    /**
+     * Convert HTML to ESC/POS commands for thermal printers
+     * This is a simplified version that extracts text and basic formatting
+     * @param {string} html - HTML content to convert
+     * @returns {Uint8Array} ESC/POS commands for the printer
+     */
+    async htmlToEscPos(html) {
+        try {
+            let doc;
+            
+            // Create a DOM parser to parse the HTML
+            if (typeof DOMParser !== 'undefined') {
+                // Browser environment
+                const parser = new DOMParser();
+                doc = parser.parseFromString(html, 'text/html');
+            } else {
+                // Fallback for non-browser environments
+                console.warn("DOMParser not available, using simplified HTML parsing");
+                // Create a very simple text-only extraction
+                const textContent = html.replace(/<[^>]*>/g, ' ')
+                                       .replace(/\s+/g, ' ')
+                                       .trim();
+                
+                // Initialize commands array
+                const commands = [];
+                
+                // Initialize printer
+                commands.push(0x1B, 0x40); // ESC @ - Initialize printer
+                
+                // Add text content
+                commands.push(...this.encoder.encode(textContent));
+                
+                // Add feed and cut
+                commands.push(0x1B, 0x64, 5); // Feed 5 lines
+                commands.push(0x1D, 0x56, 0x41); // Partial cut
+                
+                return new Uint8Array(commands);
+            }
+            
+            // Initialize commands array for ESC/POS
+            const commands = [];
+            
+            // Initialize printer
+            commands.push(0x1B, 0x40); // ESC @ - Initialize printer
+            
+            // Extract and process text nodes
+            this.processNode(doc.body, commands);
+            
+            // Add feed and cut at the end
+            commands.push(0x1B, 0x64, 5); // Feed 5 lines
+            commands.push(0x1D, 0x56, 0x41); // Partial cut
+            
+            return new Uint8Array(commands);
+        } catch (error) {
+            console.error("Error converting HTML to ESC/POS:", error);
+            
+            // Fallback to basic text with minimal formatting
+            try {
+                const commands = [];
+                
+                // Initialize printer
+                commands.push(0x1B, 0x40); // ESC @ - Initialize printer
+                
+                // Extract text content by removing HTML tags
+                const textContent = html.replace(/<[^>]*>/g, ' ')
+                                       .replace(/\s+/g, ' ')
+                                       .trim();
+                
+                // Add text with basic formatting
+                commands.push(0x1D, 0x21, 0x00); // Normal size
+                commands.push(0x1B, 0x45, 0x01); // Bold ON
+                commands.push(0x1B, 0x61, 0x01); // Center align
+                commands.push(...this.encoder.encode("--- RECEIPT ---\n\n"));
+                commands.push(0x1B, 0x45, 0x00); // Bold OFF
+                commands.push(0x1B, 0x61, 0x00); // Left align
+                
+                // Add the extracted text content
+                commands.push(...this.encoder.encode(textContent));
+                
+                // Add feed and cut
+                commands.push(0x1B, 0x64, 5); // Feed 5 lines
+                commands.push(0x1D, 0x56, 0x41); // Partial cut
+                
+                return new Uint8Array(commands);
+            } catch (fallbackError) {
+                console.error("Fallback text extraction failed:", fallbackError);
+                throw error; // Throw the original error
+            }
+        }
+    }
+    
+    /**
+     * Process an HTML node and its children to generate ESC/POS commands
+     * @param {Node} node - DOM node to process
+     * @param {Array} commands - Array to append commands to
+     * @private
+     */
+    processNode(node, commands) {
+        // Handle different node types
+        if (node.nodeType === Node.TEXT_NODE) {
+            // Text node - add the text content if not empty (without automatic newline)
+            const text = node.textContent.trim();
+            if (text) {
+                commands.push(...this.encoder.encode(text));
+            }
+            return;
+        }
+        
+        if (node.nodeType !== Node.ELEMENT_NODE) {
+            return; // Skip non-element nodes
+        }
+        
+        // Process element based on tag name
+        const tagName = node.tagName.toLowerCase();
+        let style = null;
+        
+        try {
+            // Try to get computed style if in browser environment
+            style = window.getComputedStyle ? window.getComputedStyle(node) : null;
+        } catch (e) {
+            // Handle absence of window/DOM environment (in case of SSR)
+            style = null;
+        }
+        
+        // Default formatting
+        let addNewline = false;
+        let centerAlign = false;
+        let applyBold = false;
+        let textSize = 0x00; // Normal size
+        
+        // Extract style attributes from inline style if computed style is not available
+        if (!style && node.getAttribute) {
+            const textAlign = node.getAttribute('style')?.match(/text-align:\s*([^;]+)/i)?.[1];
+            const fontWeight = node.getAttribute('style')?.match(/font-weight:\s*([^;]+)/i)?.[1];
+            const fontSize = node.getAttribute('style')?.match(/font-size:\s*([^;]+)/i)?.[1];
+            
+            centerAlign = textAlign === 'center';
+            applyBold = fontWeight === 'bold' || fontWeight === '700' || fontWeight === '800';
+            
+            // Simple fontSize parsing for inline styles
+            if (fontSize) {
+                if (fontSize.includes('px')) {
+                    const size = parseInt(fontSize);
+                    if (size >= 20) {
+                        textSize = 0x11; // Double height, double width
+                    } else if (size >= 16) {
+                        textSize = 0x01; // Normal height, double width
+                    }
+                }
+            }
+        } else if (style) {
+            // Use computed style
+            centerAlign = style.textAlign === 'center';
+            applyBold = style.fontWeight === 'bold' || parseInt(style.fontWeight) >= 700;
+            
+            const fontSize = parseInt(style.fontSize);
+            if (fontSize >= 20) {
+                textSize = 0x11; // Double height, double width
+            } else if (fontSize >= 16) {
+                textSize = 0x01; // Normal height, double width
+            }
+        }
+        
+        // Apply alignment
+        if (centerAlign) {
+            commands.push(0x1B, 0x61, 0x01); // Center align
+        } else {
+            commands.push(0x1B, 0x61, 0x00); // Left align (default)
+        }
+        
+        // Apply bold if needed
+        if (applyBold) {
+            commands.push(0x1B, 0x45, 0x01); // Bold ON
+        }
+        
+        // Apply text size
+        if (textSize !== 0x00) {
+            commands.push(0x1D, 0x21, textSize);
+        }
+        
+        // Special handling for specific elements
+        switch (tagName) {
+            case 'br':
+                commands.push(...this.encoder.encode('\n'));
+                return;
+                
+            case 'hr':
+                commands.push(...this.encoder.encode('-'.repeat(this.printerWidth) + '\n'));
+                return;
+                
+            case 'div':
+            case 'p':
+            case 'h1':
+            case 'h2':
+            case 'h3':
+            case 'h4':
+            case 'h5':
+            case 'h6':
+                addNewline = true;
+                break;
+                
+            case 'img':
+                // Image not supported in this basic implementation
+                // We could extend this to handle simple images using graphics mode
+                commands.push(...this.encoder.encode('[IMAGE]'));
+                addNewline = true;
+                break;
+        }
+        
+        // Process all child nodes
+        for (const child of node.childNodes) {
+            this.processNode(child, commands);
+        }
+        
+        // Add newline if needed after processing all children
+        if (addNewline) {
+            commands.push(...this.encoder.encode('\n'));
+        }
+        
+        // Reset formatting
+        if (applyBold) {
+            commands.push(0x1B, 0x45, 0x00); // Bold OFF
+        }
+        
+        if (textSize !== 0x00) {
+            commands.push(0x1D, 0x21, 0x00); // Normal size
+        }
     }
 
     /**
@@ -649,40 +1272,59 @@ class BluetoothPrinting {
             throw new Error('Printer not connected. Call connect() first.');
         }
 
-        // print byte size
-        console.log("DATA SIZE",data.byteLength);
+        // Log byte size
+        console.log("Printer data size:", data.byteLength, "bytes");
 
         const MAX_RETRIES = 3;
-        const RETRY_DELAY_MS = 300; // Increased retry delay
-        const INTER_CHUNK_DELAY_MS = 100; // New delay between chunks
+        const RETRY_DELAY_MS = 500; // Increased retry delay
+        const INTER_CHUNK_DELAY_MS = 200; // Increased delay between chunks
+        const DEFAULT_CHUNK_SIZE = 100; // Smaller chunk size for better reliability
 
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
+                // Get the best chunk size, but don't exceed our default
                 const CHUNK_SIZE = (this.characteristic?.service?.device?.gatt?.server?.maxGATTCharacteristicWriteSize)
-                    ? Math.min(this.characteristic.service.device.gatt.server.maxGATTCharacteristicWriteSize, 200) // Cap at 200 even if printer reports higher
-                    : 200;
+                    ? Math.min(this.characteristic.service.device.gatt.server.maxGATTCharacteristicWriteSize, DEFAULT_CHUNK_SIZE)
+                    : DEFAULT_CHUNK_SIZE;
+                
+                // Break data into chunks and send with delays between chunks
                 for (let i = 0; i < data.length; i += CHUNK_SIZE) {
                     const chunk = data.slice(i, i + CHUNK_SIZE);
+                    
+                    // Log progress for debugging
+                    if (i % 1000 === 0 || i + CHUNK_SIZE >= data.length) {
+                        console.log(`Sending chunk ${i}-${i + chunk.length} of ${data.length} bytes`);
+                    }
+                    
+                    // Choose write method based on characteristic properties
                     if (this.characteristic.properties.writeWithoutResponse) {
                         await this.characteristic.writeValueWithoutResponse(chunk);
                     } else {
                         await this.characteristic.writeValue(chunk);
                     }
-                    // Add a small delay between sending chunks
-                    if (data.length > CHUNK_SIZE && i < data.length - CHUNK_SIZE) { // Only delay if there are more chunks
+                    
+                    // Add a delay between chunks to give the printer time to process
+                    if (data.length > CHUNK_SIZE && i < data.length - CHUNK_SIZE) {
                         await new Promise(resolve => setTimeout(resolve, INTER_CHUNK_DELAY_MS));
                     }
                 }
-                return true; // Success
+                
+                console.log("Data transmission successful");
+                return true;
             } catch (error) {
                 console.warn(`Attempt ${attempt} to send data failed:`, error.message);
+                
                 if (attempt === MAX_RETRIES) {
                     console.error('Error sending data to printer after multiple retries:', error);
                     throw error; // Rethrow error after max retries
                 }
+                
+                // Wait longer between retries
+                console.log(`Retrying in ${RETRY_DELAY_MS * attempt}ms...`);
                 await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * attempt));
             }
         }
+        
         throw new Error('Failed to send data to printer after multiple retries.');
     }
 
@@ -739,49 +1381,173 @@ class BluetoothPrinting {
 
     /**
      * Print a KOT (Kitchen Order Ticket) for a specific order
+     * This method handles all aspects of printing including connections and error handling
      * @param {string} orderId - The ID of the order to print
+     * @returns {Promise<boolean>} True if printing was successful
      */
     async printKOT(orderId) {
+        if (!orderId) {
+            this._showToast("No order ID provided for KOT printing", "error");
+            return false;
+        }
+
         try {
             // Fetch order data
             const orderData = await this.getOrderData(orderId);
+            if (!orderData) {
+                this._showToast("Order not found", "error");
+                return false;
+            }
 
-            // Connect to printer if not already connected
-            await this.ensurePrinterConnection();
+            // Generate HTML for the KOT
+            const kotHtml = this.generateReceiptHTML(orderData, 'kot');
+            
+            // Show initial status message
+            if (this.connected && this.characteristic) {
+                this._showToast("Printing KOT using connected printer...", "info");
+            } else if (this.lastConnectedDevice) {
+                this._showToast("Connecting to printer for KOT...", "info");
+            } else if (this.isSupported()) {
+                this._showToast("Select a printer to print KOT", "info");
+            }
 
-            // Format the KOT data - build ESC/POS commands
-            const data = await this.formatKOTData(orderData);
-
-            // Send to printer
-            await this.sendData(data);
-            return true;
+            // Try Bluetooth printing first if supported
+            if (this.isSupported()) {
+                try {
+                    // Connect to printer if not already connected
+                    await this.ensurePrinterConnection();
+                    
+                    // Convert HTML to ESC/POS commands
+                    const data = await this.htmlToEscPos(kotHtml);
+                    
+                    // Send to printer
+                    await this.sendData(data);
+                    this._showToast("KOT printed successfully", "success");
+                    return true;
+                } catch (error) {
+                    // Handle error based on type
+                    const errorType = this._handlePrinterError(error);
+                    
+                    // If it's a user cancellation, don't attempt fallback
+                    if (errorType === "user_cancelled") {
+                        return false;
+                    }
+                    
+                    // For other errors, try browser printing as fallback
+                    this._showToast("Attempting browser print for KOT...", "info");
+                    try {
+                        await this.browserPrint(kotHtml, false);
+                        this._showToast("KOT printed successfully via browser", "success");
+                        return true;
+                    } catch (fallbackErr) {
+                        console.error("Browser print fallback failed:", fallbackErr);
+                        this._showToast(`Browser print failed: ${fallbackErr.message}`, "error");
+                        return false;
+                    }
+                }
+            } else {
+                // No Bluetooth support, use browser print directly
+                try {
+                    await this.browserPrint(kotHtml, false);
+                    this._showToast("KOT printed successfully", "success");
+                    return true;
+                } catch (err) {
+                    console.error("Browser print failed:", err);
+                    this._showToast(`Browser print failed: ${err.message}`, "error");
+                    return false;
+                }
+            }
         } catch (error) {
-            console.error('Error printing KOT:', error);
-            throw error;
+            console.error('Error in printKOT:', error);
+            this._showToast(`Failed to print KOT: ${error.message}`, "error");
+            return false;
         }
     }
 
     /**
      * Print a bill receipt for a specific order
+     * This method handles all aspects of printing including connections and error handling
      * @param {string} orderId - The ID of the order to print
+     * @param {string} [paymentMode] - Optional payment mode to include on the bill
+     * @param {boolean} [autoPrint=false] - Whether to attempt auto-printing without dialog
+     * @returns {Promise<boolean>} True if printing was successful
      */
-    async printBill(orderId) {
+    async printBill(orderId, paymentMode, autoPrint = false) {
+        if (!orderId) {
+            this._showToast("No order ID provided for bill printing", "error");
+            return false;
+        }
+
         try {
             // Fetch order data
             const orderData = await this.getOrderData(orderId);
+            if (!orderData) {
+                this._showToast("Order not found", "error");
+                return false;
+            }
 
-            // Connect to printer if not already connected
-            await this.ensurePrinterConnection();
+            // Generate HTML for the bill
+            const billHtml = this.generateReceiptHTML(orderData, 'bill', paymentMode);
+            
+            // Show initial status message
+            if (this.connected && this.characteristic) {
+                this._showToast("Printing bill using connected printer...", "info");
+            } else if (this.lastConnectedDevice) {
+                this._showToast("Connecting to printer for bill...", "info");
+            } else if (this.isSupported()) {
+                this._showToast("Select a printer to print bill", "info");
+            }
 
-            // Format the bill data - build ESC/POS commands
-            const data = this.formatBillData(orderData);
-
-            // Send to printer
-            await this.sendData(data);
-            return true;
+            // Try Bluetooth printing first if supported
+            if (this.isSupported()) {
+                try {
+                    // Connect to printer if not already connected
+                    await this.ensurePrinterConnection();
+                    
+                    // Convert HTML to ESC/POS commands
+                    const data = await this.htmlToEscPos(billHtml);
+                    
+                    // Send to printer
+                    await this.sendData(data);
+                    this._showToast("Bill printed successfully", "success");
+                    return true;
+                } catch (error) {
+                    // Handle error based on type
+                    const errorType = this._handlePrinterError(error);
+                    
+                    // If it's a user cancellation, don't attempt fallback
+                    if (errorType === "user_cancelled") {
+                        return false;
+                    }
+                    
+                    // For other errors, try browser printing as fallback
+                    this._showToast("Attempting browser print for bill...", "info");
+                    try {
+                        await this.browserPrint(billHtml, autoPrint);
+                        this._showToast("Bill printed successfully via browser", "success");
+                        return true;
+                    } catch (fallbackErr) {
+                        console.error("Browser print fallback failed:", fallbackErr);
+                        this._showToast(`Browser print failed: ${fallbackErr.message}`, "error");
+                        return false;
+                    }
+                }
+            } else {
+                // No Bluetooth support, use browser print directly
+                try {
+                    await this.browserPrint(billHtml, autoPrint);
+                    this._showToast("Bill printed successfully", "success");
+                    return true;
+                } catch (err) {
+                    console.error("Browser print failed:", err);
+                    this._showToast(`Browser print failed: ${err.message}`, "error");
+                    return false;
+                }
+            }
         } catch (error) {
-            console.error('Error printing bill:', error);
-            throw error;
+            console.error('Error in printBill:', error);
+            this._showToast(`Failed to print bill: ${error.message}`, "error");
+            return false;
         }
     }
 
@@ -895,255 +1661,135 @@ class BluetoothPrinting {
     }
 
     /**
-     * Format order data into ESC/POS commands for a KOT
-     * @param {Object} order - The order data
-     * @returns {Uint8Array} - Formatted printer commands
+     * Load an image from a URL and convert it to a printer-compatible bitmap
+     * @param {string} imageUrl - URL of the image to load
+     * @param {number} maxWidth - Maximum width for the image in pixels (usually printer width * 8)
+     * @returns {Promise<Uint8Array>} - Commands for printing the image or null if failed
+     * @private
      */
-    async formatKOTData(order) {
-        // Use common formatter with basic options (no centered text)
-        const {
-            commands,
-            printerWidth,
-            printerSizeName,
-            addText,
-            addLine,
-            truncate,
-            formatOrderNumber,
-            formatDateTime,
-            createTextSizes
-        } = this.createPrinterFormatter();
-
-        // Define text size constants based on printer width
-        const TEXT_SIZE = createTextSizes();
-
-        // Top margin
-        commands.push(0x1B, 0x64, 1); // Feed 1 line for 2-inch
-
-        // Table number (if exists)
-        if (order.tableId) {
-            commands.push(0x1B, 0x61, 0x01); // Center
-            commands.push(0x1D, 0x21, TEXT_SIZE.TABLE);
-            addText('TABLE ' + order.tableId);
-            addText(''); // Extra space
+    async loadLogoImage(imageUrl) {
+        if (!imageUrl) return null;
+        
+        // Check cache first
+        if (this.imageCache.has(imageUrl)) {
+            return this.imageCache.get(imageUrl);
         }
-
-        // Order number
-        commands.push(0x1B, 0x61, 0x01); // Center
-        commands.push(0x1D, 0x21, TEXT_SIZE.ORDER);
-        const orderNum = formatOrderNumber(order);
-        addText('ORDER #' + orderNum);
-
-        // Time in clear format
-        commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL); // Normal for all printers
-        const time = formatDateTime(order.date, true);
-        addText(time);
-
-        // Distinctive separator
-        addLine();
-
-        // Items section
-        if (order.items && order.items.length > 0) {
-            order.items.forEach((item, index) => {
-                // Quantity
-                const qty = item.quantity || item.qnt || 1;
-                commands.push(0x1B, 0x61, 0x00); // Left align
-                commands.push(0x1D, 0x21, TEXT_SIZE.QUANTITY);
-                addText(qty + 'x', false);
-
-                // Item name
-                commands.push(0x1D, 0x21, TEXT_SIZE.ITEM);
-                // Adjust title width based on printer size
-                const qtyLength = String(qty).length;
-                const titleMaxWidth = printerWidth - (printerSizeName === '2inch' ? qtyLength + 2 : qtyLength * 2 + 2);
-                const title = truncate(item.title || 'Unknown Item', Math.floor(titleMaxWidth));
-                addText(' ' + title);
-
-                // Special instructions for item
-                if (item.instructions) {
-                    commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL); // Normal size for all printers
-                    addText('  ' + item.instructions.trim());
-                }
-
-                // Add separator between items
-                if (index < order.items.length - 1) {
-                    commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL); // Normal size
-                    addText('- - - - - - - -');
-                }
-
-                // Space between items
-                addText('');
+        
+        try {
+            // Determine maximum width based on printer size
+            const printerWidthPixels = this.printerWidth * 8; // Each character is about 8 pixels
+            const maxHeight = 100; // Limit maximum height to avoid large prints
+            
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                
+                img.onload = () => {
+                    try {
+                        // Create a canvas to process the image
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        
+                        // Calculate dimensions while preserving aspect ratio
+                        let width = img.width;
+                        let height = img.height;
+                        
+                        // Scale down if wider than printer width
+                        if (width > printerWidthPixels) {
+                            const scale = printerWidthPixels / width;
+                            width = printerWidthPixels;
+                            height = Math.floor(height * scale);
+                        }
+                        
+                        // Further limit height if needed
+                        if (height > maxHeight) {
+                            const scale = maxHeight / height;
+                            height = maxHeight;
+                            width = Math.floor(width * scale);
+                        }
+                        
+                        // Ensure width is a multiple of 8 for byte alignment
+                        width = Math.floor(width / 8) * 8;
+                        
+                        // Set canvas dimensions
+                        canvas.width = width;
+                        canvas.height = height;
+                        
+                        // Draw and process image
+                        ctx.fillStyle = 'white';
+                        ctx.fillRect(0, 0, width, height);
+                        ctx.drawImage(img, 0, 0, width, height);
+                        
+                        // Get image data
+                        const imageData = ctx.getImageData(0, 0, width, height);
+                        const pixels = imageData.data;
+                        
+                        // Process image data for printer
+                        const commands = [];
+                        
+                        // Center alignment
+                        commands.push(0x1B, 0x61, 0x01);
+                        
+                        // Calculate bytes needed for each line (width / 8)
+                        const bytesPerLine = width / 8;
+                        
+                        // Use GS v 0 raster bit image command - more compatible with various printers
+                        commands.push(0x1D, 0x76, 0x30, 0x00);
+                        
+                        // xL, xH - width in bytes (low, high bytes)
+                        commands.push(bytesPerLine & 0xFF);
+                        commands.push((bytesPerLine >> 8) & 0xFF);
+                        
+                        // yL, yH - height in pixels (low, high bytes)
+                        commands.push(height & 0xFF);
+                        commands.push((height >> 8) & 0xFF);
+                        
+                        // Convert image data to bitmap
+                        for (let y = 0; y < height; y++) {
+                            for (let x = 0; x < bytesPerLine; x++) {
+                                let b = 0;
+                                for (let bit = 0; bit < 8; bit++) {
+                                    const xPos = x * 8 + bit;
+                                    const i = (y * width + xPos) * 4;
+                                    
+                                    // Convert to grayscale and check threshold
+                                    const gray = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
+                                    
+                                    // Set bit if pixel is dark (invert because thermal printers print black)
+                                    if (gray < 128) {
+                                        b |= (0x80 >> bit);
+                                    }
+                                }
+                                commands.push(b);
+                            }
+                        }
+                        
+                        // Return to left alignment
+                        commands.push(0x1B, 0x61, 0x00);
+                        
+                        // Create result and cache it
+                        const result = new Uint8Array(commands);
+                        this.imageCache.set(imageUrl, result);
+                        
+                        resolve(result);
+                    } catch (error) {
+                        console.error('Error processing logo image:', error);
+                        resolve(null);
+                    }
+                };
+                
+                img.onerror = () => {
+                    console.error('Failed to load logo image:', imageUrl);
+                    resolve(null);
+                };
+                
+                // Set crossOrigin to allow processing images from other domains
+                img.crossOrigin = 'anonymous';
+                img.src = imageUrl;
             });
+        } catch (error) {
+            console.error('Error in loadLogoImage:', error);
+            return null;
         }
-
-        // General instructions if any
-        if (order.instructions) {
-            addLine();
-            commands.push(0x1B, 0x61, 0x01); // Center
-            commands.push(0x1D, 0x21, TEXT_SIZE.NOTES_HEADER);
-            addText('NOTES');
-
-            commands.push(0x1B, 0x61, 0x00); // Left align
-            commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL); // Normal size for all printers
-            let notes = order.instructions.trim();
-            while (notes.length > 0) {
-                addText(truncate(notes, printerWidth));
-                notes = notes.substring(printerWidth);
-            }
-        }
-
-        // Bottom margin and cut
-        commands.push(0x1B, 0x64, 3); // Feed 3 lines
-        commands.push(0x1D, 0x56, 0x41); // Partial cut
-
-        return new Uint8Array(commands);
-    }
-
-    /**
-     * Format order data into ESC/POS commands for a bill
-     * @param {Object} order - The order data
-     * @returns {Uint8Array} - Formatted printer commands
-     */
-    formatBillData(order) {
-        // Use common formatter with centered text option enabled
-        const {
-            commands,
-            printerSizeName,
-            addText,
-            addLine,
-            addCenteredText,
-            formatOrderNumber,
-            formatDateTime,
-            createTextSizes
-        } = this.createPrinterFormatter(true);
-
-        // Define text size constants based on printer width
-        const TEXT_SIZE = createTextSizes(true);
-
-        // Header
-        const seller = window.UserSession?.seller || {};
-
-        // Business name
-        commands.push(0x1D, 0x21, TEXT_SIZE.HEADER);
-        addCenteredText(seller.businessName || 'Your Business');
-        commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL);
-
-        // Business details
-        commands.push(0x1B, 0x21, 0x00); // Normal for all printers
-        if (seller.address) addCenteredText(seller.address);
-        if (seller.phone) addCenteredText(`Ph: ${seller.phone}`);
-        if (seller.gstEnabled && seller.gstIN) {
-            addCenteredText('GSTIN:');
-            addCenteredText(seller.gstIN);
-        }
-        commands.push(0x1B, 0x21, 0x00);
-
-        addLine();
-
-        // Bill details in normal text
-        const orderNum = formatOrderNumber(order);
-        addText(`Bill #: ${orderNum}`);
-
-        const dateTime = formatDateTime(order.date);
-        addText(`Date: ${dateTime.date}`);
-        addText(`Time: ${dateTime.time}`);
-
-        if (order.customer?.name) {
-            addText(`Cust: ${order.customer.name}`);
-        }
-
-        addLine();
-
-        // Items header
-        commands.push(0x1D, 0x21, TEXT_SIZE.HEADER);
-        addCenteredText('ITEMS');
-        commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL);
-
-        // Calculate totals
-        let subTotal = 0;
-        let totalGST = 0;
-        let totalCharges = 0;
-        let totalDiscount = 0;
-
-        // Items list with running total calculation
-        if (order.items && order.items.length > 0) {
-            commands.push(0x1B, 0x21, 0x00); // Normal size
-            order.items.forEach(item => {
-                const qty = item.quantity || item.qnt || 1;
-                const price = parseFloat(item.price || 0);
-                const amount = qty * price;
-                subTotal += amount;
-
-                addText(item.title || 'Unknown Item');
-                addText(`${qty} x ${price.toFixed(2)} = ${amount.toFixed(2)}`);
-            });
-        }
-
-        addLine();
-
-        // Totals section with clear formatting
-        // Normal size for all printers
-        commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL);
-        addText(`Sub Total: ${subTotal.toFixed(2)}`);
-
-        // GST calculations if enabled
-        if (seller.gstEnabled) {
-            const gst = subTotal * 0.18;
-            totalGST = gst;
-            addText(`CGST (9%): ${(gst / 2).toFixed(2)}`);
-            addText(`SGST (9%): ${(gst / 2).toFixed(2)}`);
-        }
-
-        // Additional charges
-        if (order.charges && Array.isArray(order.charges)) {
-            order.charges.forEach(charge => {
-                if (charge.value) {
-                    const chargeValue = parseFloat(charge.value);
-                    totalCharges += chargeValue;
-                    addText(`${charge.name}: ${chargeValue.toFixed(2)}`);
-                }
-            });
-        }
-
-        // Discount
-        if (order.discount && parseFloat(order.discount) > 0) {
-            totalDiscount = parseFloat(order.discount);
-            addText(`Discount: -${totalDiscount.toFixed(2)}`);
-        }
-
-        addLine();
-
-        // Calculate final total
-        const grandTotal = subTotal + totalGST + totalCharges - totalDiscount;
-
-        // Grand total
-        commands.push(0x1D, 0x21, TEXT_SIZE.TOTAL);
-        addCenteredText('TOTAL');
-        addCenteredText(`Rs. ${grandTotal.toFixed(2)}`);
-        commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL);
-
-        addLine();
-
-        // Payment details - normal size for all printers
-        commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL);
-        addText(`Payment: ${order.payMode || 'CASH'}`);
-
-        // Footer
-        addLine();
-        commands.push(0x1D, 0x21, TEXT_SIZE.FOOTER);
-        addCenteredText('Thank You!');
-        addCenteredText('Visit Again');
-        commands.push(0x1D, 0x21, TEXT_SIZE.NORMAL);
-
-        if (seller.website) {
-            addCenteredText(seller.website);
-        }
-
-        // Feed and Cut
-        commands.push(0x1B, 0x64, 0x04); // Feed 4 lines
-        commands.push(0x1D, 0x56, 0x00); // Full cut
-        commands.push(0x1B, 0x45, 0x00); // Bold OFF
-
-        return new Uint8Array(commands);
     }
 }
 
