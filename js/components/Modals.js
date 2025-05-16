@@ -824,6 +824,62 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
         window.BluetoothPrinting ? window.BluetoothPrinting.connected : false
     );
     const [connectingPrinter, setConnectingPrinter] = React.useState(false);
+    const [managedPrinters, setManagedPrinters] = React.useState([]);
+    const [selectedPrinter, setSelectedPrinter] = React.useState(null);
+    const [showPrinterDropdown, setShowPrinterDropdown] = React.useState(false);
+    const printerDropdownRef = React.useRef(null);
+
+    // Load managed printers
+    React.useEffect(() => {
+        if (window.BluetoothPrinting) {
+            const printers = window.BluetoothPrinting.getSavedPrinters() || [];
+            setManagedPrinters(printers);
+
+            // Set the active printer (connected, default, or first available)
+            const connectedPrinter = window.BluetoothPrinting.device ?
+                printers.find(p => p.deviceId === window.BluetoothPrinting.device.id) : null;
+
+            const activeId = window.BluetoothPrinting.getActivePrinterId();
+            const activePrinter = printers.find(p => p.id === activeId);
+
+            const defaultPrinter = printers.find(p => p.isDefault);
+
+            setSelectedPrinter(connectedPrinter || activePrinter || defaultPrinter || (printers.length > 0 ? printers[0] : null));
+
+            // Try to reconnect to the saved printer if we have one and we're not already connected
+            if (isOpen && !window.BluetoothPrinting.connected && window.BluetoothPrinting.lastConnectedDevice) {
+                tryReconnectToPrinter();
+            }
+        }
+    }, [isOpen]);
+
+    // Attempt to reconnect to the last used printer when the modal opens
+    const tryReconnectToPrinter = React.useCallback(async () => {
+        if (!window.BluetoothPrinting || window.BluetoothPrinting.connected) return;
+
+        try {
+            setConnectingPrinter(true);
+            console.log('OrderRoom: Attempting to reconnect to saved printer...');
+
+            // First try silent reconnect without showing any message to avoid UI clutter
+            const reconnected = await window.BluetoothPrinting.attemptSilentReconnect();
+
+            if (reconnected) {
+                setPrinterConnected(true);
+                // Show success message only when reconnection is successful
+                if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                    window.ModalManager.showToast(`Printer ready`, { type: "success" });
+                } else {
+                    showToast(`Printer ready`, "success");
+                }
+            }
+        } catch (error) {
+            console.error('Error reconnecting to printer:', error);
+            // Don't show error toast for reconnection attempts to reduce notification spam
+        } finally {
+            setConnectingPrinter(false);
+        }
+    }, []);
 
     // Debug logging
     React.useEffect(() => {
@@ -859,8 +915,19 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
         }
     }, [isOpen]);
 
-    // No longer attempt to automatically connect to printer on modal open
-    // This was causing repeated prompts. Users can connect manually from the menu.
+    // Handle clicks outside of printer dropdown
+    React.useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (printerDropdownRef.current && !printerDropdownRef.current.contains(event.target)) {
+                setShowPrinterDropdown(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, []);
 
     // Keep the disconnect function when closing the room
     React.useEffect(() => {
@@ -963,6 +1030,57 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
             element.removeEventListener('touchmove', handleTouchMove);
         };
     }, [isOpen, isMobile]);
+
+    // Handle printer selection
+    const handlePrinterSelect = (printer) => {
+        if (!printer) return;
+
+        setSelectedPrinter(printer);
+        setShowPrinterDropdown(false);
+
+        if (window.BluetoothPrinting) {
+            // Set as active printer for printing operations
+            window.BluetoothPrinting.setActivePrinterId(printer.id);
+
+            // If we need to connect to the selected printer
+            if (!printerConnected && printer.deviceId) {
+                setConnectingPrinter(true);
+
+                // Try to connect to this specific printer using its deviceId
+                window.BluetoothPrinting.lastConnectedDevice = {
+                    id: printer.deviceId,
+                    name: printer.name || printer.deviceName
+                };
+
+                window.BluetoothPrinting.connect()
+                    .then(() => {
+                        setPrinterConnected(true);
+                        if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                            window.ModalManager.showToast(`Connected to ${printer.name}`, { type: "success" });
+                        } else {
+                            showToast(`Connected to ${printer.name}`, "success");
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Error connecting to printer:", error);
+                        // Only show error messages for non-cancellation errors
+                        if (error.name !== "NotFoundError" &&
+                            !error.message.includes("Device selection cancelled") &&
+                            !error.message.includes("cancelled by user") &&
+                            !error.message.includes("No printer selected")) {
+                            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
+                                window.ModalManager.showToast("Error connecting to printer", { type: "error" });
+                            } else {
+                                showToast("Error connecting to printer", "error");
+                            }
+                        }
+                    })
+                    .finally(() => {
+                        setConnectingPrinter(false);
+                    });
+            }
+        }
+    };
 
     // Handle smooth closing animation
     const handleClose = () => {
@@ -1082,62 +1200,7 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
                 className="absolute right-0 top-12 w-52 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden z-50"
             >
                 <div className="py-1">
-                    {window.BluetoothPrinting && window.BluetoothPrinting.isSupported() && (
-                        <button
-                            className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3"
-                            onClick={() => {
-                                setIsMenuOpen(false);
-                                if (printerConnected) {
-                                    // Disconnect printer
-                                    window.BluetoothPrinting.disconnect()
-                                        .then(() => {
-                                            setPrinterConnected(false);
-                                            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                                window.ModalManager.showToast("Printer disconnected", { type: "info" });
-                                            } else {
-                                                showToast("Printer disconnected", "info");
-                                            }
-                                        })
-                                        .catch(err => {
-                                            console.error("Error disconnecting printer:", err);
-                                        });
-                                } else {
-                                    // Connect to printer
-                                    setConnectingPrinter(true);
-                                    window.BluetoothPrinting.connect()
-                                        .then(() => {
-                                            setPrinterConnected(true);
-                                            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                                window.ModalManager.showToast("Printer connected successfully", { type: "success" });
-                                            } else {
-                                                showToast("Printer connected successfully", "success");
-                                            }
-                                        })
-                                        .catch(error => {
-                                            console.error("Error connecting to printer:", error);
-                                            // Only show error messages for non-cancellation errors
-                                            if (error.name !== "NotFoundError" &&
-                                                !error.message.includes("Device selection cancelled") &&
-                                                !error.message.includes("cancelled by user") &&
-                                                !error.message.includes("No printer selected")) {
-                                                if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                                    window.ModalManager.showToast("Error connecting to printer", { type: "error" });
-                                                } else {
-                                                    showToast("Error connecting to printer", "error");
-                                                }
-                                            }
-                                        })
-                                        .finally(() => {
-                                            setConnectingPrinter(false);
-                                        });
-                                }
-                            }}
-                        >
-                            <i className={`ph ph-printer ${printerConnected ? 'text-green-500' : 'text-red-500'}`}></i>
-                            <span>{printerConnected ? 'Disconnect Printer' : 'Connect Printer'}</span>
-                        </button>
-                    )}
-
+                    {/* Removed printer management/disconnect button */}
                     <button
                         className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3"
                         onClick={() => {
@@ -1363,23 +1426,94 @@ function OrderRoom({ isOpen, onClose, tableId, variant, orderStatus = "KITCHEN",
                         <h2 className="text-xl font-semibold">{variant || `Table ${tableId}`}</h2>
                         <div className="flex items-center gap-3">
                             {window.BluetoothPrinting && window.BluetoothPrinting.isSupported() && (
-                                <div
-                                    className={`flex items-center ${printerConnected ? 'text-green-600' : 'text-gray-400'}`}
-                                    title={printerConnected ? 'Printer connected' : 'Printer not connected'}
-                                >
-                                    <i className="ph ph-printer text-xl"></i>
-                                    {connectingPrinter && (
-                                        <div className="ml-1 w-3 h-3 border-2 border-t-transparent border-gray-400 rounded-full animate-spin"></div>
+                                <div className="relative" ref={printerDropdownRef}>
+                                    <div
+                                        className={`flex items-center gap-2 px-2 py-1 rounded-lg cursor-pointer ${printerConnected ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-600'} hover:bg-opacity-80 transition-colors`}
+                                        onClick={() => setShowPrinterDropdown(!showPrinterDropdown)}
+                                        title={printerConnected ? (selectedPrinter?.name || 'Printer connected') : 'Select printer'}
+                                    >
+                                        <i className="ph ph-printer text-xl"></i>
+                                        {/* Show selected printer name or fallback */}
+                                        <span className="max-w-[120px] truncate text-sm font-medium">
+                                            {selectedPrinter?.name || (printerConnected ? 'Connected' : 'No Printer')}
+                                        </span>
+                                        {connectingPrinter ? (
+                                            <div className="w-3 h-3 border-2 border-t-transparent border-current rounded-full animate-spin"></div>
+                                        ) : (
+                                            <i className={`ph ph-caret-${showPrinterDropdown ? 'up' : 'down'} text-xs`}></i>
+                                        )}
+                                    </div>
+
+                                    {/* Printer Dropdown */}
+                                    {showPrinterDropdown && (
+                                        <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-20 w-56">
+                                            <div className="p-2 border-b border-gray-100">
+                                                <div className="text-sm font-medium text-gray-800">Select Printer</div>
+                                            </div>
+                                            <div className="max-h-56 overflow-y-auto">
+                                                {managedPrinters.length > 0 ? (
+                                                    <>
+                                                        {managedPrinters.map(printer => (
+                                                            <div
+                                                                key={printer.id}
+                                                                className={`px-3 py-2 flex items-center cursor-pointer ${selectedPrinter?.id === printer.id ? 'bg-red-50 text-red-500' : 'hover:bg-gray-50'}`}
+                                                                onClick={() => handlePrinterSelect(printer)}
+                                                            >
+                                                                <i className={`ph ph-printer mr-2 ${printer.isDefault ? 'text-red-500' : 'text-gray-500'}`}></i>
+                                                                <div className="flex-1 overflow-hidden">
+                                                                    <div className="text-sm font-medium truncate">{printer.name}</div>
+                                                                    {printer.isDefault && <div className="text-xs text-gray-500">Default</div>}
+                                                                </div>
+                                                                {selectedPrinter?.id === printer.id && <i className="ph ph-check text-red-500"></i>}
+                                                            </div>
+                                                        ))}
+                                                        <div className="border-t border-gray-100 p-2">
+                                                            <button
+                                                                className="w-full text-xs text-left px-3 py-2 text-red-500 hover:bg-gray-50 rounded flex items-center gap-2"
+                                                                onClick={() => {
+                                                                    setShowPrinterDropdown(false);
+                                                                    window.BluetoothPrinting.connect()
+                                                                        .then(() => {
+                                                                            setPrinterConnected(true);
+                                                                            // Refresh printers list
+                                                                            const printers = window.BluetoothPrinting.getSavedPrinters() || [];
+                                                                            setManagedPrinters(printers);
+                                                                        });
+                                                                }}
+                                                            >
+                                                                <i className="ph ph-plus-circle"></i>
+                                                                <span>Add New Printer</span>
+                                                            </button>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <div>
+                                                        <div className="px-3 py-3 text-center text-gray-500 text-sm">No printers configured</div>
+                                                        <div className="border-t border-gray-100 p-2">
+                                                            <button
+                                                                className="w-full text-xs text-left px-3 py-2 text-red-500 hover:bg-gray-50 rounded flex items-center gap-2"
+                                                                onClick={() => {
+                                                                    setShowPrinterDropdown(false);
+                                                                    window.BluetoothPrinting.connect()
+                                                                        .then(() => {
+                                                                            setPrinterConnected(true);
+                                                                            // Refresh printers list
+                                                                            const printers = window.BluetoothPrinting.getSavedPrinters() || [];
+                                                                            setManagedPrinters(printers);
+                                                                        });
+                                                                }}
+                                                            >
+                                                                <i className="ph ph-plus-circle"></i>
+                                                                <span>Connect Printer</span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
                                     )}
                                 </div>
                             )}
-                            <button
-                                className="p-2 hover:bg-gray-100 rounded-full"
-                                onClick={() => refreshCompletedOrders(true)}
-                                title="Refresh Orders"
-                            >
-                                <i className="ph ph-arrows-clockwise text-xl text-gray-600"></i>
-                            </button>
                             <div className="relative" ref={menuRef}>
                                 <button
                                     className="p-2 hover:bg-gray-100 rounded-full"
@@ -1632,17 +1766,6 @@ function OrderView({ order, tableId, variant }) {
             // Try Bluetooth printing first if available
             if (window.BluetoothPrinting && window.BluetoothPrinting.isSupported()) {
                 try {
-                    // Check if we already have a printer connected
-                    const printerAlreadyConnected = window.BluetoothPrinting.connected && window.BluetoothPrinting.characteristic;
-
-                    if (printerAlreadyConnected) {
-                        showToast("Printing KOT using connected printer...", "info");
-                    } else if (window.BluetoothPrinting.lastConnectedDevice) {
-                        showToast(`Connecting to printer...`, "info");
-                    } else {
-                        showToast("Select a printer to print KOT", "info");
-                    }
-
                     await window.BluetoothPrinting.printKOT(order.id);
                     showToast("KOT printed successfully", "success");
                     return; // Exit if Bluetooth printing succeeds
@@ -1712,7 +1835,7 @@ function OrderView({ order, tableId, variant }) {
                                 kotHtml += `<div style="font-size: 10px; padding-left: 15px; margin-bottom: 3px;"><em>Notes: ${item.instructions}</em></div>`;
                             }
                         });
-            } else {
+                    } else {
                         kotHtml += "<p>No items</p>";
                     }
 
@@ -1754,7 +1877,7 @@ function OrderView({ order, tableId, variant }) {
                             }
                         }, 1000); // Delay to ensure print dialog is processed
                     };
-                     // For browsers that might not fire onload for dynamically written iframes promptly
+                    // For browsers that might not fire onload for dynamically written iframes promptly
                     if (printFrame.contentWindow.document.readyState === 'complete') {
                         printFrame.onload();
                     }
@@ -1829,7 +1952,7 @@ function OrderView({ order, tableId, variant }) {
                         ${window.UserSessin?.seller?.phone ? `<p style="text-align: center; font-size: 9px; margin:0;">Ph: ${window.UserSession.seller.phone}</p>` : ''}
                         ${window.UserSession?.seller?.gstEnabled && window.UserSession?.seller?.gstIN ? `<p style="text-align: center; font-size: 9px; margin:0;">GSTIN: ${window.UserSession.seller.gstIN}</p>` : ''}
                         <hr style="border:none; border-top: 1px dashed #000; margin: 4px 0;" />
-                        <div style="display:flex; justify-content:space-between; font-size:10px;"><span>Bill: ${orderData.billNo || orderData.id?.substring(0,8) || 'N/A'}</span><span>${new Date(orderData.date?.toDate ? orderData.date.toDate() : orderData.date || new Date()).toLocaleDateString()}</span></div>
+                        <div style="display:flex; justify-content:space-between; font-size:10px;"><span>Bill: ${orderData.billNo || orderData.id?.substring(0, 8) || 'N/A'}</span><span>${new Date(orderData.date?.toDate ? orderData.date.toDate() : orderData.date || new Date()).toLocaleDateString()}</span></div>
                         <div style="font-size:10px;">Time: ${new Date(orderData.date?.toDate ? orderData.date.toDate() : orderData.date || new Date()).toLocaleTimeString()}</div>
                         ${orderData.customer?.name ? `<p style="font-size:10px;">Cust: ${orderData.customer.name}</p>` : ''}
                         ${orderData.tableId ? `<p style="font-size:10px;">Table: ${orderData.tableId}</p>` : ''}
@@ -1853,10 +1976,10 @@ function OrderView({ order, tableId, variant }) {
                         });
                     }
                     billHtml += `</tbody></table><hr style="border:none; border-top: 1px dashed #000; margin: 4px 0;" />`;
-                    
+
                     const subTotalForDisplay = orderData.subTotal?.toFixed(2) || calculatedSubTotal.toFixed(2);
                     billHtml += `<div style="display:flex; justify-content:space-between; font-size:10px;"><span>Subtotal:</span><span>${subTotalForDisplay}</span></div>`;
-                    
+
                     let totalAmount = parseFloat(orderData.subTotal || calculatedSubTotal);
                     if (orderData.discount && parseFloat(orderData.discount) > 0) {
                         const discountVal = parseFloat(orderData.discount);
@@ -1878,7 +2001,7 @@ function OrderView({ order, tableId, variant }) {
                     billHtml += `<div style="display:flex; justify-content:space-between; font-weight:bold; font-size: 12px;"><span>TOTAL:</span><span>${orderData.total?.toFixed(2)}</span></div>`; // Use orderData.total directly
                     billHtml += `<hr style="border:none; border-top: 1px solid #000; margin: 4px 0;" />`;
                     billHtml += `<p style="font-size:10px;"><strong>Mode:</strong> ${orderData.payMode || 'N/A'}</p>`;
-                    if(orderData.notes) billHtml += `<p style="font-size:9px;">Notes: ${orderData.notes}</p>`;
+                    if (orderData.notes) billHtml += `<p style="font-size:9px;">Notes: ${orderData.notes}</p>`;
                     billHtml += `<p style="text-align:center; font-size:9px; margin-top:8px;">Thank you! Visit Again!</p></div>`;
                     // --- End Bill HTML Formatting ---
 
@@ -1888,7 +2011,7 @@ function OrderView({ order, tableId, variant }) {
                     printFrame.contentDocument.open();
                     printFrame.contentDocument.write('<html><head><title>Print Bill</title><style>body{margin:0;padding:0;color:#000;background:#fff} @media print{@page{size:80mm auto;margin:3mm} html,body{width:74mm; font-size: 10px;} h2,p,div,span,th,td{margin:0 0 2px 0; padding:0;} table{width:100%;} hr{margin:3px 0;}}</style></head><body>' + billHtml + '</body></html>');
                     printFrame.contentDocument.close();
-                    
+
                     const doPrint = () => {
                         try {
                             printFrame.contentWindow.focus();
@@ -1915,15 +2038,15 @@ function OrderView({ order, tableId, variant }) {
 
             // Only complete order if it wasn't a user cancellation of Bluetooth and print was attempted or bill printing is disabled
             if (!userCancelledBluetooth) {
-            const orderRef = window.sdk.db.collection("Orders").doc(order.id);
-            await orderRef.update({
-                status: window.sdk.FieldValue.arrayUnion({
-                    label: "COMPLETED",
-                    date: new Date()
-                }),
-                currentStatus: {
-                    label: "COMPLETED",
-                    date: new Date()
+                const orderRef = window.sdk.db.collection("Orders").doc(order.id);
+                await orderRef.update({
+                    status: window.sdk.FieldValue.arrayUnion({
+                        label: "COMPLETED",
+                        date: new Date()
+                    }),
+                    currentStatus: {
+                        label: "COMPLETED",
+                        date: new Date()
                     },
                     printed: billPrintedSuccessfully // Optionally track if bill was printed
                 });
@@ -1934,7 +2057,7 @@ function OrderView({ order, tableId, variant }) {
                 return billPrintedSuccessfully;
             } else {
                 // User cancelled Bluetooth, don't complete order automatically
-                return false; 
+                return false;
             }
 
         } catch (err) {
@@ -3744,51 +3867,7 @@ function RecipeItems({ items, setItems }) {
             <div className="flex items-center justify-between mb-3">
                 <h4 className="text-sm font-medium text-gray-700">Recipe Items</h4>
                 <div className="flex items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={() => {
-                            // Function to reload inventory items for debugging
-                            async function reloadInventory() {
-                                try {
-                                    setLoading(true);
-                                    const snapshot = await window.sdk.db.collection("Inventory")
-                                        .orderBy("updatedAt", "desc")
-                                        .limit(100)
-                                        .get();
-
-                                    console.log("RELOAD: Total docs from Firestore:", snapshot.docs.length);
-
-                                    const items = snapshot.docs.map(doc => {
-                                        const data = doc.data();
-                                        console.log("RELOAD: Item data:", data.name, doc.id);
-                                        return new InventoryItem({
-                                            id: doc.id,
-                                            name: data.name || '',
-                                            quantity: Number(data.quantity || 0),
-                                            unit: data.unit || '',
-                                            minQuantity: Number(data.minQuantity || 0),
-                                            date: data.date?.toDate ? data.date.toDate() : new Date(),
-                                            updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(),
-                                            lastUpdated: data.lastUpdated || (data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : new Date().toISOString())
-                                        });
-                                    });
-
-                                    setInventoryItems(items);
-                                    setLoading(false);
-                                    showToast("Inventory items reloaded for debugging", "success");
-                                } catch (error) {
-                                    console.error("Error reloading inventory items:", error);
-                                    setLoading(false);
-                                    showToast("Failed to reload inventory", "error");
-                                }
-                            }
-
-                            reloadInventory();
-                        }}
-                        className="text-xs bg-blue-100 text-blue-600 py-1 px-2 rounded flex items-center"
-                    >
-                        <i className="ph ph-arrows-clockwise mr-1"></i> Reload
-                    </button>
+                    {/* Removed reload button */}
                     <button
                         type="button"
                         onClick={handleAddItem}
@@ -3989,62 +4068,7 @@ const renderContextMenu = () => {
             className="absolute right-0 top-12 w-52 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden z-50"
         >
             <div className="py-1">
-                {window.BluetoothPrinting && window.BluetoothPrinting.isSupported() && (
-                    <button
-                        className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3"
-                        onClick={() => {
-                            setIsMenuOpen(false);
-                            if (printerConnected) {
-                                // Disconnect printer
-                                window.BluetoothPrinting.disconnect()
-                                    .then(() => {
-                                        setPrinterConnected(false);
-                                        if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                            window.ModalManager.showToast("Printer disconnected", { type: "info" });
-                                        } else {
-                                            showToast("Printer disconnected", "info");
-                                        }
-                                    })
-                                    .catch(err => {
-                                        console.error("Error disconnecting printer:", err);
-                                    });
-                            } else {
-                                // Connect to printer
-                                setConnectingPrinter(true);
-                                window.BluetoothPrinting.connect()
-                                    .then(() => {
-                                        setPrinterConnected(true);
-                                        if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                            window.ModalManager.showToast("Printer connected successfully", { type: "success" });
-                                        } else {
-                                            showToast("Printer connected successfully", "success");
-                                        }
-                                    })
-                                    .catch(error => {
-                                        console.error("Error connecting to printer:", error);
-                                        // Only show error messages for non-cancellation errors
-                                        if (error.name !== "NotFoundError" &&
-                                            !error.message.includes("Device selection cancelled") &&
-                                            !error.message.includes("cancelled by user") &&
-                                            !error.message.includes("No printer selected")) {
-                                            if (window.ModalManager && typeof window.ModalManager.showToast === 'function') {
-                                                window.ModalManager.showToast("Error connecting to printer", { type: "error" });
-                                            } else {
-                                                showToast("Error connecting to printer", "error");
-                                            }
-                                        }
-                                    })
-                                    .finally(() => {
-                                        setConnectingPrinter(false);
-                                    });
-                            }
-                        }}
-                    >
-                        <i className={`ph ph-printer ${printerConnected ? 'text-green-500' : 'text-red-500'}`}></i>
-                        <span>{printerConnected ? 'Disconnect Printer' : 'Connect Printer'}</span>
-                    </button>
-                )}
-
+                {/* Removed printer management/disconnect button */}
                 <button
                     className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3"
                     onClick={() => {

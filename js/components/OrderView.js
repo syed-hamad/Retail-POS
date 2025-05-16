@@ -4,6 +4,52 @@ const ReactDOM = window.ReactDOM;
 
 function OrderView({ order, tableId, variant, onClose }) {
     const [showCheckout, setShowCheckout] = React.useState(false);
+    const [availablePrinters, setAvailablePrinters] = React.useState([]);
+    const [activePrinter, setActivePrinter] = React.useState(null);
+    const [showPrinterDropdown, setShowPrinterDropdown] = React.useState(false);
+
+    // Load printers on component mount
+    React.useEffect(() => {
+        if (window.BluetoothPrinting) {
+            const printers = window.BluetoothPrinting.getSavedPrinters() || [];
+            setAvailablePrinters(printers);
+
+            const activeId = window.BluetoothPrinting.getActivePrinterId();
+            const active = printers.find(p => p.id === activeId) ||
+                printers.find(p => p.isDefault) ||
+                (printers.length > 0 ? printers[0] : null);
+
+            setActivePrinter(active);
+        }
+    }, []);
+
+    // Function to switch active printer
+    const handlePrinterSelect = (printer) => {
+        if (window.BluetoothPrinting && printer) {
+            window.BluetoothPrinting.setActivePrinterId(printer.id);
+            setActivePrinter(printer);
+        }
+        setShowPrinterDropdown(false);
+    };
+
+    // Function to handle adding a new printer
+    const handleAddNewPrinter = () => {
+        if (window.BluetoothPrinting) {
+            window.BluetoothPrinting.connect().then(() => {
+                const updatedPrinters = window.BluetoothPrinting.getSavedPrinters() || [];
+                setAvailablePrinters(updatedPrinters);
+
+                const newActiveId = window.BluetoothPrinting.getActivePrinterId();
+                const newActive = updatedPrinters.find(p => p.id === newActiveId);
+                if (newActive) {
+                    setActivePrinter(newActive);
+                }
+            }).catch(error => {
+                console.error("Error connecting to printer:", error);
+            });
+        }
+        setShowPrinterDropdown(false);
+    };
 
     // Ensure order has all required properties and methods
     React.useEffect(() => {
@@ -196,7 +242,7 @@ function OrderView({ order, tableId, variant, onClose }) {
     return (
         <div className="bg-white rounded-xl shadow-lg p-4 mb-4" style={{ backgroundColor: "#fff8f8", borderRadius: "16px" }}>
             {/* Order Header */}
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-2">
                 <div>
                     <div className="flex items-center">
                         <span className="text-lg font-bold text-gray-800">
@@ -219,6 +265,60 @@ function OrderView({ order, tableId, variant, onClose }) {
                 >
                     <i className="ph ph-plus-circle text-2xl" />
                 </button>
+            </div>
+
+            {/* Printer Selection */}
+            <div className="mb-4 relative">
+                <div
+                    className="flex items-center p-2 bg-red-50 rounded-lg cursor-pointer hover:bg-red-100 transition-colors"
+                    onClick={() => setShowPrinterDropdown(!showPrinterDropdown)}
+                >
+                    <i className="ph ph-printer text-red-500 mr-2"></i>
+                    <div className="flex-1 overflow-hidden">
+                        <div className="text-sm font-medium text-gray-800 truncate">
+                            {activePrinter ? activePrinter.name : 'No printer selected'}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                            {activePrinter && activePrinter.isDefault ? 'Default Printer' : 'Click to select printer'}
+                        </div>
+                    </div>
+                    <i className={`ph ph-caret-${showPrinterDropdown ? 'up' : 'down'} text-gray-500`}></i>
+                </div>
+
+                {/* Printer Dropdown */}
+                {showPrinterDropdown && (
+                    <div className="absolute z-10 w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 max-h-56 overflow-y-auto">
+                        {availablePrinters.length > 0 ? (
+                            <>
+                                {availablePrinters.map(printer => (
+                                    <div
+                                        key={printer.id}
+                                        className={`px-3 py-2 flex items-center cursor-pointer ${activePrinter?.id === printer.id ? 'bg-red-50 text-red-500' : 'hover:bg-gray-50'}`}
+                                        onClick={() => handlePrinterSelect(printer)}
+                                    >
+                                        <i className={`ph ph-printer mr-2 ${printer.isDefault ? 'text-red-500' : 'text-gray-500'}`}></i>
+                                        <div className="flex-1">
+                                            <div className="text-sm font-medium">{printer.name}</div>
+                                            {printer.isDefault && <div className="text-xs text-gray-500">Default</div>}
+                                        </div>
+                                        {activePrinter?.id === printer.id && <i className="ph ph-check text-red-500"></i>}
+                                    </div>
+                                ))}
+                            </>
+                        ) : (
+                            <div className="px-3 py-3 text-center text-gray-500 text-sm">No printers configured</div>
+                        )}
+                        <div className="border-t border-gray-100 mt-1 pt-1">
+                            <div
+                                className="px-3 py-2 flex items-center text-blue-600 hover:bg-blue-50 cursor-pointer"
+                                onClick={handleAddNewPrinter}
+                            >
+                                <i className="ph ph-plus-circle mr-2"></i>
+                                <span className="text-sm font-medium">Add New Printer</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Progress Bar */}

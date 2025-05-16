@@ -280,14 +280,16 @@ class BluetoothPrinting {
      * @returns {string} - Classification of the error
      * @private
      */
-    _handlePrinterError(error) {
+    _handlePrinterError(error, showToasts = true) {
         console.error('Printer error:', error);
 
         // User cancelled the connection
         if (error.message?.includes("cancelled") ||
             error.message?.includes("No printer selected") ||
             error.name === "NotFoundError") {
-            this._showToast("Printing cancelled by user", "info");
+            if (showToasts) {
+                this._showToast("Printing cancelled by user", "info");
+            }
             return "user_cancelled";
         }
 
@@ -297,7 +299,9 @@ class BluetoothPrinting {
             error.message?.includes("not supported as a printer") ||
             error.message?.includes("cannot be used for printing") ||
             (error.name === 'NetworkError' && error.message?.includes("Unsupported device"))) {
-            this._showToast("Could not connect to printer. Please select a compatible thermal printer.", "error");
+            if (showToasts) {
+                this._showToast("Could not connect to printer. Please select a compatible thermal printer.", "error");
+            }
             return "incompatible_device";
         }
 
@@ -306,12 +310,16 @@ class BluetoothPrinting {
             error.message?.includes("disconnected") ||
             error.message?.includes("connection") ||
             error.message?.includes("GATT")) {
-            this._showToast(`Printer connection error: ${error.message}`, "error");
+            if (showToasts) {
+                this._showToast(`Printer connection error: ${error.message}`, "error");
+            }
             return "connection_error";
         }
 
         // Generic errors
-        this._showToast(`Printing error: ${error.message}`, "error");
+        if (showToasts) {
+            this._showToast(`Printing error: ${error.message}`, "error");
+        }
         return "other_error";
     }
 
@@ -930,6 +938,32 @@ class BluetoothPrinting {
             localStorage.setItem('lastConnectedPrinter', JSON.stringify(printerInfo));
             this.lastConnectedDevice = printerInfo;
             console.log('Printer information saved:', printerInfo);
+
+            // Add the printer to the managed printers list if not already there
+            const printers = this.getSavedPrinters();
+            const existingPrinter = printers.find(p => p.deviceId === this.device.id);
+
+            if (!existingPrinter) {
+                // Create a new printer entry for managed printers
+                const newPrinter = {
+                    id: `printer_${Date.now()}`,
+                    name: this.device.name || 'Printer',
+                    deviceId: this.device.id,
+                    deviceName: this.device.name || 'Unknown Printer',
+                    dateAdded: new Date().toISOString(),
+                    lastConnected: new Date().toISOString()
+                };
+
+                // Add to managed printers
+                printers.push(newPrinter);
+                this.savePrinters(printers);
+                console.log('Added printer to managed printers list:', newPrinter);
+            } else {
+                // Update the last connected timestamp
+                existingPrinter.lastConnected = new Date().toISOString();
+                this.savePrinters(printers);
+                console.log('Updated printer last connected timestamp:', existingPrinter);
+            }
         } catch (error) {
             console.error('Error saving printer information:', error);
         }
@@ -1002,20 +1036,20 @@ class BluetoothPrinting {
             const server = await this.device.gatt.connect();
             console.log('Silent reconnect: Connected to GATT server');
 
-            // Get all available services
+            // Get all services
             const services = await server.getPrimaryServices();
-            if (services.length === 0) {
-                throw new Error('No services found on the device');
-            }
+            console.log(`Found ${services.length} services`);
 
-            // Try to find a service we can use for printing
-            let service = null;
-            let characteristic = null;
+            // Try to find a writable characteristic in any of the services
+            let service;
+            let characteristic;
 
             // Try each service to find a writable characteristic
             for (const s of services) {
                 try {
+                    console.log(`Exploring service ${s.uuid}...`);
                     const chars = await s.getCharacteristics();
+                    console.log(`Found ${chars.length} characteristics in service ${s.uuid}`);
 
                     // Find a writable characteristic
                     const writableChar = chars.find(c =>
@@ -1033,12 +1067,15 @@ class BluetoothPrinting {
             }
 
             if (!service || !characteristic) {
-                throw new Error('No suitable service or characteristic found');
+                console.log('No suitable characteristic found during silent reconnect');
+                return false;
             }
+
+            console.log('Silent reconnect: Using service:', service.uuid);
+            console.log('Silent reconnect: Using characteristic:', characteristic.uuid);
 
             this.characteristic = characteristic;
             this.connected = true;
-            this.reconnectAttempted = false;
 
             // Set up disconnection listener to reset state
             this.device.addEventListener('gattserverdisconnected', () => {
@@ -1049,10 +1086,11 @@ class BluetoothPrinting {
 
             console.log('Silent reconnect successful');
             return true;
-        } catch (error) {
-            console.error('Silent reconnect failed:', error);
-            this.connected = false;
-            this.reconnectAttempted = false;
+        } catch (err) {
+            console.log('Silent reconnect failed:', err);
+            // Use _handlePrinterError with showToasts=false to avoid showing notifications
+            this._handlePrinterError(err, false);
+            this.reconnectAttempted = false; // Reset so we can try again if needed
             return false;
         }
     }
@@ -1538,6 +1576,12 @@ class BluetoothPrinting {
             // If silent reconnect fails, try regular connection with user interaction
             if (!silentReconnected) {
                 try {
+                    // Check if we have a saved printer to suggest
+                    if (this.lastConnectedDevice) {
+                        console.log(`Attempting to reconnect to last used printer: ${this.lastConnectedDevice.name}`);
+                        // No toast notification here - let the calling method handle user-facing notifications
+                    }
+
                     await this.connect();
                 } catch (connectError) {
                     // Handle user cancellation with a specific error
@@ -1553,7 +1597,13 @@ class BluetoothPrinting {
                     }
                     throw connectError;
                 }
+            } else {
+                console.log('Successfully reconnected to printer silently!');
+                // Reset reconnect attempt flag since we had a successful connection
+                this.reconnectAttempted = false;
             }
+        } else {
+            console.log('Printer already connected, no reconnection needed');
         }
         return true;
     }
@@ -1608,17 +1658,6 @@ class BluetoothPrinting {
             // Find the appropriate printer for this channel and KOT
             const printer = this.getPrinterForChannel(channel, 'kot');
 
-            // Show initial status message
-            if (printer) {
-                this._showToast(`Printing KOT using ${printer.name || 'assigned printer'}...`, "info");
-            } else if (this.connected && this.characteristic) {
-                this._showToast("Printing KOT using connected printer...", "info");
-            } else if (this.lastConnectedDevice) {
-                this._showToast("Connecting to printer for KOT...", "info");
-            } else if (this.isSupported()) {
-                this._showToast("Select a printer to print KOT", "info");
-            }
-
             // Try Bluetooth printing first if supported
             if (this.isSupported()) {
                 try {
@@ -1638,8 +1677,16 @@ class BluetoothPrinting {
                                 name: printer.name
                             };
 
+                            // Only show a connection message if we're not already connected
+                            if (!this.connected) {
+                                this._showToast(`Connecting to ${printer.name || 'printer'}...`, "info");
+                            }
+
                             // Connect to this specific printer
                             await this.ensurePrinterConnection();
+
+                            // Only show one toast message right before actually printing
+                            this._showToast("Printing KOT...", "info");
 
                             // Convert HTML to printer-compatible canvas data
                             const data = await this.htmlToCanvas(kotHtml);
@@ -1664,8 +1711,20 @@ class BluetoothPrinting {
                         }
                     }
 
-                    // Default printing path
+                    // Default printing path - only show one toast message at a time
+                    if (!this.connected) {
+                        // Only show connection message if we're not connected yet
+                        if (this.lastConnectedDevice) {
+                            this._showToast("Connecting to printer...", "info");
+                        } else {
+                            this._showToast("Select a printer for KOT", "info");
+                        }
+                    }
+
                     await this.ensurePrinterConnection();
+
+                    // We're connected now, show a single printing message
+                    this._showToast("Printing KOT...", "info");
 
                     // Convert HTML to printer-compatible canvas data
                     const data = await this.htmlToCanvas(kotHtml);
@@ -1673,6 +1732,10 @@ class BluetoothPrinting {
                     // Send to printer
                     await this.sendData(data);
                     this._showToast("KOT printed successfully", "success");
+
+                    // Save the connected printer to the printer list
+                    this.savePrinter();
+
                     return true;
                 } catch (error) {
                     // Handle error based on type
@@ -1695,17 +1758,17 @@ class BluetoothPrinting {
                         return false;
                     }
                 }
-            } else {
-                // No Bluetooth support, use browser print directly
-                try {
-                    await this.browserPrint(kotHtml, false);
-                    this._showToast("KOT printed successfully", "success");
-                    return true;
-                } catch (err) {
-                    console.error("Browser print failed:", err);
-                    this._showToast(`Browser print failed: ${err.message}`, "error");
-                    return false;
-                }
+            }
+            // No Bluetooth support, use browser print directly
+            try {
+                this._showToast("Printing KOT via browser...", "info");
+                await this.browserPrint(kotHtml, false);
+                this._showToast("KOT printed successfully", "success");
+                return true;
+            } catch (err) {
+                console.error("Browser print failed:", err);
+                this._showToast(`Browser print failed: ${err.message}`, "error");
+                return false;
             }
         } catch (error) {
             console.error('Error in printKOT:', error);
@@ -1748,17 +1811,6 @@ class BluetoothPrinting {
             // Find the appropriate printer for this channel and bill
             const printer = this.getPrinterForChannel(channel, 'bill');
 
-            // Show initial status message
-            if (printer) {
-                this._showToast(`Printing bill using ${printer.name || 'assigned printer'}...`, "info");
-            } else if (this.connected && this.characteristic) {
-                this._showToast("Printing bill using connected printer...", "info");
-            } else if (this.lastConnectedDevice) {
-                this._showToast("Connecting to printer for bill...", "info");
-            } else if (this.isSupported()) {
-                this._showToast("Select a printer to print bill", "info");
-            }
-
             // Try Bluetooth printing first if supported
             if (this.isSupported()) {
                 try {
@@ -1777,8 +1829,16 @@ class BluetoothPrinting {
                                 name: printer.name
                             };
 
+                            // Only show a connection message if we're not already connected
+                            if (!this.connected) {
+                                this._showToast(`Connecting to ${printer.name || 'printer'}...`, "info");
+                            }
+
                             // Connect to this specific printer
                             await this.ensurePrinterConnection();
+
+                            // Only show one toast message right before actually printing
+                            this._showToast("Printing bill...", "info");
 
                             // Convert HTML to printer-compatible canvas data
                             const data = await this.htmlToCanvas(billHtml);
@@ -1787,7 +1847,7 @@ class BluetoothPrinting {
                             await this.sendData(data);
                             this._showToast("Bill printed successfully", "success");
 
-                            // Save this printer as the last connected
+                            // Save the connected printer to the printer list
                             this.savePrinter();
 
                             return true;
@@ -1803,8 +1863,21 @@ class BluetoothPrinting {
                         }
                     }
 
-                    // Default printing path
+                    // Default printing path - only show one toast message at a time
+                    if (!this.connected) {
+                        // Only show connection message if we're not connected yet
+                        if (this.lastConnectedDevice) {
+                            this._showToast("Connecting to printer...", "info");
+                        } else {
+                            this._showToast("Select a printer for bill", "info");
+                        }
+                    }
+
+                    // Connect to printer if not already connected
                     await this.ensurePrinterConnection();
+
+                    // We're connected now, show a single printing message
+                    this._showToast("Printing bill...", "info");
 
                     // Convert HTML to printer-compatible canvas data
                     const data = await this.htmlToCanvas(billHtml);
@@ -1812,6 +1885,10 @@ class BluetoothPrinting {
                     // Send to printer
                     await this.sendData(data);
                     this._showToast("Bill printed successfully", "success");
+
+                    // Save the connected printer to the printer list
+                    this.savePrinter();
+
                     return true;
                 } catch (error) {
                     // Handle error based on type
@@ -1837,6 +1914,7 @@ class BluetoothPrinting {
             } else {
                 // No Bluetooth support, use browser print directly
                 try {
+                    this._showToast("Printing bill via browser...", "info");
                     await this.browserPrint(billHtml, autoPrint);
                     this._showToast("Bill printed successfully", "success");
                     return true;
@@ -2092,6 +2170,59 @@ class BluetoothPrinting {
             console.error('Error in loadLogoImage:', error);
             return null;
         }
+    }
+
+    /**
+     * Initialize the BluetoothPrinting service and potentially restore connection
+     * Call this method when the app starts
+     */
+    initialize() {
+        console.log('Initializing BluetoothPrinting service');
+
+        // Reset flags
+        this.reconnectAttempted = false;
+
+        // Attempt to silently reconnect if we have a saved printer and browser supports it
+        if (this.isSupported() && this.lastConnectedDevice && !this.connected) {
+            console.log('Attempting to restore printer connection on initialization');
+            setTimeout(() => {
+                this.attemptSilentReconnect()
+                    .then(success => {
+                        if (success) {
+                            console.log('Successfully restored printer connection on initialization');
+                            // Add event listeners for browser visibility changes
+                            this._setupVisibilityListeners();
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Failed to restore printer connection:', err);
+                    });
+            }, 1000); // Slight delay to ensure DOM is fully loaded
+        }
+    }
+
+    /**
+     * Set up visibility change listeners to handle reconnection when tab becomes visible again
+     * @private
+     */
+    _setupVisibilityListeners() {
+        // Document visibility change can help restore connection when tab becomes active
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && !this.connected && this.lastConnectedDevice) {
+                console.log('Document became visible, attempting to restore printer connection');
+                this.reconnectAttempted = false; // Reset the flag to allow reconnection
+                this.attemptSilentReconnect();
+            }
+        });
+
+        // Also try to reconnect on focus
+        window.addEventListener('focus', () => {
+            if (!this.connected && this.lastConnectedDevice) {
+                console.log('Window focused, attempting to restore printer connection');
+                this.reconnectAttempted = false; // Reset the flag to allow reconnection
+                this.attemptSilentReconnect();
+            }
+        });
     }
 }
 

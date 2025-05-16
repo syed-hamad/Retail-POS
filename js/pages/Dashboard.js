@@ -2256,6 +2256,12 @@ function Dashboard() {
         const bluetoothPrinting = window.BluetoothPrinting;
         const managedPrinters = bluetoothPrinting ? bluetoothPrinting.getSavedPrinters() : [];
 
+        // Get currently connected printer info
+        const currentlyConnected = bluetoothPrinting && bluetoothPrinting.connected;
+        const connectedDevice = bluetoothPrinting && bluetoothPrinting.device;
+        const connectedDeviceId = connectedDevice ? connectedDevice.id : null;
+        const connectedDeviceName = connectedDevice ? connectedDevice.name : null;
+
         // Create modal
         const modal = window.ModalManager.createCenterModal({
             id: 'printer-management-modal',
@@ -2270,9 +2276,39 @@ function Dashboard() {
                         </p>
                     </div>
                     
+                    <div class="mb-5">
+                        <div class="flex items-center">
+                            <div class="w-3 h-3 rounded-full ${currentlyConnected ? 'bg-green-500' : 'bg-gray-300'} mr-2"></div>
+                            <span class="text-sm ${currentlyConnected ? 'text-green-600' : 'text-gray-500'} font-medium">
+                                ${currentlyConnected ? 'Printer Connected' : 'No Printer Connected'}
+                            </span>
+                        </div>
+                    </div>
+                    
                     <!-- Printer List -->
                     <div id="printer-list" class="mb-5 space-y-4">
-                        ${managedPrinters.length === 0 ? `
+                        ${currentlyConnected && connectedDevice ? `
+                        <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200 shadow-sm">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center">
+                                    <div class="w-10 h-10 bg-gradient-to-br from-green-100 to-green-200 rounded-lg flex items-center justify-center mr-3 shadow-sm">
+                                        <i class="ph ph-printer text-green-600 text-xl"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-medium text-gray-800 flex items-center">
+                                            ${connectedDeviceName || 'Connected Printer'}
+                                            <span class="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full flex items-center">
+                                                <i class="ph ph-plug text-green-600 mr-1 text-xs"></i>Connected Now
+                                            </span>
+                                        </h4>
+                                        <p class="text-xs text-gray-500">${connectedDeviceId || 'Unknown ID'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        ${!managedPrinters.length && !currentlyConnected ? `
                             <div class="text-center py-8 bg-gradient-to-br from-gray-50 to-white rounded-lg border border-dashed border-gray-300">
                                 <div class="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm">
                                     <i class="ph ph-printer text-gray-400 text-3xl"></i>
@@ -2280,56 +2316,97 @@ function Dashboard() {
                                 <p class="text-gray-500 mb-1">No printers configured</p>
                                 <p class="text-xs text-gray-400">Connect a Bluetooth printer to get started</p>
                             </div>
-                        ` : managedPrinters.map((printer, index) => `
-                            <div class="printer-item bg-gradient-to-br from-white to-gray-50 border rounded-lg shadow-sm p-4 transition-all hover:shadow-md" data-printer-id="${printer.id}">
-                                <div class="flex justify-between items-start mb-3">
-                                    <div class="flex items-center">
-                                        <div class="w-10 h-10 bg-gradient-to-br from-red-50 to-red-100 rounded-lg flex items-center justify-center mr-3 shadow-sm">
-                                            <i class="ph ph-printer text-red-500 text-xl"></i>
+                        ` : ''}
+                        
+                        ${managedPrinters.map((printer, index) => {
+                // Determine if this printer is connected - check both id and name
+                const isPrinterConnected = currentlyConnected && (
+                    (connectedDeviceId && printer.deviceId === connectedDeviceId) ||
+                    (connectedDeviceName && printer.deviceName === connectedDeviceName)
+                );
+
+                // Skip if this is already shown as the connected printer
+                if (isPrinterConnected && currentlyConnected && connectedDevice) {
+                    return '';
+                }
+
+                // Format date added or last connected date
+                let dateInfo = '';
+                if (printer.lastConnected) {
+                    const lastConnectedDate = new Date(printer.lastConnected);
+                    const now = new Date();
+                    const diffMs = now - lastConnectedDate;
+                    const diffMins = Math.round(diffMs / 60000);
+                    const diffHours = Math.round(diffMs / 3600000);
+                    const diffDays = Math.round(diffMs / 86400000);
+
+                    if (diffMins < 1) {
+                        dateInfo = `Connected just now`;
+                    } else if (diffMins < 60) {
+                        dateInfo = `Connected ${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+                    } else if (diffHours < 24) {
+                        dateInfo = `Connected ${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+                    } else {
+                        dateInfo = `Connected ${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+                    }
+                } else if (printer.dateAdded) {
+                    const addedDate = new Date(printer.dateAdded);
+                    dateInfo = `Added on ${addedDate.toLocaleDateString()}`;
+                }
+
+                return `
+                                <div class="printer-item bg-gradient-to-br from-white to-gray-50 border ${isPrinterConnected ? 'border-green-300 ring-1 ring-green-300' : 'border-gray-200'} rounded-lg shadow-sm p-4 transition-all hover:shadow-md" data-printer-id="${printer.id}">
+                                    <div class="flex justify-between items-start mb-3">
+                                        <div class="flex items-center">
+                                            <div class="w-10 h-10 bg-gradient-to-br from-red-50 to-red-100 rounded-lg flex items-center justify-center mr-3 shadow-sm">
+                                                <i class="ph ph-printer text-red-500 text-xl"></i>
+                                            </div>
+                                            <div>
+                                                <h4 class="font-medium text-gray-800">${printer.name || 'Unnamed Printer'}</h4>
+                                                <p class="text-xs text-gray-500">${printer.deviceId || 'Unknown ID'}</p>
+                                                ${dateInfo ? `<p class="text-xs text-gray-500 italic">${dateInfo}</p>` : ''}
+                                            </div>
+                                            ${printer.isDefault ? `<span class="ml-2 px-2 py-0.5 bg-gradient-to-r from-red-100 to-red-50 text-red-700 text-xs rounded-full flex items-center"><i class="ph ph-star-fill text-amber-500 mr-1 text-xs"></i>Default</span>` : ''}
+                                            ${isPrinterConnected ? `<span class="ml-2 px-2 py-0.5 bg-gradient-to-r from-green-100 to-green-50 text-green-700 text-xs rounded-full flex items-center"><i class="ph ph-plug text-green-500 mr-1 text-xs"></i>Connected</span>` : ''}
                                         </div>
-                                        <div>
-                                            <h4 class="font-medium text-gray-800">${printer.name || 'Unnamed Printer'}</h4>
-                                            <p class="text-xs text-gray-500">${printer.deviceId || 'Unknown ID'}</p>
+                                        <div class="flex space-x-1">
+                                            <button class="printer-edit-btn p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors" data-printer-id="${printer.id}" title="Edit printer">
+                                                <i class="ph ph-pencil-simple"></i>
+                                            </button>
+                                            <button class="printer-remove-btn p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100 transition-colors" data-printer-id="${printer.id}" title="Remove printer">
+                                                <i class="ph ph-trash"></i>
+                                            </button>
                                         </div>
-                                        ${printer.isDefault ? `<span class="ml-2 px-2 py-0.5 bg-gradient-to-r from-red-100 to-red-50 text-red-700 text-xs rounded-full flex items-center"><i class="ph ph-star-fill text-amber-500 mr-1 text-xs"></i>Default</span>` : ''}
                                     </div>
-                                    <div class="flex space-x-1">
-                                        <button class="printer-edit-btn p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors" data-printer-id="${printer.id}" title="Edit printer">
-                                            <i class="ph ph-pencil-simple"></i>
-                                        </button>
-                                        <button class="printer-remove-btn p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100 transition-colors" data-printer-id="${printer.id}" title="Remove printer">
-                                            <i class="ph ph-trash"></i>
-                                        </button>
+                                    
+                                    <!-- Assignments -->
+                                    <div class="mt-3 pt-3 border-t border-gray-200">
+                                        <h5 class="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                                            <i class="ph ph-link text-gray-400 mr-1.5"></i>
+                                            Channel Assignments
+                                        </h5>
+                                        ${printer.assignments && printer.assignments.length > 0 ? `
+                                            <div class="flex flex-wrap gap-2">
+                                                ${printer.assignments.map(assignment => `
+                                                    <div class="inline-flex items-center px-2 py-1 bg-gradient-to-r from-gray-100 to-gray-50 text-xs rounded-md border border-gray-100 shadow-sm">
+                                                        <span class="font-medium">${assignment.channel}</span>
+                                                        <span class="mx-1 text-gray-400">•</span>
+                                                        <span class="text-${assignment.printType === 'all' ? 'blue' : assignment.printType === 'kot' ? 'green' : 'orange'}-500">
+                                                            ${assignment.printType === 'all' ? 'All' : assignment.printType === 'kot' ? 'KOT' : 'Bill'}
+                                                        </span>
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        ` : `
+                                            <p class="text-xs text-gray-500 flex items-center">
+                                                <i class="ph ph-info text-gray-400 mr-1"></i>
+                                                No channel assignments
+                                            </p>
+                                        `}
                                     </div>
                                 </div>
-                                
-                                <!-- Assignments -->
-                                <div class="mt-3 pt-3 border-t border-gray-200">
-                                    <h5 class="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                                        <i class="ph ph-link text-gray-400 mr-1.5"></i>
-                                        Channel Assignments
-                                    </h5>
-                                    ${printer.assignments && printer.assignments.length > 0 ? `
-                                        <div class="flex flex-wrap gap-2">
-                                            ${printer.assignments.map(assignment => `
-                                                <div class="inline-flex items-center px-2 py-1 bg-gradient-to-r from-gray-100 to-gray-50 text-xs rounded-md border border-gray-100 shadow-sm">
-                                                    <span class="font-medium">${assignment.channel}</span>
-                                                    <span class="mx-1 text-gray-400">•</span>
-                                                    <span class="text-${assignment.printType === 'all' ? 'blue' : assignment.printType === 'kot' ? 'green' : 'orange'}-500">
-                                                        ${assignment.printType === 'all' ? 'All' : assignment.printType === 'kot' ? 'KOT' : 'Bill'}
-                                                    </span>
-                                                </div>
-                                            `).join('')}
-                                        </div>
-                                    ` : `
-                                        <p class="text-xs text-gray-500 flex items-center">
-                                            <i class="ph ph-info text-gray-400 mr-1"></i>
-                                            No channel assignments
-                                        </p>
-                                    `}
-                                </div>
-                            </div>
-                        `).join('')}
+                            `;
+            }).join('')}
                     </div>
                     
                     <!-- Add Printer Button -->
@@ -3790,7 +3867,7 @@ function Dashboard() {
                                             }}>
                                             <div className="flex items-center">
                                                 <div className="w-12 h-12 bg-red-50 rounded-lg mr-4 flex-shrink-0 flex items-center justify-center">
-                                                    <i className="ph ph-printer text-red-500 text-xl"></i>
+                                                    <i className="ph ph-file-text text-red-500 text-xl"></i>
                                                 </div>
                                                 <div>
                                                     <h4 className="font-medium text-gray-800">Print Template</h4>
@@ -3811,7 +3888,7 @@ function Dashboard() {
                                             }}>
                                             <div className="flex items-center">
                                                 <div className="w-12 h-12 bg-red-50 rounded-lg mr-4 flex-shrink-0 flex items-center justify-center">
-                                                    <i className="ph ph-printer-bluetooth text-red-500 text-xl"></i>
+                                                    <i className="ph ph-printer text-red-500 text-xl"></i>
                                                 </div>
                                                 <div>
                                                     <h4 className="font-medium text-gray-800">Printer Management</h4>
