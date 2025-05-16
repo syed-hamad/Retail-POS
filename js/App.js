@@ -7,8 +7,7 @@ function App() {
         { id: 'products', icon: 'package', label: 'Products' },
         { id: 'customers', icon: 'users', label: 'Customers' },
         { id: 'passbook', icon: 'wallet', label: 'Passbook' },
-        { id: 'analytics', icon: 'chart-line', label: 'Analytics' },
-        { id: 'settings', icon: 'gear', label: 'Settings' }
+        { id: 'analytics', icon: 'chart-line', label: 'Analytics' }
     ];
 
     const renderContent = () => {
@@ -18,7 +17,6 @@ function App() {
             case 'customers': return <Customers />;
             case 'passbook': return <Passbook />;
             case 'analytics': return <Analytics />;
-            case 'settings': return <PrinterTester />;
             default: return null;
         }
     };

@@ -29,9 +29,233 @@ class BluetoothPrinting {
 
         // Track attempts to auto-reconnect to prevent infinite loops
         this.reconnectAttempted = false;
-        
+
         // Cache for loaded logo images
         this.imageCache = new Map();
+
+        // Initialize managed printers list
+        this.managedPrinters = this.getSavedPrinters() || [];
+
+        // Initialize active printer selection - defaults to the most recently used printer
+        this.activePrinterId = this.getActivePrinterId();
+    }
+
+    /**
+     * Get list of saved printers
+     * @returns {Array} List of saved printers
+     */
+    getSavedPrinters() {
+        try {
+            const savedPrinters = localStorage.getItem('managedPrinters');
+            if (savedPrinters) {
+                return JSON.parse(savedPrinters);
+            }
+        } catch (error) {
+            console.error('Error retrieving saved printers:', error);
+        }
+        return [];
+    }
+
+    /**
+     * Save the list of managed printers
+     * @param {Array} printers - The printers to save
+     * @private
+     */
+    savePrinters(printers) {
+        try {
+            localStorage.setItem('managedPrinters', JSON.stringify(printers));
+            this.managedPrinters = printers;
+        } catch (error) {
+            console.error('Error saving printers:', error);
+        }
+    }
+
+    /**
+     * Get the active printer ID
+     * @returns {string|null} The active printer ID or null if none
+     */
+    getActivePrinterId() {
+        try {
+            return localStorage.getItem('activePrinterId') || null;
+        } catch (error) {
+            console.error('Error retrieving active printer ID:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Set the active printer ID
+     * @param {string} printerId - The ID of the printer to set as active
+     */
+    setActivePrinterId(printerId) {
+        try {
+            localStorage.setItem('activePrinterId', printerId);
+            this.activePrinterId = printerId;
+        } catch (error) {
+            console.error('Error saving active printer ID:', error);
+        }
+    }
+
+    /**
+     * Add a printer to the managed printers list
+     * @param {Object} printer - The printer to add
+     * @param {boolean} setAsDefault - Whether to set this printer as the default
+     * @returns {Object} The added printer with generated ID
+     */
+    addPrinter(printer, setAsDefault = false) {
+        try {
+            const printers = this.getSavedPrinters();
+
+            // Generate a unique ID if none provided
+            const newPrinter = {
+                ...printer,
+                id: printer.id || `printer_${Date.now()}`,
+                isDefault: setAsDefault
+            };
+
+            // If this is marked as default, unmark any existing default
+            if (setAsDefault) {
+                printers.forEach(p => p.isDefault = false);
+            }
+
+            // Add the new printer
+            printers.push(newPrinter);
+
+            // Save the updated list
+            this.savePrinters(printers);
+
+            // If this is the first printer or default, set it as active
+            if (setAsDefault || printers.length === 1) {
+                this.setActivePrinterId(newPrinter.id);
+            }
+
+            return newPrinter;
+        } catch (error) {
+            console.error('Error adding printer:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Update a printer's properties
+     * @param {string} printerId - The ID of the printer to update
+     * @param {Object} updates - The properties to update
+     * @returns {Object|null} The updated printer or null if not found
+     */
+    updatePrinter(printerId, updates) {
+        try {
+            const printers = this.getSavedPrinters();
+            const index = printers.findIndex(p => p.id === printerId);
+
+            if (index === -1) {
+                console.error(`Printer with ID ${printerId} not found`);
+                return null;
+            }
+
+            // If setting this as default, unmark others
+            if (updates.isDefault) {
+                printers.forEach(p => p.isDefault = false);
+            }
+
+            // Update the printer
+            printers[index] = {
+                ...printers[index],
+                ...updates
+            };
+
+            // Save the updated list
+            this.savePrinters(printers);
+
+            return printers[index];
+        } catch (error) {
+            console.error('Error updating printer:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Remove a printer from the managed printers list
+     * @param {string} printerId - The ID of the printer to remove
+     * @returns {boolean} True if successful, false otherwise
+     */
+    removePrinter(printerId) {
+        try {
+            let printers = this.getSavedPrinters();
+            const removedPrinter = printers.find(p => p.id === printerId);
+
+            if (!removedPrinter) {
+                return false;
+            }
+
+            // Remove the printer
+            printers = printers.filter(p => p.id !== printerId);
+
+            // If we removed the default printer, set a new default if possible
+            if (removedPrinter.isDefault && printers.length > 0) {
+                printers[0].isDefault = true;
+            }
+
+            // If we removed the active printer, set a new active if possible
+            if (this.activePrinterId === printerId && printers.length > 0) {
+                this.setActivePrinterId(printers[0].id);
+            } else if (printers.length === 0) {
+                this.setActivePrinterId(null);
+            }
+
+            // Save the updated list
+            this.savePrinters(printers);
+
+            return true;
+        } catch (error) {
+            console.error('Error removing printer:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get the appropriate printer for a given order channel and print type
+     * @param {string} channel - The order channel ('Default', 'Swiggy', etc.)
+     * @param {string} printType - The print type ('kot' or 'bill')
+     * @returns {Object|null} The printer to use or null if none found
+     */
+    getPrinterForChannel(channel, printType) {
+        const printers = this.getSavedPrinters();
+
+        if (printers.length === 0) {
+            return null;
+        }
+
+        // First, look for a printer specifically assigned to this channel and print type
+        let printer = printers.find(p =>
+            p.assignments &&
+            p.assignments.some(a =>
+                a.channel === channel &&
+                (a.printType === printType || a.printType === 'all')
+            )
+        );
+
+        // If none found, try to find a printer assigned to "All Channels" with this print type
+        if (!printer) {
+            printer = printers.find(p =>
+                p.assignments &&
+                p.assignments.some(a =>
+                    a.channel === 'All Channels' &&
+                    (a.printType === printType || a.printType === 'all')
+                )
+            );
+        }
+
+        // If still none found, use the default printer
+        if (!printer) {
+            printer = printers.find(p => p.isDefault);
+        }
+
+        // If still none found, use the first available printer
+        if (!printer && printers.length > 0) {
+            printer = printers[0];
+        }
+
+        return printer;
     }
 
     /**
@@ -58,15 +282,15 @@ class BluetoothPrinting {
      */
     _handlePrinterError(error) {
         console.error('Printer error:', error);
-        
+
         // User cancelled the connection
-        if (error.message?.includes("cancelled") || 
+        if (error.message?.includes("cancelled") ||
             error.message?.includes("No printer selected") ||
             error.name === "NotFoundError") {
             this._showToast("Printing cancelled by user", "info");
             return "user_cancelled";
-        } 
-        
+        }
+
         // Incompatible device errors
         if (error.message?.includes("No suitable service") ||
             error.message?.includes("No services found") ||
@@ -76,16 +300,16 @@ class BluetoothPrinting {
             this._showToast("Could not connect to printer. Please select a compatible thermal printer.", "error");
             return "incompatible_device";
         }
-        
+
         // Generic connection errors
-        if (error.name === "NetworkError" || 
+        if (error.name === "NetworkError" ||
             error.message?.includes("disconnected") ||
             error.message?.includes("connection") ||
             error.message?.includes("GATT")) {
             this._showToast(`Printer connection error: ${error.message}`, "error");
             return "connection_error";
         }
-        
+
         // Generic errors
         this._showToast(`Printing error: ${error.message}`, "error");
         return "other_error";
@@ -112,10 +336,10 @@ class BluetoothPrinting {
         if (isBill) {
             html += `
                 <!-- Logo Section -->
-                ${seller.logo ? 
+                ${seller.logo ?
                     `<div style="text-align: center; margin-bottom: 8px;">
                         <img src="${seller.logo}" alt="Logo" style="max-width: 45mm; max-height: 15mm;">
-                    </div>` : 
+                    </div>` :
                     `<div style="text-align: center; margin-bottom: 8px; font-size: 24px;">
                         <i class="ph ph-storefront"></i>
                     </div>`
@@ -126,28 +350,28 @@ class BluetoothPrinting {
         html += `
             <!-- Header Section -->
             <div style="text-align: center; font-weight: 700;">`;
-        
+
         if (isBill) {
             html += `
                 <div style="font-size: 14px; margin-bottom: 4px;">${seller.gstEnabled ? 'TAX INVOICE' : 'BILL/RECEIPT'}</div>
                 <div style="font-size: 16px; margin-bottom: 4px;">${seller.businessName || 'Your Business'}</div>
-                ${seller.address ? 
+                ${seller.address ?
                     `<div style="font-size: 10px; margin-bottom: 2px;">${seller.address}</div>` : ''}
-                ${seller.phone ? 
+                ${seller.phone ?
                     `<div style="font-size: 10px; margin-bottom: 2px;">Ph: ${seller.phone}</div>` : ''}
-                ${seller.gstEnabled && seller.gstIN ? 
+                ${seller.gstEnabled && seller.gstIN ?
                     `<div style="font-size: 10px; margin-bottom: 2px;">GSTIN: ${seller.gstIN}</div>` : ''}`;
         } else if (isKOT) {
             html += `
                 <div style="font-size: 20px; margin-bottom: 4px; font-weight: 800;">KOT</div>`;
-            
+
             // Table info for KOT (if available)
             if (orderData.tableId) {
                 html += `
                     <div style="font-size: 18px; margin-bottom: 4px;">TABLE ${orderData.tableId}</div>`;
             }
         }
-        
+
         html += `</div>`;
 
         // Separator
@@ -157,13 +381,13 @@ class BluetoothPrinting {
         html += `
             <!-- Order Details -->
             <div style="font-size: 12px; font-weight: 600;">
-                <div style="margin-bottom: 4px;">${isKOT ? 'KOT' : 'Bill'} #: ${orderData.billNo || orderData.id?.substring(0,8) || 'N/A'}</div>
+                <div style="margin-bottom: 4px;">${isKOT ? 'KOT' : 'Bill'} #: ${orderData.billNo || orderData.id?.substring(0, 8) || 'N/A'}</div>
                 <div style="margin-bottom: 4px;">Date: ${new Date(orderData.date?.toDate ? orderData.date.toDate() : orderData.date || new Date()).toLocaleDateString()}</div>
                 <div style="margin-bottom: 4px;">Time: ${new Date(orderData.date?.toDate ? orderData.date.toDate() : orderData.date || new Date()).toLocaleTimeString()}</div>
-                ${orderData.custName || orderData.customer?.name ? 
-                    `<div style="margin-bottom: 4px;">Customer: ${orderData.custName || orderData.customer?.name}</div>` : ''}
-                ${orderData.tableId ? 
-                    `<div style="margin-bottom: 4px;">Table: ${orderData.tableId}</div>` : ''}
+                ${orderData.custName || orderData.customer?.name ?
+                `<div style="margin-bottom: 4px;">Customer: ${orderData.custName || orderData.customer?.name}</div>` : ''}
+                ${orderData.tableId ?
+                `<div style="margin-bottom: 4px;">Table: ${orderData.tableId}</div>` : ''}
             </div>`;
 
         // Separator
@@ -185,7 +409,7 @@ class BluetoothPrinting {
                 const quantity = parseFloat(item.quantity || item.qnt || 1);
                 const price = parseFloat(item.price || 0);
                 const amount = quantity * price;
-                
+
                 if (isBill) {
                     calculatedSubTotal += amount;
 
@@ -214,7 +438,7 @@ class BluetoothPrinting {
                             <div style="font-size: 18px; font-weight: 700; margin-right: 8px; min-width: 30px;">${quantity}x</div>
                             <div style="font-weight: 600;">${item.title || 'Unknown Item'}</div>
                         </div>`;
-                    
+
                     // Add item-specific instructions if any
                     if (item.instructions) {
                         html += `
@@ -295,8 +519,8 @@ class BluetoothPrinting {
                 <div style="text-align: center; margin-top: 12px;">
                     <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">Thank You!</div>
                     <div style="font-size: 12px; margin-bottom: 4px;">Visit Again</div>
-                    ${seller.website ? 
-                        `<div style="font-size: 10px;">${seller.website}</div>` : ''}
+                    ${seller.website ?
+                    `<div style="font-size: 10px;">${seller.website}</div>` : ''}
                 </div>`;
         } else if (isKOT) {
             // Special instructions for KOT
@@ -357,12 +581,12 @@ class BluetoothPrinting {
     }
 
     /**
-     * Browser-based print function using hidden iframe
-     * @param {string} htmlContent - The HTML content to print
-     * @param {boolean} autoPrint - Whether to attempt auto-printing without dialog
-     * @returns {Promise<boolean>} True if printing was successful
+     * Creates a hidden iframe with the content to be printed
+     * @param {string} htmlContent - The HTML content to render
+     * @returns {Promise<HTMLIFrameElement>} The iframe element with rendered content
+     * @private
      */
-    async browserPrint(htmlContent, autoPrint = false) {
+    async _createPrintFrame(htmlContent) {
         return new Promise((resolve, reject) => {
             try {
                 const printFrame = document.createElement('iframe');
@@ -374,11 +598,34 @@ class BluetoothPrinting {
                     height: '0',
                     border: '0'
                 });
-                
+
                 document.body.appendChild(printFrame);
                 printFrame.contentDocument.open();
                 printFrame.contentDocument.write(this.createPrintableHTML(htmlContent));
                 printFrame.contentDocument.close();
+
+                if (printFrame.contentWindow.document.readyState === 'complete') {
+                    resolve(printFrame);
+                } else {
+                    printFrame.onload = () => resolve(printFrame);
+                }
+            } catch (error) {
+                console.error('Error creating print frame:', error);
+                reject(error);
+            }
+        });
+    }
+
+    /**
+     * Browser-based print function using hidden iframe
+     * @param {string} htmlContent - The HTML content to print
+     * @param {boolean} autoPrint - Whether to attempt auto-printing without dialog
+     * @returns {Promise<boolean>} True if printing was successful
+     */
+    async browserPrint(htmlContent, autoPrint = false) {
+        return new Promise(async (resolve, reject) => {
+            try {
+                const printFrame = await this._createPrintFrame(htmlContent);
 
                 const doPrint = () => {
                     try {
@@ -404,7 +651,7 @@ class BluetoothPrinting {
                         console.error("Error triggering browser print:", printError);
                         reject(new Error("Could not open print dialog. Please check browser pop-up settings."));
                     }
-                    
+
                     // Clean up the iframe after printing
                     setTimeout(() => {
                         if (document.body.contains(printFrame)) {
@@ -413,11 +660,7 @@ class BluetoothPrinting {
                     }, 1500);
                 };
 
-                if (printFrame.contentWindow.document.readyState === 'complete') {
-                    doPrint();
-                } else {
-                    printFrame.onload = doPrint;
-                }
+                doPrint();
             } catch (error) {
                 console.error("Error setting up browser print:", error);
                 reject(error);
@@ -426,231 +669,185 @@ class BluetoothPrinting {
     }
 
     /**
-     * Convert HTML to ESC/POS commands for thermal printers
-     * This is a simplified version that extracts text and basic formatting
+     * Convert HTML to printer-compatible commands
+     * This approach provides consistent output between browser and Bluetooth printing
      * @param {string} html - HTML content to convert
-     * @returns {Uint8Array} ESC/POS commands for the printer
+     * @returns {Promise<Uint8Array>} Commands for printing via Bluetooth
      */
-    async htmlToEscPos(html) {
+    async htmlToCanvas(html) {
         try {
-            let doc;
-            
-            // Create a DOM parser to parse the HTML
-            if (typeof DOMParser !== 'undefined') {
-                // Browser environment
-                const parser = new DOMParser();
-                doc = parser.parseFromString(html, 'text/html');
-            } else {
-                // Fallback for non-browser environments
-                console.warn("DOMParser not available, using simplified HTML parsing");
-                // Create a very simple text-only extraction
-                const textContent = html.replace(/<[^>]*>/g, ' ')
-                                       .replace(/\s+/g, ' ')
-                                       .trim();
-                
-                // Initialize commands array
-                const commands = [];
-                
-                // Initialize printer
-                commands.push(0x1B, 0x40); // ESC @ - Initialize printer
-                
-                // Add text content
-                commands.push(...this.encoder.encode(textContent));
-                
-                // Add feed and cut
-                commands.push(0x1B, 0x64, 5); // Feed 5 lines
-                commands.push(0x1D, 0x56, 0x41); // Partial cut
-                
-                return new Uint8Array(commands);
-            }
-            
-            // Initialize commands array for ESC/POS
-            const commands = [];
-            
-            // Initialize printer
-            commands.push(0x1B, 0x40); // ESC @ - Initialize printer
-            
-            // Extract and process text nodes
-            this.processNode(doc.body, commands);
-            
-            // Add feed and cut at the end
-            commands.push(0x1B, 0x64, 5); // Feed 5 lines
-            commands.push(0x1D, 0x56, 0x41); // Partial cut
-            
-            return new Uint8Array(commands);
-        } catch (error) {
-            console.error("Error converting HTML to ESC/POS:", error);
-            
-            // Fallback to basic text with minimal formatting
+            const printFrame = await this._createPrintFrame(html);
+
             try {
+                // Get the body element from the iframe
+                const body = printFrame.contentDocument.body;
+
+                // Initialize commands array for ESC/POS
                 const commands = [];
-                
+
                 // Initialize printer
                 commands.push(0x1B, 0x40); // ESC @ - Initialize printer
-                
-                // Extract text content by removing HTML tags
-                const textContent = html.replace(/<[^>]*>/g, ' ')
-                                       .replace(/\s+/g, ' ')
-                                       .trim();
-                
-                // Add text with basic formatting
-                commands.push(0x1D, 0x21, 0x00); // Normal size
-                commands.push(0x1B, 0x45, 0x01); // Bold ON
-                commands.push(0x1B, 0x61, 0x01); // Center align
-                commands.push(...this.encoder.encode("--- RECEIPT ---\n\n"));
-                commands.push(0x1B, 0x45, 0x00); // Bold OFF
-                commands.push(0x1B, 0x61, 0x00); // Left align
-                
-                // Add the extracted text content
-                commands.push(...this.encoder.encode(textContent));
-                
-                // Add feed and cut
+
+                // Process the content
+                this.processDocumentForPrinting(body, commands);
+
+                // Add feed and cut at the end
                 commands.push(0x1B, 0x64, 5); // Feed 5 lines
                 commands.push(0x1D, 0x56, 0x41); // Partial cut
-                
+
+                // Clean up
+                document.body.removeChild(printFrame);
+
+                // Return ESC/POS commands
                 return new Uint8Array(commands);
-            } catch (fallbackError) {
-                console.error("Fallback text extraction failed:", fallbackError);
-                throw error; // Throw the original error
+            } catch (error) {
+                if (document.body.contains(printFrame)) {
+                    document.body.removeChild(printFrame);
+                }
+                console.error('Error processing HTML for printing:', error);
+                throw error;
             }
+        } catch (error) {
+            console.error('Error setting up HTML to commands conversion:', error);
+            throw error;
         }
     }
-    
+
     /**
-     * Process an HTML node and its children to generate ESC/POS commands
-     * @param {Node} node - DOM node to process
+     * Process a document to generate ESC/POS commands
+     * @param {HTMLElement} element - The element to process
      * @param {Array} commands - Array to append commands to
      * @private
      */
-    processNode(node, commands) {
-        // Handle different node types
-        if (node.nodeType === Node.TEXT_NODE) {
-            // Text node - add the text content if not empty (without automatic newline)
-            const text = node.textContent.trim();
-            if (text) {
-                commands.push(...this.encoder.encode(text));
-            }
-            return;
+    processDocumentForPrinting(element, commands) {
+        // Handle different sections based on class names or positions
+        // Header section - typically centered
+        const headerElements = element.querySelectorAll('div[style*="text-align: center"]');
+        if (headerElements.length > 0) {
+            commands.push(0x1B, 0x61, 0x01); // Center align
+
+            headerElements.forEach(header => {
+                // Look for large text that might be a title
+                const largeTexts = header.querySelectorAll('div[style*="font-size: 16px"], div[style*="font-size: 14px"], div[style*="font-size: 20px"]');
+
+                largeTexts.forEach(largeText => {
+                    const text = largeText.innerText.trim();
+                    if (text) {
+                        // Make titles bold
+                        commands.push(0x1B, 0x45, 0x01); // Bold ON
+                        commands.push(...this.encoder.encode(text + '\n'));
+                        commands.push(0x1B, 0x45, 0x00); // Bold OFF
+                    }
+                });
+
+                // Handle other header content
+                const otherTexts = header.querySelectorAll('div:not([style*="font-size: 16px"]):not([style*="font-size: 14px"]):not([style*="font-size: 20px"])');
+                otherTexts.forEach(textElement => {
+                    const text = textElement.innerText.trim();
+                    if (text) {
+                        commands.push(...this.encoder.encode(text + '\n'));
+                    }
+                });
+            });
+
+            commands.push(0x1B, 0x61, 0x00); // Left align
         }
-        
-        if (node.nodeType !== Node.ELEMENT_NODE) {
-            return; // Skip non-element nodes
+
+        // Find separator lines
+        const separators = element.querySelectorAll('div[style*="border-bottom: 1px dashed"]');
+        if (separators.length > 0) {
+            commands.push(...this.encoder.encode('-'.repeat(this.printerWidth) + '\n'));
         }
-        
-        // Process element based on tag name
-        const tagName = node.tagName.toLowerCase();
-        let style = null;
-        
-        try {
-            // Try to get computed style if in browser environment
-            style = window.getComputedStyle ? window.getComputedStyle(node) : null;
-        } catch (e) {
-            // Handle absence of window/DOM environment (in case of SSR)
-            style = null;
+
+        // Order details section
+        const orderDetails = element.querySelectorAll('div[style*="font-size: 12px"][style*="font-weight: 600"]');
+        if (orderDetails.length > 0) {
+            orderDetails.forEach(detail => {
+                const lines = detail.innerText.split('\n');
+                lines.forEach(line => {
+                    if (line.trim()) {
+                        commands.push(...this.encoder.encode(line.trim() + '\n'));
+                    }
+                });
+            });
         }
-        
-        // Default formatting
-        let addNewline = false;
-        let centerAlign = false;
-        let applyBold = false;
-        let textSize = 0x00; // Normal size
-        
-        // Extract style attributes from inline style if computed style is not available
-        if (!style && node.getAttribute) {
-            const textAlign = node.getAttribute('style')?.match(/text-align:\s*([^;]+)/i)?.[1];
-            const fontWeight = node.getAttribute('style')?.match(/font-weight:\s*([^;]+)/i)?.[1];
-            const fontSize = node.getAttribute('style')?.match(/font-size:\s*([^;]+)/i)?.[1];
-            
-            centerAlign = textAlign === 'center';
-            applyBold = fontWeight === 'bold' || fontWeight === '700' || fontWeight === '800';
-            
-            // Simple fontSize parsing for inline styles
-            if (fontSize) {
-                if (fontSize.includes('px')) {
-                    const size = parseInt(fontSize);
-                    if (size >= 20) {
-                        textSize = 0x11; // Double height, double width
-                    } else if (size >= 16) {
-                        textSize = 0x01; // Normal height, double width
+
+        // Find Items Section header
+        const itemsHeader = element.querySelector('div[style*="text-align: center"][style*="margin-bottom: 8px"]');
+        if (itemsHeader) {
+            commands.push(...this.encoder.encode('\n'));
+            commands.push(0x1B, 0x61, 0x01); // Center align
+            commands.push(0x1B, 0x45, 0x01); // Bold ON
+            commands.push(...this.encoder.encode(itemsHeader.innerText.trim() + '\n'));
+            commands.push(0x1B, 0x45, 0x00); // Bold OFF
+            commands.push(0x1B, 0x61, 0x00); // Left align
+        }
+
+        // Find and process items
+        const items = element.querySelectorAll('div[style*="margin-bottom: 8px"] > div[style*="font-weight: 600"]');
+        if (items.length > 0) {
+            items.forEach(item => {
+                const itemName = item.innerText.trim();
+                const itemParent = item.parentElement;
+                const itemDetails = itemParent.querySelector('div[style*="display: flex"]');
+
+                if (itemName) {
+                    commands.push(0x1B, 0x45, 0x01); // Bold ON
+                    commands.push(...this.encoder.encode(itemName + '\n'));
+                    commands.push(0x1B, 0x45, 0x00); // Bold OFF
+                }
+
+                if (itemDetails) {
+                    commands.push(...this.encoder.encode(itemDetails.innerText.trim() + '\n'));
+                }
+            });
+        }
+
+        // For KOT, handle quantity x item format differently
+        const kotItems = element.querySelectorAll('div[style*="display: flex"] > div[style*="font-size: 18px"]');
+        if (kotItems.length > 0) {
+            kotItems.forEach(quantityElement => {
+                const itemElement = quantityElement.nextElementSibling;
+                if (itemElement) {
+                    const quantity = quantityElement.innerText.trim();
+                    const itemName = itemElement.innerText.trim();
+
+                    commands.push(0x1B, 0x45, 0x01); // Bold ON
+                    commands.push(...this.encoder.encode(quantity + ' ' + itemName + '\n'));
+                    commands.push(0x1B, 0x45, 0x00); // Bold OFF
+
+                    // Look for instructions
+                    const parentDiv = quantityElement.parentElement;
+                    const instructionsDiv = parentDiv.nextElementSibling;
+                    if (instructionsDiv && instructionsDiv.getAttribute('style')?.includes('font-style: italic')) {
+                        commands.push(...this.encoder.encode('  ' + instructionsDiv.innerText.trim() + '\n'));
                     }
                 }
-            }
-        } else if (style) {
-            // Use computed style
-            centerAlign = style.textAlign === 'center';
-            applyBold = style.fontWeight === 'bold' || parseInt(style.fontWeight) >= 700;
-            
-            const fontSize = parseInt(style.fontSize);
-            if (fontSize >= 20) {
-                textSize = 0x11; // Double height, double width
-            } else if (fontSize >= 16) {
-                textSize = 0x01; // Normal height, double width
-            }
+            });
         }
-        
-        // Apply alignment
-        if (centerAlign) {
-            commands.push(0x1B, 0x61, 0x01); // Center align
-        } else {
-            commands.push(0x1B, 0x61, 0x00); // Left align (default)
-        }
-        
-        // Apply bold if needed
-        if (applyBold) {
+
+        // Total section for bills
+        const totalSection = element.querySelector('div[style*="border-top: 2px solid"][style*="border-bottom: 2px solid"]');
+        if (totalSection) {
+            commands.push(...this.encoder.encode('-'.repeat(this.printerWidth) + '\n'));
             commands.push(0x1B, 0x45, 0x01); // Bold ON
-        }
-        
-        // Apply text size
-        if (textSize !== 0x00) {
-            commands.push(0x1D, 0x21, textSize);
-        }
-        
-        // Special handling for specific elements
-        switch (tagName) {
-            case 'br':
-                commands.push(...this.encoder.encode('\n'));
-                return;
-                
-            case 'hr':
-                commands.push(...this.encoder.encode('-'.repeat(this.printerWidth) + '\n'));
-                return;
-                
-            case 'div':
-            case 'p':
-            case 'h1':
-            case 'h2':
-            case 'h3':
-            case 'h4':
-            case 'h5':
-            case 'h6':
-                addNewline = true;
-                break;
-                
-            case 'img':
-                // Image not supported in this basic implementation
-                // We could extend this to handle simple images using graphics mode
-                commands.push(...this.encoder.encode('[IMAGE]'));
-                addNewline = true;
-                break;
-        }
-        
-        // Process all child nodes
-        for (const child of node.childNodes) {
-            this.processNode(child, commands);
-        }
-        
-        // Add newline if needed after processing all children
-        if (addNewline) {
-            commands.push(...this.encoder.encode('\n'));
-        }
-        
-        // Reset formatting
-        if (applyBold) {
+            commands.push(...this.encoder.encode(totalSection.innerText.trim() + '\n'));
             commands.push(0x1B, 0x45, 0x00); // Bold OFF
         }
-        
-        if (textSize !== 0x00) {
-            commands.push(0x1D, 0x21, 0x00); // Normal size
+
+        // Payment details
+        const paymentDetails = element.querySelector('div[style*="font-size: 12px"][style*="margin-bottom: 8px"]:not([style*="text-align: center"])');
+        if (paymentDetails && paymentDetails.innerText.includes('Payment Mode')) {
+            commands.push(...this.encoder.encode(paymentDetails.innerText.trim() + '\n'));
+        }
+
+        // Footer
+        const footer = element.querySelector('div[style*="text-align: center"][style*="margin-top: 12px"]');
+        if (footer) {
+            commands.push(...this.encoder.encode('\n'));
+            commands.push(0x1B, 0x61, 0x01); // Center align
+            commands.push(...this.encoder.encode(footer.innerText.trim()));
+            commands.push(0x1B, 0x61, 0x00); // Left align
         }
     }
 
@@ -1286,45 +1483,45 @@ class BluetoothPrinting {
                 const CHUNK_SIZE = (this.characteristic?.service?.device?.gatt?.server?.maxGATTCharacteristicWriteSize)
                     ? Math.min(this.characteristic.service.device.gatt.server.maxGATTCharacteristicWriteSize, DEFAULT_CHUNK_SIZE)
                     : DEFAULT_CHUNK_SIZE;
-                
+
                 // Break data into chunks and send with delays between chunks
                 for (let i = 0; i < data.length; i += CHUNK_SIZE) {
                     const chunk = data.slice(i, i + CHUNK_SIZE);
-                    
+
                     // Log progress for debugging
                     if (i % 1000 === 0 || i + CHUNK_SIZE >= data.length) {
                         console.log(`Sending chunk ${i}-${i + chunk.length} of ${data.length} bytes`);
                     }
-                    
+
                     // Choose write method based on characteristic properties
                     if (this.characteristic.properties.writeWithoutResponse) {
                         await this.characteristic.writeValueWithoutResponse(chunk);
                     } else {
                         await this.characteristic.writeValue(chunk);
                     }
-                    
+
                     // Add a delay between chunks to give the printer time to process
                     if (data.length > CHUNK_SIZE && i < data.length - CHUNK_SIZE) {
                         await new Promise(resolve => setTimeout(resolve, INTER_CHUNK_DELAY_MS));
                     }
                 }
-                
+
                 console.log("Data transmission successful");
                 return true;
             } catch (error) {
                 console.warn(`Attempt ${attempt} to send data failed:`, error.message);
-                
+
                 if (attempt === MAX_RETRIES) {
                     console.error('Error sending data to printer after multiple retries:', error);
                     throw error; // Rethrow error after max retries
                 }
-                
+
                 // Wait longer between retries
                 console.log(`Retrying in ${RETRY_DELAY_MS * attempt}ms...`);
                 await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * attempt));
             }
         }
-        
+
         throw new Error('Failed to send data to printer after multiple retries.');
     }
 
@@ -1383,9 +1580,10 @@ class BluetoothPrinting {
      * Print a KOT (Kitchen Order Ticket) for a specific order
      * This method handles all aspects of printing including connections and error handling
      * @param {string} orderId - The ID of the order to print
+     * @param {string} [channel] - Optional order channel for printer selection
      * @returns {Promise<boolean>} True if printing was successful
      */
-    async printKOT(orderId) {
+    async printKOT(orderId, channel = 'Default') {
         if (!orderId) {
             this._showToast("No order ID provided for KOT printing", "error");
             return false;
@@ -1399,11 +1597,21 @@ class BluetoothPrinting {
                 return false;
             }
 
+            // Use order's channel if not provided
+            if (!channel && orderData.priceVariant) {
+                channel = orderData.priceVariant;
+            }
+
             // Generate HTML for the KOT
             const kotHtml = this.generateReceiptHTML(orderData, 'kot');
-            
+
+            // Find the appropriate printer for this channel and KOT
+            const printer = this.getPrinterForChannel(channel, 'kot');
+
             // Show initial status message
-            if (this.connected && this.characteristic) {
+            if (printer) {
+                this._showToast(`Printing KOT using ${printer.name || 'assigned printer'}...`, "info");
+            } else if (this.connected && this.characteristic) {
                 this._showToast("Printing KOT using connected printer...", "info");
             } else if (this.lastConnectedDevice) {
                 this._showToast("Connecting to printer for KOT...", "info");
@@ -1415,11 +1623,53 @@ class BluetoothPrinting {
             if (this.isSupported()) {
                 try {
                     // Connect to printer if not already connected
+                    // If we have a specific printer for this channel, use it
+                    if (printer) {
+                        // Save current connection state
+                        const previousDevice = this.device;
+                        const previousConnected = this.connected;
+                        const previousCharacteristic = this.characteristic;
+
+                        // Try to connect to the specific printer
+                        try {
+                            // Temporarily set this device as the last connected device
+                            this.lastConnectedDevice = {
+                                id: printer.deviceId,
+                                name: printer.name
+                            };
+
+                            // Connect to this specific printer
+                            await this.ensurePrinterConnection();
+
+                            // Convert HTML to printer-compatible canvas data
+                            const data = await this.htmlToCanvas(kotHtml);
+
+                            // Send to printer
+                            await this.sendData(data);
+                            this._showToast("KOT printed successfully", "success");
+
+                            // Save this printer as the last connected
+                            this.savePrinter();
+
+                            return true;
+                        } catch (specificPrinterError) {
+                            console.error(`Error using specific printer for channel ${channel}:`, specificPrinterError);
+
+                            // Restore previous connection state for fallback
+                            this.device = previousDevice;
+                            this.connected = previousConnected;
+                            this.characteristic = previousCharacteristic;
+
+                            // Fall through to try the default printing path
+                        }
+                    }
+
+                    // Default printing path
                     await this.ensurePrinterConnection();
-                    
-                    // Convert HTML to ESC/POS commands
-                    const data = await this.htmlToEscPos(kotHtml);
-                    
+
+                    // Convert HTML to printer-compatible canvas data
+                    const data = await this.htmlToCanvas(kotHtml);
+
                     // Send to printer
                     await this.sendData(data);
                     this._showToast("KOT printed successfully", "success");
@@ -1427,12 +1677,12 @@ class BluetoothPrinting {
                 } catch (error) {
                     // Handle error based on type
                     const errorType = this._handlePrinterError(error);
-                    
+
                     // If it's a user cancellation, don't attempt fallback
                     if (errorType === "user_cancelled") {
                         return false;
                     }
-                    
+
                     // For other errors, try browser printing as fallback
                     this._showToast("Attempting browser print for KOT...", "info");
                     try {
@@ -1470,9 +1720,10 @@ class BluetoothPrinting {
      * @param {string} orderId - The ID of the order to print
      * @param {string} [paymentMode] - Optional payment mode to include on the bill
      * @param {boolean} [autoPrint=false] - Whether to attempt auto-printing without dialog
+     * @param {string} [channel] - Optional order channel for printer selection
      * @returns {Promise<boolean>} True if printing was successful
      */
-    async printBill(orderId, paymentMode, autoPrint = false) {
+    async printBill(orderId, paymentMode, autoPrint = false, channel = 'Default') {
         if (!orderId) {
             this._showToast("No order ID provided for bill printing", "error");
             return false;
@@ -1486,11 +1737,21 @@ class BluetoothPrinting {
                 return false;
             }
 
+            // Use order's channel if not provided
+            if (!channel && orderData.priceVariant) {
+                channel = orderData.priceVariant;
+            }
+
             // Generate HTML for the bill
             const billHtml = this.generateReceiptHTML(orderData, 'bill', paymentMode);
-            
+
+            // Find the appropriate printer for this channel and bill
+            const printer = this.getPrinterForChannel(channel, 'bill');
+
             // Show initial status message
-            if (this.connected && this.characteristic) {
+            if (printer) {
+                this._showToast(`Printing bill using ${printer.name || 'assigned printer'}...`, "info");
+            } else if (this.connected && this.characteristic) {
                 this._showToast("Printing bill using connected printer...", "info");
             } else if (this.lastConnectedDevice) {
                 this._showToast("Connecting to printer for bill...", "info");
@@ -1501,12 +1762,53 @@ class BluetoothPrinting {
             // Try Bluetooth printing first if supported
             if (this.isSupported()) {
                 try {
-                    // Connect to printer if not already connected
+                    // If we have a specific printer for this channel, use it
+                    if (printer) {
+                        // Save current connection state
+                        const previousDevice = this.device;
+                        const previousConnected = this.connected;
+                        const previousCharacteristic = this.characteristic;
+
+                        // Try to connect to the specific printer
+                        try {
+                            // Temporarily set this device as the last connected device
+                            this.lastConnectedDevice = {
+                                id: printer.deviceId,
+                                name: printer.name
+                            };
+
+                            // Connect to this specific printer
+                            await this.ensurePrinterConnection();
+
+                            // Convert HTML to printer-compatible canvas data
+                            const data = await this.htmlToCanvas(billHtml);
+
+                            // Send to printer
+                            await this.sendData(data);
+                            this._showToast("Bill printed successfully", "success");
+
+                            // Save this printer as the last connected
+                            this.savePrinter();
+
+                            return true;
+                        } catch (specificPrinterError) {
+                            console.error(`Error using specific printer for channel ${channel}:`, specificPrinterError);
+
+                            // Restore previous connection state for fallback
+                            this.device = previousDevice;
+                            this.connected = previousConnected;
+                            this.characteristic = previousCharacteristic;
+
+                            // Fall through to try the default printing path
+                        }
+                    }
+
+                    // Default printing path
                     await this.ensurePrinterConnection();
-                    
-                    // Convert HTML to ESC/POS commands
-                    const data = await this.htmlToEscPos(billHtml);
-                    
+
+                    // Convert HTML to printer-compatible canvas data
+                    const data = await this.htmlToCanvas(billHtml);
+
                     // Send to printer
                     await this.sendData(data);
                     this._showToast("Bill printed successfully", "success");
@@ -1514,12 +1816,12 @@ class BluetoothPrinting {
                 } catch (error) {
                     // Handle error based on type
                     const errorType = this._handlePrinterError(error);
-                    
+
                     // If it's a user cancellation, don't attempt fallback
                     if (errorType === "user_cancelled") {
                         return false;
                     }
-                    
+
                     // For other errors, try browser printing as fallback
                     this._showToast("Attempting browser print for bill...", "info");
                     try {
@@ -1669,80 +1971,80 @@ class BluetoothPrinting {
      */
     async loadLogoImage(imageUrl) {
         if (!imageUrl) return null;
-        
+
         // Check cache first
         if (this.imageCache.has(imageUrl)) {
             return this.imageCache.get(imageUrl);
         }
-        
+
         try {
             // Determine maximum width based on printer size
             const printerWidthPixels = this.printerWidth * 8; // Each character is about 8 pixels
             const maxHeight = 100; // Limit maximum height to avoid large prints
-            
+
             return new Promise((resolve, reject) => {
                 const img = new Image();
-                
+
                 img.onload = () => {
                     try {
                         // Create a canvas to process the image
                         const canvas = document.createElement('canvas');
                         const ctx = canvas.getContext('2d');
-                        
+
                         // Calculate dimensions while preserving aspect ratio
                         let width = img.width;
                         let height = img.height;
-                        
+
                         // Scale down if wider than printer width
                         if (width > printerWidthPixels) {
                             const scale = printerWidthPixels / width;
                             width = printerWidthPixels;
                             height = Math.floor(height * scale);
                         }
-                        
+
                         // Further limit height if needed
                         if (height > maxHeight) {
                             const scale = maxHeight / height;
                             height = maxHeight;
                             width = Math.floor(width * scale);
                         }
-                        
+
                         // Ensure width is a multiple of 8 for byte alignment
                         width = Math.floor(width / 8) * 8;
-                        
+
                         // Set canvas dimensions
                         canvas.width = width;
                         canvas.height = height;
-                        
+
                         // Draw and process image
                         ctx.fillStyle = 'white';
                         ctx.fillRect(0, 0, width, height);
                         ctx.drawImage(img, 0, 0, width, height);
-                        
+
                         // Get image data
                         const imageData = ctx.getImageData(0, 0, width, height);
                         const pixels = imageData.data;
-                        
+
                         // Process image data for printer
                         const commands = [];
-                        
+
                         // Center alignment
                         commands.push(0x1B, 0x61, 0x01);
-                        
+
                         // Calculate bytes needed for each line (width / 8)
                         const bytesPerLine = width / 8;
-                        
+
                         // Use GS v 0 raster bit image command - more compatible with various printers
                         commands.push(0x1D, 0x76, 0x30, 0x00);
-                        
+
                         // xL, xH - width in bytes (low, high bytes)
                         commands.push(bytesPerLine & 0xFF);
                         commands.push((bytesPerLine >> 8) & 0xFF);
-                        
+
                         // yL, yH - height in pixels (low, high bytes)
                         commands.push(height & 0xFF);
                         commands.push((height >> 8) & 0xFF);
-                        
+
                         // Convert image data to bitmap
                         for (let y = 0; y < height; y++) {
                             for (let x = 0; x < bytesPerLine; x++) {
@@ -1750,10 +2052,10 @@ class BluetoothPrinting {
                                 for (let bit = 0; bit < 8; bit++) {
                                     const xPos = x * 8 + bit;
                                     const i = (y * width + xPos) * 4;
-                                    
+
                                     // Convert to grayscale and check threshold
                                     const gray = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
-                                    
+
                                     // Set bit if pixel is dark (invert because thermal printers print black)
                                     if (gray < 128) {
                                         b |= (0x80 >> bit);
@@ -1762,26 +2064,26 @@ class BluetoothPrinting {
                                 commands.push(b);
                             }
                         }
-                        
+
                         // Return to left alignment
                         commands.push(0x1B, 0x61, 0x00);
-                        
+
                         // Create result and cache it
                         const result = new Uint8Array(commands);
                         this.imageCache.set(imageUrl, result);
-                        
+
                         resolve(result);
                     } catch (error) {
                         console.error('Error processing logo image:', error);
                         resolve(null);
                     }
                 };
-                
+
                 img.onerror = () => {
                     console.error('Failed to load logo image:', imageUrl);
                     resolve(null);
                 };
-                
+
                 // Set crossOrigin to allow processing images from other domains
                 img.crossOrigin = 'anonymous';
                 img.src = imageUrl;

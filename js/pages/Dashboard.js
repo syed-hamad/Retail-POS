@@ -2230,6 +2230,862 @@ function Dashboard() {
         });
     };
 
+    // Handle printer management
+    const handlePrinterManagement = () => {
+        if (!window.ModalManager || !window.sdk) {
+            showToast("System components not loaded. Please try again later.");
+            return;
+        }
+
+        // Get all available order channels
+        const orderChannels = [];
+
+        // Add the Default channel
+        orderChannels.push('Default');
+
+        // Add channels from price variants
+        if (seller?.priceVariants && Array.isArray(seller.priceVariants)) {
+            seller.priceVariants.forEach(variant => {
+                if (variant.title && variant.title !== 'Default' && !orderChannels.includes(variant.title)) {
+                    orderChannels.push(variant.title);
+                }
+            });
+        }
+
+        // Get managed printers from BluetoothPrinting
+        const bluetoothPrinting = window.BluetoothPrinting;
+        const managedPrinters = bluetoothPrinting ? bluetoothPrinting.getSavedPrinters() : [];
+
+        // Create modal
+        const modal = window.ModalManager.createCenterModal({
+            id: 'printer-management-modal',
+            title: "Printer Management",
+            content: `
+                <div class="p-5">
+                    <div id="printer-error-container" class="mb-4 hidden p-3 bg-red-50 text-red-700 rounded-lg"></div>
+                    
+                    <div class="mb-5">
+                        <p class="text-sm text-gray-600 leading-relaxed">
+                            Configure printers for different order channels. You can assign specific printers for KOT (Kitchen Order Ticket) and bills.
+                        </p>
+                    </div>
+                    
+                    <!-- Printer List -->
+                    <div id="printer-list" class="mb-5 space-y-4">
+                        ${managedPrinters.length === 0 ? `
+                            <div class="text-center py-8 bg-gradient-to-br from-gray-50 to-white rounded-lg border border-dashed border-gray-300">
+                                <div class="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm">
+                                    <i class="ph ph-printer text-gray-400 text-3xl"></i>
+                                </div>
+                                <p class="text-gray-500 mb-1">No printers configured</p>
+                                <p class="text-xs text-gray-400">Connect a Bluetooth printer to get started</p>
+                            </div>
+                        ` : managedPrinters.map((printer, index) => `
+                            <div class="printer-item bg-gradient-to-br from-white to-gray-50 border rounded-lg shadow-sm p-4 transition-all hover:shadow-md" data-printer-id="${printer.id}">
+                                <div class="flex justify-between items-start mb-3">
+                                    <div class="flex items-center">
+                                        <div class="w-10 h-10 bg-gradient-to-br from-red-50 to-red-100 rounded-lg flex items-center justify-center mr-3 shadow-sm">
+                                            <i class="ph ph-printer text-red-500 text-xl"></i>
+                                        </div>
+                                        <div>
+                                            <h4 class="font-medium text-gray-800">${printer.name || 'Unnamed Printer'}</h4>
+                                            <p class="text-xs text-gray-500">${printer.deviceId || 'Unknown ID'}</p>
+                                        </div>
+                                        ${printer.isDefault ? `<span class="ml-2 px-2 py-0.5 bg-gradient-to-r from-red-100 to-red-50 text-red-700 text-xs rounded-full flex items-center"><i class="ph ph-star-fill text-amber-500 mr-1 text-xs"></i>Default</span>` : ''}
+                                    </div>
+                                    <div class="flex space-x-1">
+                                        <button class="printer-edit-btn p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors" data-printer-id="${printer.id}" title="Edit printer">
+                                            <i class="ph ph-pencil-simple"></i>
+                                        </button>
+                                        <button class="printer-remove-btn p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100 transition-colors" data-printer-id="${printer.id}" title="Remove printer">
+                                            <i class="ph ph-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Assignments -->
+                                <div class="mt-3 pt-3 border-t border-gray-200">
+                                    <h5 class="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                                        <i class="ph ph-link text-gray-400 mr-1.5"></i>
+                                        Channel Assignments
+                                    </h5>
+                                    ${printer.assignments && printer.assignments.length > 0 ? `
+                                        <div class="flex flex-wrap gap-2">
+                                            ${printer.assignments.map(assignment => `
+                                                <div class="inline-flex items-center px-2 py-1 bg-gradient-to-r from-gray-100 to-gray-50 text-xs rounded-md border border-gray-100 shadow-sm">
+                                                    <span class="font-medium">${assignment.channel}</span>
+                                                    <span class="mx-1 text-gray-400">•</span>
+                                                    <span class="text-${assignment.printType === 'all' ? 'blue' : assignment.printType === 'kot' ? 'green' : 'orange'}-500">
+                                                        ${assignment.printType === 'all' ? 'All' : assignment.printType === 'kot' ? 'KOT' : 'Bill'}
+                                                    </span>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                    ` : `
+                                        <p class="text-xs text-gray-500 flex items-center">
+                                            <i class="ph ph-info text-gray-400 mr-1"></i>
+                                            No channel assignments
+                                        </p>
+                                    `}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    
+                    <!-- Add Printer Button -->
+                    <button id="add-printer-btn" class="w-full py-3 border border-dashed border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 hover:shadow-sm transition-all flex items-center justify-center gap-2 bg-gradient-to-r from-white to-gray-50">
+                        <i class="ph ph-plus-circle"></i>
+                        Add New Printer
+                    </button>
+                </div>
+            `,
+            actions: `
+                <div class="flex justify-end px-5 py-4 bg-gradient-to-r from-gray-50 to-white border-t border-gray-100">
+                    <button id="close-printer-management-btn" class="px-4 py-2 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-600">
+                        <i class="ph ph-x"></i>
+                        Close
+                    </button>
+                </div>
+            `,
+            size: 'lg',
+            onShown: (modalControl) => {
+                const errorContainer = document.getElementById('printer-error-container');
+                const addPrinterBtn = document.getElementById('add-printer-btn');
+                const closePrinterManagementBtn = document.getElementById('close-printer-management-btn');
+
+                // Add printer event handler
+                addPrinterBtn.addEventListener('click', () => {
+                    showAddPrinterModal(modalControl);
+                });
+
+                // Close button event handler
+                closePrinterManagementBtn.addEventListener('click', () => {
+                    modalControl.close();
+                });
+
+                // Edit printer event handlers
+                document.querySelectorAll('.printer-edit-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const printerId = btn.getAttribute('data-printer-id');
+                        showEditPrinterModal(printerId, modalControl);
+                    });
+                });
+
+                // Remove printer event handlers
+                document.querySelectorAll('.printer-remove-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const printerId = btn.getAttribute('data-printer-id');
+                        removePrinter(printerId, modalControl);
+                    });
+                });
+            }
+        });
+    };
+
+    // Show add printer modal
+    const showAddPrinterModal = (parentModalControl) => {
+        // Get all available order channels
+        const orderChannels = ['All Channels', 'Default'];
+
+        // Add channels from price variants
+        if (seller?.priceVariants && Array.isArray(seller.priceVariants)) {
+            seller.priceVariants.forEach(variant => {
+                if (variant.title && variant.title !== 'Default' && !orderChannels.includes(variant.title)) {
+                    orderChannels.push(variant.title);
+                }
+            });
+        }
+
+        // Create modal
+        const modal = window.ModalManager.createCenterModal({
+            id: 'add-printer-modal',
+            title: "Add Printer",
+            content: `
+                <div class="p-5 pt-4">
+                    <div id="add-printer-error-container" class="mb-4 hidden p-3 bg-red-50 text-red-700 rounded-lg"></div>
+                    
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">
+                            <i class="ph ph-tag text-gray-400 mr-1.5"></i>
+                            Printer Name
+                        </label>
+                        <input
+                            type="text"
+                            id="printer-name-input"
+                            class="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-gradient-to-r from-white to-gray-50 shadow-sm"
+                            placeholder="e.g. Kitchen Printer"
+                        />
+                    </div>
+                    
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="block text-sm font-medium text-gray-700">
+                                <i class="ph ph-bluetooth text-gray-400 mr-1.5"></i>
+                                Bluetooth Device
+                            </label>
+                            <button id="select-device-btn" class="text-xs text-red-500 hover:text-red-600 flex items-center gap-1 transition-colors">
+                                <i class="ph ph-scan"></i>
+                                Select Device
+                            </button>
+                        </div>
+                        <div id="selected-device-container" class="border rounded-lg p-4 flex items-center justify-between bg-gradient-to-r from-gray-50 to-white shadow-sm">
+                            <div id="no-device-selected" class="text-gray-500 text-sm flex items-center">
+                                <i class="ph ph-bluetooth-x text-gray-400 mr-2"></i>
+                                No device selected
+                            </div>
+                            <div id="device-info" class="hidden">
+                                <div class="flex items-center">
+                                    <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center mr-2 shadow-sm">
+                                        <i class="ph ph-bluetooth text-blue-500"></i>
+                                    </div>
+                                    <div>
+                                        <div id="device-name" class="font-medium"></div>
+                                        <div id="device-id" class="text-xs text-gray-500"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="flex items-center p-2 hover:bg-gray-50 rounded-md cursor-pointer transition-colors">
+                            <input
+                                type="checkbox"
+                                id="is-default-printer-input"
+                                class="w-4 h-4 text-red-600 rounded focus:ring-red-500"
+                            />
+                            <div class="ml-2">
+                                <div class="text-sm text-gray-700 font-medium">Set as default printer</div>
+                                <div class="text-xs text-gray-500">This printer will be used when no specific printer is assigned</div>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div class="mb-5">
+                        <label class="flex items-center p-2 hover:bg-gray-50 rounded-md cursor-pointer transition-colors">
+                            <input
+                                type="checkbox"
+                                id="add-assignments-input"
+                                class="w-4 h-4 text-red-600 rounded focus:ring-red-500"
+                            />
+                            <div class="ml-2">
+                                <div class="text-sm text-gray-700 font-medium">Add channel assignments</div>
+                                <div class="text-xs text-gray-500">Configure which channels and print types use this printer</div>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div id="assignments-container" class="hidden space-y-4 p-4 border border-gray-200 rounded-lg bg-gradient-to-r from-gray-50 to-white shadow-sm">
+                        <div id="assignments-list" class="space-y-4">
+                            <div class="assignment-entry grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 mb-1.5 flex items-center">
+                                        <i class="ph ph-storefront text-gray-400 mr-1"></i>
+                                        Channel
+                                    </label>
+                                    <select class="assignment-channel w-full px-3 py-2 border rounded-lg text-sm bg-white shadow-sm focus:ring-2 focus:ring-red-500 focus:outline-none">
+                                        ${orderChannels.map(channel => `
+                                            <option value="${channel}">${channel}</option>
+                                        `).join('')}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 mb-1.5 flex items-center">
+                                        <i class="ph ph-printer text-gray-400 mr-1"></i>
+                                        Print Type
+                                    </label>
+                                    <select class="assignment-type w-full px-3 py-2 border rounded-lg text-sm bg-white shadow-sm focus:ring-2 focus:ring-red-500 focus:outline-none">
+                                        <option value="all">All</option>
+                                        <option value="kot">KOT Only</option>
+                                        <option value="bill">Bill Only</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button id="add-assignment-btn" class="w-full py-2 border border-dashed border-gray-300 text-gray-600 rounded-md hover:bg-gray-50 hover:shadow-sm transition-all flex items-center justify-center text-sm gap-1">
+                            <i class="ph ph-plus-circle"></i>
+                            Add Another Assignment
+                        </button>
+                    </div>
+                </div>
+            `,
+            actions: `
+                <div class="flex justify-end px-5 py-4 space-x-3 bg-gradient-to-r from-gray-50 to-white border-t border-gray-100">
+                    <button id="cancel-add-printer-btn" class="px-4 py-2 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-600">
+                        <i class="ph ph-x"></i>
+                        Cancel
+                    </button>
+                    <button id="save-add-printer-btn" class="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-md hover:from-red-600 hover:to-red-700 transition-colors flex items-center gap-2 shadow-sm">
+                        <i class="ph ph-check"></i>
+                        Add Printer
+                    </button>
+                </div>
+            `,
+            size: 'md',
+            onShown: (modalControl) => {
+                const errorContainer = document.getElementById('add-printer-error-container');
+                const printerNameInput = document.getElementById('printer-name-input');
+                const selectDeviceBtn = document.getElementById('select-device-btn');
+                const deviceInfoDiv = document.getElementById('device-info');
+                const noDeviceSelectedDiv = document.getElementById('no-device-selected');
+                const deviceNameDiv = document.getElementById('device-name');
+                const deviceIdDiv = document.getElementById('device-id');
+                const isDefaultPrinterInput = document.getElementById('is-default-printer-input');
+                const addAssignmentsInput = document.getElementById('add-assignments-input');
+                const assignmentsContainer = document.getElementById('assignments-container');
+                const assignmentsList = document.getElementById('assignments-list');
+                const addAssignmentBtn = document.getElementById('add-assignment-btn');
+                const cancelButton = document.getElementById('cancel-add-printer-btn');
+                const saveButton = document.getElementById('save-add-printer-btn');
+
+                let selectedDevice = null;
+
+                // Show/hide assignments based on checkbox
+                addAssignmentsInput.addEventListener('change', () => {
+                    assignmentsContainer.classList.toggle('hidden', !addAssignmentsInput.checked);
+                });
+
+                // Add assignment button event handler
+                addAssignmentBtn.addEventListener('click', () => {
+                    const assignmentEntry = document.createElement('div');
+                    assignmentEntry.className = 'assignment-entry grid grid-cols-2 gap-4 relative';
+                    assignmentEntry.innerHTML = `
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">
+                                Channel
+                            </label>
+                            <select class="assignment-channel w-full px-3 py-2 border rounded-md text-sm">
+                                ${orderChannels.map(channel => `
+                                    <option value="${channel}">${channel}</option>
+                                `).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">
+                                Print Type
+                            </label>
+                            <div class="flex">
+                                <select class="assignment-type w-full px-3 py-2 border rounded-md text-sm">
+                                    <option value="all">All</option>
+                                    <option value="kot">KOT Only</option>
+                                    <option value="bill">Bill Only</option>
+                                </select>
+                                <button class="remove-assignment-btn ml-2 p-1 text-gray-400 hover:text-red-500 rounded hover:bg-gray-100">
+                                    <i class="ph ph-x"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+
+                    assignmentsList.appendChild(assignmentEntry);
+
+                    // Add event listener to the remove button
+                    assignmentEntry.querySelector('.remove-assignment-btn').addEventListener('click', () => {
+                        assignmentEntry.remove();
+                    });
+                });
+
+                // Select device button event handler
+                selectDeviceBtn.addEventListener('click', async () => {
+                    try {
+                        errorContainer.classList.add('hidden');
+
+                        if (!window.BluetoothPrinting) {
+                            throw new Error('Bluetooth printing service not available');
+                        }
+
+                        const bluetoothPrinting = window.BluetoothPrinting;
+
+                        // Check if the browser supports Web Bluetooth
+                        if (!bluetoothPrinting.isSupported()) {
+                            throw new Error('Web Bluetooth is not supported in this browser');
+                        }
+
+                        // Request a Bluetooth device
+                        const device = await navigator.bluetooth.requestDevice({
+                            acceptAllDevices: true,
+                            optionalServices: [
+                                '000018f0-0000-1000-8000-00805f9b34fb',  // Common printer service
+                                '00001101-0000-1000-8000-00805f9b34fb',  // Serial Port Profile
+                                '00001800-0000-1000-8000-00805f9b34fb',  // Generic Access Service
+                                '00001801-0000-1000-8000-00805f9b34fb',  // Generic Attribute Service
+                                '0000180a-0000-1000-8000-00805f9b34fb',  // Device Information Service
+                                '0000ffff-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                                '0000fff0-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                                '0000ff00-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                                '0000fe00-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                                '00010000-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                                '00000000-0000-1000-8000-00805f9b34fb'   // Vendor specific service
+                            ]
+                        });
+
+                        // Set the selected device
+                        selectedDevice = {
+                            id: device.id,
+                            name: device.name || 'Unknown Device'
+                        };
+
+                        // Update the UI
+                        deviceNameDiv.textContent = selectedDevice.name;
+                        deviceIdDiv.textContent = selectedDevice.id;
+                        deviceInfoDiv.classList.remove('hidden');
+                        noDeviceSelectedDiv.classList.add('hidden');
+
+                        // Set printer name if empty
+                        if (!printerNameInput.value) {
+                            printerNameInput.value = selectedDevice.name;
+                        }
+
+                    } catch (error) {
+                        console.error('Error selecting device:', error);
+                        errorContainer.textContent = `Error: ${error.message}`;
+                        errorContainer.classList.remove('hidden');
+                    }
+                });
+
+                // Cancel button event handler
+                cancelButton.addEventListener('click', () => {
+                    modalControl.close();
+                });
+
+                // Save button event handler
+                saveButton.addEventListener('click', async () => {
+                    try {
+                        // Basic validation
+                        if (!printerNameInput.value.trim()) {
+                            errorContainer.textContent = 'Please enter a printer name';
+                            errorContainer.classList.remove('hidden');
+                            return;
+                        }
+
+                        if (!selectedDevice) {
+                            errorContainer.textContent = 'Please select a Bluetooth device';
+                            errorContainer.classList.remove('hidden');
+                            return;
+                        }
+
+                        // Collect assignments if enabled
+                        const assignments = [];
+                        if (addAssignmentsInput.checked) {
+                            const assignmentEntries = assignmentsList.querySelectorAll('.assignment-entry');
+                            assignmentEntries.forEach(entry => {
+                                const channelSelect = entry.querySelector('.assignment-channel');
+                                const typeSelect = entry.querySelector('.assignment-type');
+
+                                if (channelSelect && typeSelect) {
+                                    assignments.push({
+                                        channel: channelSelect.value,
+                                        printType: typeSelect.value
+                                    });
+                                }
+                            });
+                        }
+
+                        // Create the printer object
+                        const printer = {
+                            name: printerNameInput.value.trim(),
+                            deviceId: selectedDevice.id,
+                            deviceName: selectedDevice.name,
+                            assignments: assignments,
+                            dateAdded: new Date().toISOString()
+                        };
+
+                        // Add the printer to the managed printers list
+                        if (window.BluetoothPrinting) {
+                            const bluetoothPrinting = window.BluetoothPrinting;
+                            bluetoothPrinting.addPrinter(printer, isDefaultPrinterInput.checked);
+
+                            // Show success message
+                            window.ModalManager.showToast('Printer added successfully');
+
+                            // Close the modal
+                            modalControl.close();
+
+                            // Refresh the parent modal
+                            parentModalControl.close();
+                            handlePrinterManagement();
+                        } else {
+                            throw new Error('Bluetooth printing service not available');
+                        }
+                    } catch (error) {
+                        console.error('Error saving printer:', error);
+                        errorContainer.textContent = `Error: ${error.message}`;
+                        errorContainer.classList.remove('hidden');
+                    }
+                });
+            }
+        });
+    };
+
+    // Show edit printer modal
+    const showEditPrinterModal = (printerId, parentModalControl) => {
+        // Get the printer from BluetoothPrinting
+        const bluetoothPrinting = window.BluetoothPrinting;
+        if (!bluetoothPrinting) {
+            window.ModalManager.showToast('Bluetooth printing service not available', 'error');
+            return;
+        }
+
+        const printers = bluetoothPrinting.getSavedPrinters();
+        const printer = printers.find(p => p.id === printerId);
+
+        if (!printer) {
+            window.ModalManager.showToast('Printer not found', 'error');
+            return;
+        }
+
+        // Get all available order channels
+        const orderChannels = ['All Channels', 'Default'];
+
+        // Add channels from price variants
+        if (seller?.priceVariants && Array.isArray(seller.priceVariants)) {
+            seller.priceVariants.forEach(variant => {
+                if (variant.title && variant.title !== 'Default' && !orderChannels.includes(variant.title)) {
+                    orderChannels.push(variant.title);
+                }
+            });
+        }
+
+        // Create modal
+        const modal = window.ModalManager.createCenterModal({
+            id: 'edit-printer-modal',
+            title: "Edit Printer",
+            content: `
+                <div class="p-5 pt-4">
+                    <div id="edit-printer-error-container" class="mb-4 hidden p-3 bg-red-50 text-red-700 rounded-lg"></div>
+                    
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">
+                            <i class="ph ph-tag text-gray-400 mr-1.5"></i>
+                            Printer Name
+                        </label>
+                        <input
+                            type="text"
+                            id="edit-printer-name-input"
+                            class="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-gradient-to-r from-white to-gray-50 shadow-sm"
+                            value="${printer.name || ''}"
+                            placeholder="e.g. Kitchen Printer"
+                        />
+                    </div>
+                    
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="block text-sm font-medium text-gray-700">
+                                <i class="ph ph-bluetooth text-gray-400 mr-1.5"></i>
+                                Bluetooth Device
+                            </label>
+                        </div>
+                        <div id="selected-device-container" class="border rounded-lg p-4 flex items-center justify-between bg-gradient-to-r from-gray-50 to-white shadow-sm">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center mr-2 shadow-sm">
+                                    <i class="ph ph-bluetooth text-blue-500"></i>
+                                </div>
+                                <div>
+                                    <div class="font-medium">${printer.deviceName || 'Unknown Device'}</div>
+                                    <div class="text-xs text-gray-500">${printer.deviceId || ''}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="flex items-center p-2 hover:bg-gray-50 rounded-md cursor-pointer transition-colors">
+                            <input
+                                type="checkbox"
+                                id="edit-is-default-printer-input"
+                                class="w-4 h-4 text-red-600 rounded focus:ring-red-500"
+                                ${printer.isDefault ? 'checked' : ''}
+                            />
+                            <div class="ml-2">
+                                <div class="text-sm text-gray-700 font-medium">Set as default printer</div>
+                                <div class="text-xs text-gray-500">This printer will be used when no specific printer is assigned</div>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div class="mb-5">
+                        <h5 class="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                            <i class="ph ph-link text-gray-400 mr-1.5"></i>
+                            Channel Assignments
+                        </h5>
+                    </div>
+                    
+                    <div id="edit-assignments-container" class="space-y-4 p-4 border border-gray-200 rounded-lg bg-gradient-to-r from-gray-50 to-white shadow-sm">
+                        <div id="edit-assignments-list" class="space-y-4">
+                            ${(printer.assignments || []).map((assignment, index) => `
+                                <div class="assignment-entry grid grid-cols-2 gap-4 relative" data-index="${index}">
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1.5 flex items-center">
+                                            <i class="ph ph-storefront text-gray-400 mr-1"></i>
+                                            Channel
+                                        </label>
+                                        <select class="assignment-channel w-full px-3 py-2 border rounded-lg text-sm bg-white shadow-sm focus:ring-2 focus:ring-red-500 focus:outline-none">
+                                            ${orderChannels.map(channel => `
+                                                <option value="${channel}" ${assignment.channel === channel ? 'selected' : ''}>${channel}</option>
+                                            `).join('')}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1.5 flex items-center">
+                                            <i class="ph ph-printer text-gray-400 mr-1"></i>
+                                            Print Type
+                                        </label>
+                                        <div class="flex">
+                                            <select class="assignment-type w-full px-3 py-2 border rounded-lg text-sm bg-white shadow-sm focus:ring-2 focus:ring-red-500 focus:outline-none">
+                                                <option value="all" ${assignment.printType === 'all' ? 'selected' : ''}>All</option>
+                                                <option value="kot" ${assignment.printType === 'kot' ? 'selected' : ''}>KOT Only</option>
+                                                <option value="bill" ${assignment.printType === 'bill' ? 'selected' : ''}>Bill Only</option>
+                                            </select>
+                                            <button class="remove-assignment-btn ml-2 p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-gray-100 transition-colors">
+                                                <i class="ph ph-x"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        
+                        <button id="edit-add-assignment-btn" class="w-full py-2 border border-dashed border-gray-300 text-gray-600 rounded-md hover:bg-gray-50 hover:shadow-sm transition-all flex items-center justify-center text-sm gap-1">
+                            <i class="ph ph-plus-circle"></i>
+                            Add Assignment
+                        </button>
+                    </div>
+                </div>
+            `,
+            actions: `
+                <div class="flex justify-end px-5 py-4 space-x-3 bg-gradient-to-r from-gray-50 to-white border-t border-gray-100">
+                    <button id="cancel-edit-printer-btn" class="px-4 py-2 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-600">
+                        <i class="ph ph-x"></i>
+                        Cancel
+                    </button>
+                    <button id="save-edit-printer-btn" class="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-md hover:from-red-600 hover:to-red-700 transition-colors flex items-center gap-2 shadow-sm">
+                        <i class="ph ph-check"></i>
+                        Save Changes
+                    </button>
+                </div>
+            `,
+            size: 'md',
+            onShown: (modalControl) => {
+                const errorContainer = document.getElementById('edit-printer-error-container');
+                const printerNameInput = document.getElementById('edit-printer-name-input');
+                const isDefaultPrinterInput = document.getElementById('edit-is-default-printer-input');
+                const assignmentsList = document.getElementById('edit-assignments-list');
+                const addAssignmentBtn = document.getElementById('edit-add-assignment-btn');
+                const cancelButton = document.getElementById('cancel-edit-printer-btn');
+                const saveButton = document.getElementById('save-edit-printer-btn');
+
+                // Add assignment button event handler
+                addAssignmentBtn.addEventListener('click', () => {
+                    const assignmentEntry = document.createElement('div');
+                    assignmentEntry.className = 'assignment-entry grid grid-cols-2 gap-4 relative';
+                    assignmentEntry.innerHTML = `
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1.5 flex items-center">
+                                <i class="ph ph-storefront text-gray-400 mr-1"></i>
+                                Channel
+                            </label>
+                            <select class="assignment-channel w-full px-3 py-2 border rounded-lg text-sm bg-white shadow-sm focus:ring-2 focus:ring-red-500 focus:outline-none">
+                                ${orderChannels.map(channel => `
+                                    <option value="${channel}">${channel}</option>
+                                `).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1.5 flex items-center">
+                                <i class="ph ph-printer text-gray-400 mr-1"></i>
+                                Print Type
+                            </label>
+                            <div class="flex">
+                                <select class="assignment-type w-full px-3 py-2 border rounded-lg text-sm bg-white shadow-sm focus:ring-2 focus:ring-red-500 focus:outline-none">
+                                    <option value="all">All</option>
+                                    <option value="kot">KOT Only</option>
+                                    <option value="bill">Bill Only</option>
+                                </select>
+                                <button class="remove-assignment-btn ml-2 p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-gray-100 transition-colors">
+                                    <i class="ph ph-x"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+
+                    assignmentsList.appendChild(assignmentEntry);
+
+                    // Add event listener to the remove button
+                    assignmentEntry.querySelector('.remove-assignment-btn').addEventListener('click', () => {
+                        assignmentEntry.remove();
+                    });
+                });
+
+                // Add event listeners to existing remove buttons
+                document.querySelectorAll('.remove-assignment-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        btn.closest('.assignment-entry').remove();
+                    });
+                });
+
+                // Cancel button event handler
+                cancelButton.addEventListener('click', () => {
+                    modalControl.close();
+                });
+
+                // Save button event handler
+                saveButton.addEventListener('click', async () => {
+                    try {
+                        // Basic validation
+                        if (!printerNameInput.value.trim()) {
+                            errorContainer.textContent = 'Please enter a printer name';
+                            errorContainer.classList.remove('hidden');
+                            return;
+                        }
+
+                        // Collect assignments
+                        const assignments = [];
+                        const assignmentEntries = assignmentsList.querySelectorAll('.assignment-entry');
+                        assignmentEntries.forEach(entry => {
+                            const channelSelect = entry.querySelector('.assignment-channel');
+                            const typeSelect = entry.querySelector('.assignment-type');
+
+                            if (channelSelect && typeSelect) {
+                                assignments.push({
+                                    channel: channelSelect.value,
+                                    printType: typeSelect.value
+                                });
+                            }
+                        });
+
+                        // Create the update object
+                        const updates = {
+                            name: printerNameInput.value.trim(),
+                            assignments: assignments,
+                            isDefault: isDefaultPrinterInput.checked,
+                            dateModified: new Date().toISOString()
+                        };
+
+                        // Update the printer
+                        bluetoothPrinting.updatePrinter(printerId, updates);
+
+                        // Show success message
+                        window.ModalManager.showToast('Printer updated successfully');
+
+                        // Close the modal
+                        modalControl.close();
+
+                        // Refresh the parent modal
+                        parentModalControl.close();
+                        handlePrinterManagement();
+                    } catch (error) {
+                        console.error('Error updating printer:', error);
+                        errorContainer.textContent = `Error: ${error.message}`;
+                        errorContainer.classList.remove('hidden');
+                    }
+                });
+            }
+        });
+    };
+
+    // Remove a printer
+    const removePrinter = (printerId, parentModalControl) => {
+        // Get the printer service
+        const bluetoothPrinting = window.BluetoothPrinting;
+        if (!bluetoothPrinting) {
+            window.ModalManager.showToast('Bluetooth printing service not available', 'error');
+            return;
+        }
+
+        // Get the printer details
+        const printers = bluetoothPrinting.getSavedPrinters();
+        const printer = printers.find(p => p.id === printerId);
+
+        if (!printer) {
+            window.ModalManager.showToast('Printer not found', 'error');
+            return;
+        }
+
+        // Confirm deletion with a modal
+        const confirmModal = window.ModalManager.createCenterModal({
+            id: 'confirm-delete-printer-modal',
+            title: "Remove Printer",
+            content: `
+                <div class="p-5">
+                    <div class="flex items-center justify-center mb-5">
+                        <div class="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center">
+                            <i class="ph ph-warning-circle text-red-500 text-3xl"></i>
+                        </div>
+                    </div>
+                    
+                    <h3 class="text-lg font-medium text-gray-800 mb-2 text-center">Are you sure?</h3>
+                    
+                    <p class="text-gray-600 text-center mb-4">
+                        You're about to remove the printer <span class="font-medium text-gray-800">${printer.name || 'Unnamed printer'}</span>.
+                        ${printer.isDefault ? '<span class="text-red-500">This is your default printer.</span>' : ''}
+                    </p>
+                    
+                    <div class="bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-100 rounded-lg p-4 mb-4">
+                        <div class="flex items-start">
+                            <div class="flex-shrink-0 mt-0.5">
+                                <i class="ph ph-info text-amber-500 text-lg"></i>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm text-amber-700">
+                                    Any printer assignments to order channels will be removed. This action cannot be undone.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `,
+            actions: `
+                <div class="flex justify-end px-5 py-4 space-x-3 bg-gradient-to-r from-gray-50 to-white border-t border-gray-100">
+                    <button id="cancel-delete-printer-btn" class="px-4 py-2 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-600">
+                        <i class="ph ph-x"></i>
+                        Cancel
+                    </button>
+                    <button id="confirm-delete-printer-btn" class="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-md hover:from-red-600 hover:to-red-700 transition-colors flex items-center gap-2 shadow-sm">
+                        <i class="ph ph-trash"></i>
+                        Remove Printer
+                    </button>
+                </div>
+            `,
+            size: 'sm',
+            onShown: (modalControl) => {
+                const cancelButton = document.getElementById('cancel-delete-printer-btn');
+                const confirmButton = document.getElementById('confirm-delete-printer-btn');
+
+                // Cancel button event handler
+                cancelButton.addEventListener('click', () => {
+                    modalControl.close();
+                });
+
+                // Confirm button event handler
+                confirmButton.addEventListener('click', () => {
+                    try {
+                        // Remove the printer
+                        const result = bluetoothPrinting.removePrinter(printerId);
+
+                        if (result) {
+                            window.ModalManager.showToast('Printer removed successfully');
+
+                            // Close modals
+                            modalControl.close();
+
+                            // Refresh the parent modal
+                            parentModalControl.close();
+                            handlePrinterManagement();
+                        } else {
+                            window.ModalManager.showToast('Failed to remove printer', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error removing printer:', error);
+                        window.ModalManager.showToast(`Error: ${error.message}`, 'error');
+                    }
+                });
+            }
+        });
+    };
+
     // Render the dashboard
     return (
         <div className="pb-24 md:pb-4 px-4 mt-4">
@@ -2939,6 +3795,27 @@ function Dashboard() {
                                                 <div>
                                                     <h4 className="font-medium text-gray-800">Print Template</h4>
                                                     <p className="text-sm text-gray-500">Manage KOT & Bill template</p>
+                                                </div>
+                                            </div>
+                                            <button className="mt-2 sm:mt-0 text-gray-400 self-start">
+                                                <i className="ph ph-caret-right text-lg"></i>
+                                            </button>
+                                        </div>
+
+                                        {/* Printer Management */}
+                                        <div
+                                            className="flex flex-col sm:flex-row sm:items-center justify-between py-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 px-4 rounded-lg transition-colors"
+                                            onClick={() => {
+                                                // Open Printer Management
+                                                handlePrinterManagement();
+                                            }}>
+                                            <div className="flex items-center">
+                                                <div className="w-12 h-12 bg-red-50 rounded-lg mr-4 flex-shrink-0 flex items-center justify-center">
+                                                    <i className="ph ph-printer-bluetooth text-red-500 text-xl"></i>
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-medium text-gray-800">Printer Management</h4>
+                                                    <p className="text-sm text-gray-500">Configure printers for different channels</p>
                                                 </div>
                                             </div>
                                             <button className="mt-2 sm:mt-0 text-gray-400 self-start">
