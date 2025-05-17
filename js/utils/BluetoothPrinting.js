@@ -822,20 +822,22 @@ class BluetoothPrinting {
 
         let processedTemplate = template;
 
-        // Basic replacements
+        // Basic replacements with printer-specific classes
         const replacements = {
-            '#logo': seller.logo ? `<img src="${seller.logo}" alt="Logo" style="max-width: 45mm; max-height: 15mm;">` : '<i class="ph ph-storefront" style="font-size: 24px;"></i>',
-            '#businessName': seller.businessName || 'Your Business',
-            '#phone': seller.phone || '',
-            '#address': seller.address || '',
-            '#storeLink': seller.website || '',
-            '#gstIN': seller.gstIN || '',
-            '#billNo': orderData.billNo || orderData.id?.substring(0, 8) || 'N/A',
-            '#orderSource': orderData.priceVariant || 'Default',
-            '#payMode': paymentMode || orderData.payMode || 'CASH',
-            '#timestamp': new Date(orderData.date?.toDate ? orderData.date.toDate() : orderData.date || new Date()).toLocaleString(),
-            '#cut': '', // Paper cut command - handled separately in printer commands
-            '#upiQR': '' // UPI QR code - would need further implementation
+            '#logo': seller.logo ?
+                `<div class="printer-center"><img src="${seller.logo}" alt="Logo" style="max-width: 45mm; max-height: 15mm;"></div>` :
+                '<div class="printer-center"><i class="ph ph-storefront" style="font-size: 24px;"></i></div>',
+            '#businessName': `<div class="printer-center printer-large printer-bold">${seller.businessName || 'Your Business'}</div>`,
+            '#phone': seller.phone ? `<div class="printer-center">Tel: ${seller.phone}</div>` : '',
+            '#address': seller.address ? `<div class="printer-center">${seller.address}</div>` : '',
+            '#storeLink': seller.website ? `<div class="printer-center">${seller.website}</div>` : '',
+            '#gstIN': seller.gstIN ? `<div class="printer-center">GSTIN: ${seller.gstIN}</div>` : '',
+            '#billNo': `<div class="printer-line">Bill #: ${orderData.billNo || orderData.id?.substring(0, 8) || 'N/A'}</div>`,
+            '#orderSource': `<div class="printer-line">Source: ${orderData.priceVariant || 'Default'}</div>`,
+            '#payMode': `<div class="printer-right">Payment: ${paymentMode || orderData.payMode || 'CASH'}</div>`,
+            '#timestamp': `<div class="printer-center">${new Date(orderData.date?.toDate ? orderData.date.toDate() : orderData.date || new Date()).toLocaleString()}</div>`,
+            '#cut': '<div class="printer-divider"></div>',
+            '#upiQR': orderData.upiQR ? `<div class="printer-center"><div class="printer-qr"><i class="ph ph-qr-code"></i></div></div>` : ''
         };
 
         // Replace all simple variables
@@ -843,71 +845,86 @@ class BluetoothPrinting {
             processedTemplate = processedTemplate.replace(new RegExp(key, 'g'), replacements[key]);
         });
 
-        // Special handling for complex variables
-
-        // Items list for bills - improved compact format with header
+        // Special handling for items list
         if (processedTemplate.includes('#itemsList')) {
             let itemsHtml = '';
 
             if (orderData.items && orderData.items.length > 0) {
-                // Add header row
+                // Add header
                 itemsHtml += `
-                <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; color: #555; border-bottom: 1px dashed #ccc; padding-bottom: 2px;">
-                    <span style="flex: 0 0 20px; text-align: left;">Qty</span>
-                    <span style="flex: 1; text-align: left; padding-left: 4px;">Item</span>
-                    <span style="flex: 0 0 50px; text-align: right;">Amount</span>
-                </div>`;
+                    <div class="printer-divider"></div>
+                    <div class="printer-table">
+                        <div class="printer-table-header">
+                            <div class="printer-col-qty">Qty</div>
+                            <div class="printer-col-name">Item</div>
+                            <div class="printer-col-price">Amount</div>
+                        </div>
+                    </div>
+                    <div class="printer-divider"></div>
+                `;
 
-                // Add items in compact single-line format
+                // Add items
+                itemsHtml += '<div class="printer-table">';
                 orderData.items.forEach(item => {
                     const quantity = parseFloat(item.quantity || item.qnt || 1);
                     const price = parseFloat(item.price || 0);
                     const amount = quantity * price;
 
+                    // Pad quantity and price for alignment
+                    const paddedQty = quantity.toString().padStart(2, ' ');
+                    const paddedAmount = amount.toFixed(2).padStart(8, ' ');
+                    const itemName = (item.title || 'Unknown Item').substring(0, 20); // Limit item name length
+
                     itemsHtml += `
-                    <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px; gap: 4px;">
-                        <span style="flex: 0 0 20px; text-align: left; font-weight: 600;">${quantity}</span>
-                        <span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 4px;">${item.title || 'Unknown Item'}</span>
-                        <span style="flex: 0 0 50px; text-align: right; font-weight: 600;">${amount.toFixed(2)}</span>
-                        </div>`;
+                        <div class="printer-table-row">
+                            <div class="printer-col-qty">${paddedQty}</div>
+                            <div class="printer-col-name">${itemName}</div>
+                            <div class="printer-col-price">${paddedAmount}</div>
+                        </div>
+                    `;
                 });
+                itemsHtml += '</div><div class="printer-divider"></div>';
             }
 
             processedTemplate = processedTemplate.replace('#itemsList', itemsHtml);
         }
 
-        // KOT items list - optimized for kitchen readability
+        // Special handling for KOT items list
         if (processedTemplate.includes('#kotItemsList')) {
             let kotItemsHtml = '';
 
             if (orderData.items && orderData.items.length > 0) {
-                // Add header
-                kotItemsHtml += `<div style="font-size: 14px; font-weight: 700; text-align: center; margin-bottom: 8px;">ITEMS</div>`;
+                kotItemsHtml += `
+                    <div class="printer-center printer-large printer-bold">KITCHEN ORDER</div>
+                    <div class="printer-divider"></div>
+                `;
 
-                // Add items with emphasis on quantity
                 orderData.items.forEach(item => {
                     const quantity = parseFloat(item.quantity || item.qnt || 1);
 
                     kotItemsHtml += `
-                    <div style="font-size: 14px; margin-bottom: 8px; display: flex;">
-                        <div style="font-size: 18px; font-weight: 700; margin-right: 8px; min-width: 30px;">${quantity}x</div>
-                        <div style="font-weight: 600;">${item.title || 'Unknown Item'}</div>
-                        </div>`;
+                        <div class="printer-item printer-large">
+                            <div class="printer-item-qty">${quantity}x</div>
+                            <div class="printer-item-name printer-bold">${item.title || 'Unknown Item'}</div>
+                        </div>
+                    `;
 
-                    // Add item-specific instructions if any
                     if (item.instructions) {
                         kotItemsHtml += `
-                        <div style="font-size: 12px; margin: -4px 0 8px 38px; font-style: italic;">
-                            ${item.instructions.trim()}
-                        </div>`;
+                            <div class="printer-line" style="padding-left: 30px; font-style: italic;">
+                                Note: ${item.instructions.trim()}
+                            </div>
+                        `;
                     }
                 });
+
+                kotItemsHtml += '<div class="printer-divider"></div>';
             }
 
             processedTemplate = processedTemplate.replace('#kotItemsList', kotItemsHtml);
         }
 
-        // Subtotal
+        // Handle totals section
         if (processedTemplate.includes('#subtotal')) {
             let subtotal = 0;
             if (orderData.items && orderData.items.length > 0) {
@@ -917,36 +934,51 @@ class BluetoothPrinting {
                     return total + (quantity * price);
                 }, 0);
             }
-            processedTemplate = processedTemplate.replace('#subtotal', subtotal.toFixed(2));
+            processedTemplate = processedTemplate.replace('#subtotal', `
+                <div class="printer-total-row">
+                    <div class="printer-total-label">Subtotal:</div>
+                    <div class="printer-total-value">${subtotal.toFixed(2)}</div>
+                </div>
+            `);
         }
 
-        // Discount
+        // Handle discount
         if (processedTemplate.includes('#discount')) {
             const discount = orderData.discount ? parseFloat(orderData.discount) : 0;
-            processedTemplate = processedTemplate.replace('#discount', discount.toFixed(2));
+            if (discount > 0) {
+                processedTemplate = processedTemplate.replace('#discount', `
+                    <div class="printer-total-row">
+                        <div class="printer-total-label">Discount:</div>
+                        <div class="printer-total-value">-${discount.toFixed(2)}</div>
+                    </div>
+                `);
+            } else {
+                processedTemplate = processedTemplate.replace('#discount', '');
+            }
         }
 
-        // Charges
+        // Handle charges
         if (processedTemplate.includes('#charges')) {
             let chargesHtml = '';
             if (orderData.charges && Array.isArray(orderData.charges)) {
                 orderData.charges.forEach(charge => {
                     if (charge.value && parseFloat(charge.value) !== 0) {
-                        chargesHtml += `<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
-                            <span>${charge.name || 'Charge'}:</span>
-                            <span>${parseFloat(charge.value).toFixed(2)}</span>
-                        </div>`;
+                        chargesHtml += `
+                            <div class="printer-total-row">
+                                <div class="printer-total-label">${charge.name}:</div>
+                                <div class="printer-total-value">${parseFloat(charge.value).toFixed(2)}</div>
+                            </div>
+                        `;
                     }
                 });
             }
             processedTemplate = processedTemplate.replace('#charges', chargesHtml);
         }
 
-        // Total
+        // Handle total
         if (processedTemplate.includes('#total')) {
             let total = orderData.total;
             if (!total && orderData.items) {
-                // Calculate if not available
                 let subtotal = 0;
                 if (orderData.items && orderData.items.length > 0) {
                     subtotal = orderData.items.reduce((total, item) => {
@@ -956,7 +988,6 @@ class BluetoothPrinting {
                     }, 0);
                 }
 
-                // Add charges
                 if (orderData.charges && Array.isArray(orderData.charges)) {
                     orderData.charges.forEach(charge => {
                         if (charge.value) {
@@ -965,7 +996,6 @@ class BluetoothPrinting {
                     });
                 }
 
-                // Subtract discount
                 if (orderData.discount) {
                     subtotal -= parseFloat(orderData.discount);
                 }
@@ -973,7 +1003,12 @@ class BluetoothPrinting {
                 total = subtotal;
             }
 
-            processedTemplate = processedTemplate.replace('#total', typeof total === 'number' ? total.toFixed(2) : total || '0.00');
+            processedTemplate = processedTemplate.replace('#total', `
+                <div class="printer-total-row printer-bold printer-large">
+                    <div class="printer-total-label">TOTAL:</div>
+                    <div class="printer-total-value">${typeof total === 'number' ? total.toFixed(2) : total || '0.00'}</div>
+                </div>
+            `);
         }
 
         return processedTemplate;
@@ -992,8 +1027,8 @@ class BluetoothPrinting {
         const seller = window.UserSession?.seller || {};
         const paperWidth = '58mm'; // Standard thermal paper width
 
-        // Initialize HTML
-        let html = `<div style="font-family: 'Courier New', monospace; width: ${paperWidth}; margin: 0 auto; padding: 2px;">`;
+        // Initialize HTML with printer-specific container
+        let html = `<div class="printer-container">`;
 
         // Process each template section
         if (template && template.sections && template.sections.length > 0) {
@@ -1001,19 +1036,17 @@ class BluetoothPrinting {
                 // Get the content with variables replaced
                 const content = this.processTemplateVariables(section.template, orderData, type, paymentMode, seller);
 
-                // Determine alignment style
-                let alignStyle = 'text-align: left;';
-                if (section.alignment === 'TextAlign.center') alignStyle = 'text-align: center;';
-                if (section.alignment === 'TextAlign.right') alignStyle = 'text-align: right;';
+                // Determine alignment class
+                let alignClass = 'printer-left';
+                if (section.alignment === 'TextAlign.center') alignClass = 'printer-center';
+                if (section.alignment === 'TextAlign.right') alignClass = 'printer-right';
 
-                // Determine font style
+                // Determine font size class
                 const fontSize = section.fontSize || 24;
-                const fontSizeStyle = `font-size: ${fontSize / 2}px;`; // Divide by 2 for better fit
-                const fontWeightStyle = section.isBold ? 'font-weight: 700;' : 'font-weight: normal;';
-                const textDecoration = section.isUnderlined ? 'text-decoration: underline;' : '';
+                const fontSizeClass = fontSize > 24 ? 'printer-large' : '';
 
-                // Add the section content
-                html += `<div style="${alignStyle} ${fontSizeStyle} ${fontWeightStyle} ${textDecoration} margin-bottom: 8px;">`;
+                // Add the section content with appropriate classes
+                html += `<div class="${alignClass} ${fontSizeClass} ${section.isBold ? 'printer-bold' : ''} printer-line">`;
 
                 // Split by newlines and process each line
                 const lines = content.split('\n');
@@ -1027,7 +1060,7 @@ class BluetoothPrinting {
 
                 // Add separator after non-empty sections
                 if (content.trim()) {
-                    html += `<div style="border-bottom: 1px dashed #ccc; margin: 4px 0;"></div>`;
+                    html += `<div class="printer-divider"></div>`;
                 }
             });
         }
@@ -1048,9 +1081,14 @@ class BluetoothPrinting {
             <html>
                 <head>
                     <title>Print</title>
-                    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-                    <link href="https://cdn.jsdelivr.net/npm/phosphor-icons@1.4.2/src/css/icons.min.css" rel="stylesheet">
                     <style>
+                        @font-face {
+                            font-family: 'PrinterFont';
+                            src: local('Courier New');
+                            font-weight: normal;
+                            font-style: normal;
+                        }
+                        
                         @media print {
                             @page { 
                                 size: 58mm auto;
@@ -1060,16 +1098,152 @@ class BluetoothPrinting {
                             body { 
                                 margin: 0;
                                 padding: 0;
+                                width: 58mm;
                                 color: #000;
                                 background: #fff;
-                                width: 58mm;
                             }
-                            * {
-                                font-family: 'Inter', 'Courier New', monospace;
-                                line-height: 1.2;
-                                -webkit-print-color-adjust: exact;
-                                print-color-adjust: exact;
-                            }
+                        }
+                        
+                        body {
+                            font-family: 'PrinterFont', 'Courier New', monospace;
+                            line-height: 1.2;
+                            font-size: 12px;
+                            width: 58mm;
+                            margin: 0 auto;
+                            padding: 4px;
+                            background: white;
+                            color: black;
+                            -webkit-font-smoothing: none;
+                        }
+
+                        .printer-container {
+                            width: 100%;
+                            max-width: 58mm;
+                            margin: 0 auto;
+                            padding: 0;
+                        }
+                        
+                        /* Table formatting for items */
+                        .printer-table {
+                            width: 100%;
+                            table-layout: fixed;
+                            border-collapse: collapse;
+                        }
+
+                        .printer-table-header {
+                            display: flex;
+                            width: 100%;
+                            font-weight: bold;
+                            border-bottom: 1px dashed #000;
+                            padding: 2px 0;
+                        }
+
+                        .printer-table-row {
+                            display: flex;
+                            width: 100%;
+                            padding: 2px 0;
+                            white-space: pre;
+                        }
+
+                        .printer-col-qty {
+                            width: 30px;
+                            text-align: left;
+                            flex-shrink: 0;
+                            font-family: 'PrinterFont', 'Courier New', monospace;
+                        }
+
+                        .printer-col-name {
+                            flex: 1;
+                            padding: 0 4px;
+                            white-space: nowrap;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                            font-family: 'PrinterFont', 'Courier New', monospace;
+                        }
+
+                        .printer-col-price {
+                            width: 60px;
+                            text-align: right;
+                            flex-shrink: 0;
+                            font-family: 'PrinterFont', 'Courier New', monospace;
+                        }
+                        
+                        .printer-line {
+                            white-space: pre;
+                            overflow: hidden;
+                            width: 100%;
+                            margin: 2px 0;
+                            font-family: 'PrinterFont', 'Courier New', monospace;
+                        }
+                        
+                        .printer-center {
+                            text-align: center;
+                            width: 100%;
+                        }
+                        
+                        .printer-right {
+                            text-align: right;
+                            width: 100%;
+                        }
+
+                        .printer-left {
+                            text-align: left;
+                            width: 100%;
+                        }
+                        
+                        .printer-bold {
+                            font-weight: bold;
+                        }
+                        
+                        .printer-large {
+                            font-size: 14px;
+                            line-height: 1.4;
+                        }
+                        
+                        .printer-divider {
+                            border-top: 1px dashed #000;
+                            margin: 4px 0;
+                            width: 100%;
+                        }
+                        
+                        .printer-qr {
+                            width: 100px;
+                            height: 100px;
+                            margin: 8px auto;
+                            border: 1px solid #000;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                        }
+
+                        /* Ensure consistent spacing */
+                        .printer-text {
+                            letter-spacing: 0;
+                            word-spacing: normal;
+                        }
+
+                        /* Totals section */
+                        .printer-totals {
+                            margin-top: 4px;
+                            padding-top: 4px;
+                            border-top: 1px dashed #000;
+                        }
+
+                        .printer-total-row {
+                            display: flex;
+                            justify-content: space-between;
+                            padding: 2px 0;
+                            white-space: pre;
+                        }
+
+                        .printer-total-label {
+                            text-align: right;
+                            padding-right: 8px;
+                        }
+
+                        .printer-total-value {
+                            text-align: right;
+                            width: 60px;
                         }
                     </style>
                 </head>
@@ -1221,45 +1395,61 @@ class BluetoothPrinting {
         // Initialize printer
         commands.push(0x1B, 0x40); // ESC @ - Initialize printer
 
-        // Set line spacing for better readability
-        commands.push(0x1B, 0x33, 30); // ESC 3 - Set line spacing to 30 dots
+        // Process flex container items specially
+        const flexContainers = element.querySelectorAll('div[style*="display: flex"]');
+        if (flexContainers.length > 0) {
+            // This is likely an items list with flex layout
+            flexContainers.forEach(container => {
+                const spans = container.querySelectorAll('span');
+                if (spans.length === 3) { // Qty, Item, Amount format
+                    const qty = spans[0].textContent.trim().padEnd(4);
+                    const item = spans[1].textContent.trim();
+                    const amount = spans[2].textContent.trim().padStart(8);
 
-        // Get the text content of the document, preserving line breaks
-        const textContent = this.extractTextContent(element);
+                    // Calculate available space for item name
+                    const availableSpace = this.printerWidth - 12; // 4 for qty + 8 for amount
+                    const truncatedItem = item.length > availableSpace
+                        ? item.substring(0, availableSpace - 3) + '...'
+                        : item.padEnd(availableSpace);
 
-        // Split the text into lines
-        const lines = textContent.split('\n');
+                    // Combine into single line with proper spacing
+                    commands.push(...this.encoder.encode(qty + truncatedItem + amount + '\n'));
+                }
+            });
+            return; // Skip regular processing for flex containers
+        }
 
-        // Process each line
+        // For regular content, process line by line
+        const lines = this.extractTextContent(element).split('\n');
+
         lines.forEach(line => {
             const trimmedLine = line.trim();
             if (trimmedLine) {
-                // Check if this line appears to be a header (all caps, contains key words)
+                // Check if this line appears to be a header
                 const isHeader =
                     (trimmedLine === trimmedLine.toUpperCase() &&
                         trimmedLine.length > 3) ||
                     /BILL|RECEIPT|KOT|INVOICE|TOTAL/.test(trimmedLine);
 
-                // Check if this line appears to be a separator
-                const isSeparator = /^[-=_*]{5,}$/.test(trimmedLine);
+                // Check if this is an items header
+                const isItemsHeader = /^Qty\s+Item\s+Amount$/.test(trimmedLine);
 
-                // Apply formatting based on line type
                 if (isHeader) {
                     commands.push(0x1B, 0x61, 0x01); // Center align
                     commands.push(0x1B, 0x45, 0x01); // Bold ON
                     commands.push(...this.encoder.encode(trimmedLine + '\n'));
                     commands.push(0x1B, 0x45, 0x00); // Bold OFF
                     commands.push(0x1B, 0x61, 0x00); // Left align
-                } else if (isSeparator) {
-                    // For separator lines, print a line of dashes
+                } else if (isItemsHeader) {
+                    // Format items header with proper spacing
+                    const header = 'Qty  Item' + ' '.repeat(this.printerWidth - 20) + 'Amount\n';
+                    commands.push(0x1B, 0x45, 0x01); // Bold ON
+                    commands.push(...this.encoder.encode(header));
+                    commands.push(0x1B, 0x45, 0x00); // Bold OFF
                     commands.push(...this.encoder.encode('-'.repeat(this.printerWidth) + '\n'));
                 } else {
-                    // Regular text
                     commands.push(...this.encoder.encode(trimmedLine + '\n'));
                 }
-            } else {
-                // Empty line
-                commands.push(...this.encoder.encode('\n'));
             }
         });
 
@@ -1276,43 +1466,39 @@ class BluetoothPrinting {
     extractTextContent(element) {
         let result = '';
 
+        // Skip flex containers as they're handled separately
+        if (element.getAttribute('style')?.includes('display: flex')) {
+            return '';
+        }
+
         // Process all child nodes
         const processNode = (node) => {
             if (node.nodeType === Node.TEXT_NODE) {
-                // Text node - add its content
                 result += node.textContent;
             } else if (node.nodeType === Node.ELEMENT_NODE) {
-                // Element node - process based on tag
                 const tagName = node.tagName.toLowerCase();
+                const style = node.getAttribute('style') || '';
 
-                // Special handling for specific elements
+                // Skip flex containers
+                if (style.includes('display: flex')) {
+                    return;
+                }
+
                 if (tagName === 'br') {
                     result += '\n';
-                } else if (tagName === 'div' || tagName === 'p' || tagName === 'h1' ||
-                    tagName === 'h2' || tagName === 'h3' || tagName === 'h4' ||
-                    tagName === 'h5' || tagName === 'h6' || tagName === 'li') {
-                    // Block elements - ensure they start on a new line
+                } else if (['div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li'].includes(tagName)) {
                     if (result && !result.endsWith('\n')) {
                         result += '\n';
                     }
 
-                    // Process children
                     for (const child of node.childNodes) {
                         processNode(child);
                     }
 
-                    // Add line break after block elements
                     if (!result.endsWith('\n')) {
                         result += '\n';
                     }
-                } else if (tagName === 'hr') {
-                    // Horizontal rule - add a line of dashes
-                    result += '\n' + '-'.repeat(this.printerWidth) + '\n';
-                } else if (tagName === 'table') {
-                    // Tables need special handling
-                    this.processTableElement(node, result);
                 } else {
-                    // Other elements - just process children
                     for (const child of node.childNodes) {
                         processNode(child);
                     }
@@ -1320,35 +1506,8 @@ class BluetoothPrinting {
             }
         };
 
-        // Start processing from the root element
         processNode(element);
-
-        // Clean up multiple consecutive line breaks
         return result.replace(/\n{3,}/g, '\n\n').trim();
-    }
-
-    /**
-     * Process a table element for text extraction
-     * @param {HTMLElement} tableElement - The table element
-     * @param {string} result - The current result string
-     * @private
-     */
-    processTableElement(tableElement, result) {
-        // Process table rows
-        const rows = tableElement.querySelectorAll('tr');
-
-        rows.forEach(row => {
-            const cells = row.querySelectorAll('th, td');
-            const cellTexts = [];
-
-            cells.forEach(cell => {
-                cellTexts.push(cell.textContent.trim());
-            });
-
-            if (cellTexts.length > 0) {
-                result += cellTexts.join(' | ') + '\n';
-            }
-        });
     }
 
     /**
@@ -2012,6 +2171,121 @@ class BluetoothPrinting {
                 this.attemptSilentReconnect();
             }
         });
+    }
+
+    generatePreviewHTML(contentHtml) {
+        return `
+            <html>
+                <head>
+                    <title>Print</title>
+                    <style>
+                        @font-face {
+                            font-family: 'PrinterFont';
+                            src: local('Courier New');
+                            font-weight: normal;
+                            font-style: normal;
+                        }
+                        
+                        @media print {
+                            @page { 
+                                size: 58mm auto;
+                                margin: 0mm;
+                                padding: 0mm;
+                            }
+                            body { 
+                                margin: 0;
+                                padding: 0;
+                                width: 58mm;
+                                color: #000;
+                                background: #fff;
+                            }
+                        }
+                        
+                        body {
+                            font-family: 'PrinterFont', 'Courier New', monospace;
+                            line-height: 1.2;
+                            font-size: 12px;
+                            width: 58mm;
+                            margin: 0 auto;
+                            padding: 8px;
+                            background: white;
+                            color: black;
+                            -webkit-font-smoothing: none;
+                        }
+                        
+                        /* Exact character width matching */
+                        .printer-line {
+                            white-space: pre;
+                            overflow: hidden;
+                            width: 100%;
+                        }
+                        
+                        /* Center alignment that matches thermal printer */
+                        .printer-center {
+                            text-align: center;
+                            width: 100%;
+                        }
+                        
+                        /* Right alignment that matches thermal printer */
+                        .printer-right {
+                            text-align: right;
+                            width: 100%;
+                        }
+                        
+                        /* Bold text that matches thermal printer */
+                        .printer-bold {
+                            font-weight: bold;
+                        }
+                        
+                        /* Double height text simulation */
+                        .printer-large {
+                            font-size: 14px;
+                            line-height: 1.4;
+                        }
+                        
+                        /* Divider lines that match thermal printer */
+                        .printer-divider {
+                            border-top: 1px dashed #000;
+                            margin: 4px 0;
+                        }
+                        
+                        /* Item list formatting */
+                        .printer-item {
+                            display: flex;
+                            justify-content: space-between;
+                            margin: 2px 0;
+                        }
+                        
+                        .printer-item-qty {
+                            width: 30px;
+                            text-align: left;
+                        }
+                        
+                        .printer-item-name {
+                            flex: 1;
+                            padding: 0 4px;
+                        }
+                        
+                        .printer-item-price {
+                            width: 60px;
+                            text-align: right;
+                        }
+                        
+                        /* QR code placeholder */
+                        .printer-qr {
+                            width: 100px;
+                            height: 100px;
+                            margin: 8px auto;
+                            border: 1px solid #000;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                        }
+                    </style>
+                </head>
+                <body>${contentHtml}</body>
+            </html>
+        `;
     }
 }
 
