@@ -324,7 +324,7 @@ class BluetoothPrinting {
     }
 
     /**
-     * Generate HTML for a receipt or KOT based on order data
+     * Generate HTML for a receipt or KOT based on order data and template
      * This centralized method generates consistent HTML for both browser printing and Bluetooth printing
      * @param {Object} orderData - The order data object
      * @param {string} type - 'bill' or 'kot' to determine the type of receipt
@@ -337,6 +337,18 @@ class BluetoothPrinting {
         const isBill = type.toLowerCase() === 'bill';
         const paperWidth = '58mm'; // Standard thermal paper width
 
+        // Check if we have a custom template
+        const hasCustomTemplate = seller.printTemplate &&
+            seller.printTemplate[type.toLowerCase()] &&
+            seller.printTemplate[type.toLowerCase()].sections &&
+            seller.printTemplate[type.toLowerCase()].sections.length > 0;
+
+        // If we have a custom template, use it, otherwise use the default HTML generation
+        if (hasCustomTemplate) {
+            return this.generateTemplateBasedReceiptHTML(orderData, type, paymentMode, seller.printTemplate[type.toLowerCase()]);
+        }
+
+        // Default HTML generation logic (keeping the existing implementation)
         let html = `
             <div style="font-family: 'Courier New', monospace; width: ${paperWidth}; margin: 0 auto; padding: 2px;">`;
 
@@ -546,6 +558,215 @@ class BluetoothPrinting {
         html += `</div>`;
 
         return html;
+    }
+
+    /**
+     * Generate HTML receipt based on a custom template
+     * @param {Object} orderData - The order data
+     * @param {string} type - 'bill' or 'kot'
+     * @param {string} paymentMode - Payment mode for bills
+     * @param {Object} template - The template object with sections
+     * @returns {string} Generated HTML
+     * @private
+     */
+    generateTemplateBasedReceiptHTML(orderData, type, paymentMode, template) {
+        console.log("BluetoothPrinting.generateTemplateBasedReceiptHTML called with:", { type, paymentMode });
+        console.log("Template being used:", template);
+
+        const seller = window.UserSession?.seller || {};
+        const paperWidth = '58mm'; // Standard thermal paper width
+
+        // Initialize HTML
+        let html = `<div style="font-family: 'Courier New', monospace; width: ${paperWidth}; margin: 0 auto; padding: 2px;">`;
+
+        // Process each template section
+        if (template && template.sections && template.sections.length > 0) {
+            template.sections.forEach(section => {
+                // Get the content with variables replaced
+                const content = this.processTemplateVariables(section.template, orderData, type, paymentMode, seller);
+                console.log(`Processing section: alignment=${section.alignment}, fontSize=${section.fontSize}, content preview=${content.substring(0, 50)}...`);
+
+                // Determine alignment style
+                let alignStyle = 'text-align: left;';
+                if (section.alignment === 'TextAlign.center') alignStyle = 'text-align: center;';
+                if (section.alignment === 'TextAlign.right') alignStyle = 'text-align: right;';
+
+                // Determine font style
+                const fontSize = section.fontSize || 24;
+                const fontSizeStyle = `font-size: ${fontSize / 2}px;`; // Divide by 2 for better fit
+                const fontWeightStyle = section.isBold ? 'font-weight: 700;' : 'font-weight: normal;';
+                const textDecoration = section.isUnderlined ? 'text-decoration: underline;' : '';
+
+                // Add the section content
+                html += `<div style="${alignStyle} ${fontSizeStyle} ${fontWeightStyle} ${textDecoration} margin-bottom: 8px;">`;
+
+                // Split by newlines and process each line
+                const lines = content.split('\n');
+                lines.forEach((line, index) => {
+                    if (line.trim()) {
+                        html += `${line}${index < lines.length - 1 ? '<br>' : ''}`;
+                    }
+                });
+
+                html += `</div>`;
+
+                // Add separator after non-empty sections
+                if (content.trim()) {
+                    html += `<div style="border-bottom: 1px dashed #ccc; margin: 4px 0;"></div>`;
+                }
+            });
+        }
+
+        // Close the main container
+        html += `</div>`;
+
+        return html;
+    }
+
+    /**
+     * Process template variables and replace with actual values
+     * @param {string} template - Template string with variables
+     * @param {Object} orderData - Order data
+     * @param {string} type - 'bill' or 'kot'
+     * @param {string} paymentMode - Payment mode for bills
+     * @param {Object} seller - Seller data
+     * @returns {string} Processed template with variables replaced
+     * @private
+     */
+    processTemplateVariables(template, orderData, type, paymentMode, seller) {
+        if (!template) return '';
+
+        let processedTemplate = template;
+
+        // Basic replacements
+        const replacements = {
+            '#logo': seller.logo ? `<img src="${seller.logo}" alt="Logo" style="max-width: 45mm; max-height: 15mm;">` : '<i class="ph ph-storefront" style="font-size: 24px;"></i>',
+            '#businessName': seller.businessName || 'Your Business',
+            '#phone': seller.phone || '',
+            '#address': seller.address || '',
+            '#storeLink': seller.website || '',
+            '#gstIN': seller.gstIN || '',
+            '#billNo': orderData.billNo || orderData.id?.substring(0, 8) || 'N/A',
+            '#orderSource': orderData.priceVariant || 'Default',
+            '#payMode': paymentMode || orderData.payMode || 'CASH',
+            '#timestamp': new Date(orderData.date?.toDate ? orderData.date.toDate() : orderData.date || new Date()).toLocaleString(),
+            '#cut': '', // Paper cut command - handled separately in printer commands
+            '#upiQR': '' // UPI QR code - would need further implementation
+        };
+
+        // Replace all simple variables
+        Object.keys(replacements).forEach(key => {
+            processedTemplate = processedTemplate.replace(new RegExp(key, 'g'), replacements[key]);
+        });
+
+        // Special handling for complex variables
+
+        // Items list
+        if (processedTemplate.includes('#itemsList')) {
+            let itemsHtml = '';
+
+            if (orderData.items && orderData.items.length > 0) {
+                if (type.toLowerCase() === 'bill') {
+                    // Bill format items
+                    orderData.items.forEach(item => {
+                        const quantity = parseFloat(item.quantity || item.qnt || 1);
+                        const price = parseFloat(item.price || 0);
+                        const amount = quantity * price;
+
+                        itemsHtml += `<div style="margin-bottom: 8px;">
+                            <div style="font-weight: 600;">${item.title || 'Unknown Item'}</div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span>${quantity} x ${price.toFixed(2)}</span>
+                                <span style="font-weight: 600;">${amount.toFixed(2)}</span>
+                            </div>
+                        </div>`;
+                    });
+                } else if (type.toLowerCase() === 'kot') {
+                    // KOT format items
+                    orderData.items.forEach(item => {
+                        const quantity = parseFloat(item.quantity || item.qnt || 1);
+
+                        itemsHtml += `<div style="margin-bottom: 12px;">
+                            <div><span style="font-weight: 700; font-size: 1.2em;">${quantity}x</span> ${item.title || 'Unknown Item'}</div>
+                            ${item.instructions ? `<div style="font-style: italic; margin-left: 20px;">${item.instructions.trim()}</div>` : ''}
+                        </div>`;
+                    });
+                }
+            }
+
+            processedTemplate = processedTemplate.replace('#itemsList', itemsHtml);
+        }
+
+        // Subtotal
+        if (processedTemplate.includes('#subtotal')) {
+            let subtotal = 0;
+            if (orderData.items && orderData.items.length > 0) {
+                subtotal = orderData.items.reduce((total, item) => {
+                    const quantity = parseFloat(item.quantity || item.qnt || 1);
+                    const price = parseFloat(item.price || 0);
+                    return total + (quantity * price);
+                }, 0);
+            }
+            processedTemplate = processedTemplate.replace('#subtotal', subtotal.toFixed(2));
+        }
+
+        // Discount
+        if (processedTemplate.includes('#discount')) {
+            const discount = orderData.discount ? parseFloat(orderData.discount) : 0;
+            processedTemplate = processedTemplate.replace('#discount', discount.toFixed(2));
+        }
+
+        // Charges
+        if (processedTemplate.includes('#charges')) {
+            let chargesHtml = '';
+            if (orderData.charges && Array.isArray(orderData.charges)) {
+                orderData.charges.forEach(charge => {
+                    if (charge.value && parseFloat(charge.value) !== 0) {
+                        chargesHtml += `<div style="display: flex; justify-content: space-between;">
+                            <span>${charge.name || 'Charge'}:</span>
+                            <span>${parseFloat(charge.value).toFixed(2)}</span>
+                        </div>`;
+                    }
+                });
+            }
+            processedTemplate = processedTemplate.replace('#charges', chargesHtml);
+        }
+
+        // Total
+        if (processedTemplate.includes('#total')) {
+            let total = orderData.total;
+            if (!total && orderData.items) {
+                // Calculate if not available
+                let subtotal = 0;
+                if (orderData.items && orderData.items.length > 0) {
+                    subtotal = orderData.items.reduce((total, item) => {
+                        const quantity = parseFloat(item.quantity || item.qnt || 1);
+                        const price = parseFloat(item.price || 0);
+                        return total + (quantity * price);
+                    }, 0);
+                }
+
+                // Add charges
+                if (orderData.charges && Array.isArray(orderData.charges)) {
+                    orderData.charges.forEach(charge => {
+                        if (charge.value) {
+                            subtotal += parseFloat(charge.value);
+                        }
+                    });
+                }
+
+                // Subtract discount
+                if (orderData.discount) {
+                    subtotal -= parseFloat(orderData.discount);
+                }
+
+                total = subtotal;
+            }
+
+            processedTemplate = processedTemplate.replace('#total', typeof total === 'number' ? total.toFixed(2) : total || '0.00');
+        }
+
+        return processedTemplate;
     }
 
     /**

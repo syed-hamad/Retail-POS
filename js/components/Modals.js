@@ -1766,7 +1766,9 @@ function OrderView({ order, tableId, variant }) {
             // Try Bluetooth printing first if available
             if (window.BluetoothPrinting && window.BluetoothPrinting.isSupported()) {
                 try {
-                    await window.BluetoothPrinting.printKOT(order.id);
+                    // Get order channel for proper printer selection
+                    const channel = order.priceVariant || 'Default';
+                    await window.BluetoothPrinting.printKOT(order.id, channel);
                     showToast("KOT printed successfully", "success");
                     return; // Exit if Bluetooth printing succeeds
                 } catch (btError) {
@@ -1916,7 +1918,10 @@ function OrderView({ order, tableId, variant }) {
                         showToast("Select a printer to print bill", "info");
                     }
 
-                    await window.BluetoothPrinting.printBill(order.id);
+                    // Get order channel and payment mode for proper template variables
+                    const paymentMode = order.payMode || 'CASH';
+                    const channel = order.priceVariant || 'Default';
+                    await window.BluetoothPrinting.printBill(order.id, paymentMode, false, channel);
                     showToast("Bill printed successfully via Bluetooth", "success");
                     billPrintedSuccessfully = true;
                 } catch (btError) {

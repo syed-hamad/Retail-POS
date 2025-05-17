@@ -1401,41 +1401,74 @@ function Dashboard() {
             id: 'print-template-modal',
             title: "Print Template",
             content: `
-                <div class="p-4">
-                    <div id="print-template-error-container" class="mb-4 hidden p-3 bg-red-50 text-red-700 rounded-md"></div>
-                    <div class="mb-6">
-                        <div class="flex space-x-2 mb-4">
-                            <button id="bill-tab" class="px-4 py-2 bg-red-500 text-white rounded-lg">Bill</button>
-                            <button id="kot-tab" class="px-4 py-2 border border-gray-200 text-gray-700 rounded-lg">KOT</button>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Left column: Template editor -->
+                    <div class="space-y-6">
+                        <div id="print-template-error-container" class="hidden p-3 bg-red-50 text-red-700 rounded-md"></div>
+
+                        <div class="flex space-x-2 border-b">
+                            <button id="bill-tab" class="px-4 py-2 bg-red-500 text-white focus:outline-none">BILL</button>
+                            <button id="kot-tab" class="px-4 py-2 border border-gray-200 text-gray-700 focus:outline-none">KOT</button>
                         </div>
-                        <div id="template-sections" class="space-y-4">
-                            <!-- Template sections will be dynamically inserted here -->
+
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center">
+                                <h3 class="text-lg font-medium">Template Sections</h3>
+                                <button id="add-section-btn" class="p-2 text-red-500 hover:bg-red-50 rounded-full">
+                                    <i class="ph ph-plus"></i>
+                                </button>
+                            </div>
+                            <div id="template-sections" class="space-y-4">
+                                <!-- Template sections will be rendered here -->
+                            </div>
                         </div>
-                        <button id="add-section-btn" class="mt-4 px-4 py-2 border border-dashed border-gray-300 text-gray-600 rounded-lg w-full flex items-center justify-center">
-                            <i class="ph ph-plus mr-2"></i> Add New Section
-                        </button>
+                    </div>
+
+                    <!-- Right column: Live preview -->
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-lg font-medium">Live Preview</h3>
+                            <button id="preview-fullscreen-btn" class="p-2 text-red-500 hover:bg-red-50 rounded-full">
+                                <i class="ph ph-arrows-out"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="bg-gray-50 p-3 rounded-md text-sm text-gray-700 flex items-start">
+                            <i class="ph ph-info mr-2 mt-0.5 text-gray-500"></i>
+                            <p>Make changes to the template sections on the left, then click <strong>Refresh Preview</strong> to see how your receipt will look.</p>
+                        </div>
+                        
+                        <div class="border-2 border-dashed border-gray-300 p-4 rounded-lg min-h-[500px] overflow-auto">
+                            <div id="live-preview-container" class="text-sm">
+                                <!-- Live preview content will be rendered here -->
+                            </div>
+                        </div>
                     </div>
                 </div>
             `,
             actions: `
                 <div class="flex justify-between p-4">
-                    <button id="preview-template-btn" class="px-4 py-2 border rounded-md hover:bg-gray-50">Preview</button>
+                    <button id="refresh-preview-btn" class="px-4 py-2 border rounded-md hover:bg-gray-50">
+                        <i class="ph ph-arrows-clockwise mr-1"></i> Refresh Preview
+                    </button>
                     <div class="space-x-3">
                         <button id="reset-template-btn" class="px-4 py-2 border text-red-500 rounded-md hover:bg-red-50">Reset</button>
                         <button id="save-template-btn" class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600">Save</button>
                     </div>
                 </div>
             `,
-            size: 'lg',
+            size: '2xl',
             onShown: (modalControl) => {
                 const billTab = document.getElementById('bill-tab');
                 const kotTab = document.getElementById('kot-tab');
                 const templateSections = document.getElementById('template-sections');
                 const addSectionBtn = document.getElementById('add-section-btn');
-                const previewBtn = document.getElementById('preview-template-btn');
+                const refreshPreviewBtn = document.getElementById('refresh-preview-btn');
                 const resetBtn = document.getElementById('reset-template-btn');
                 const saveBtn = document.getElementById('save-template-btn');
                 const errorContainer = document.getElementById('print-template-error-container');
+                const livePreviewContainer = document.getElementById('live-preview-container');
+                const previewFullscreenBtn = document.getElementById('preview-fullscreen-btn');
 
                 let currentTemplateType = 'bill';
                 let templates = seller?.printTemplate || {
@@ -1579,6 +1612,127 @@ function Dashboard() {
                     };
                 }
 
+                // Generate live preview content based on the current template
+                function updateLivePreview() {
+                    console.log("updateLivePreview called - generating HTML for template type:", currentTemplateType);
+                    livePreviewContainer.innerHTML = generatePreviewHTML(currentTemplateType);
+                    console.log("Live preview updated");
+                }
+
+                // Generate HTML for the preview
+                function generatePreviewHTML(templateType) {
+                    console.log("generatePreviewHTML called with templateType:", templateType);
+                    // Create a mock test order for the preview
+                    const testOrder = {
+                        id: 'PREVIEW-123',
+                        billNo: 'PREVIEW-123',
+                        date: new Date(),
+                        tableId: 'Preview',
+                        priceVariant: 'Dine-in',
+                        items: [
+                            { title: 'Butter Chicken', quantity: 2, price: 299.50 },
+                            { title: 'Jeera Rice', quantity: 1, price: 149.00 }
+                        ],
+                        discount: 50,
+                        charges: [
+                            { name: 'Service Charge', value: 30 }
+                        ],
+                        total: 733.00,
+                        payMode: 'CASH'
+                    };
+
+                    // Check if we have a custom template and it has sections
+                    const currentTemplate = templates[templateType];
+                    console.log("Current template:", currentTemplate);
+
+                    if (currentTemplate && currentTemplate.sections && currentTemplate.sections.length > 0) {
+                        // Use the BluetoothPrinting utility to generate HTML based on the current template
+                        if (window.BluetoothPrinting) {
+                            try {
+                                console.log("Using BluetoothPrinting.generateTemplateBasedReceiptHTML");
+                                // Use the template-based generation with the current template
+                                return window.BluetoothPrinting.generateTemplateBasedReceiptHTML(
+                                    testOrder,
+                                    templateType,
+                                    'CASH',
+                                    currentTemplate
+                                );
+                            } catch (error) {
+                                console.error('Error generating template preview:', error);
+                                return `<div class="text-center text-red-500 p-4">
+                                    <i class="ph ph-warning-circle text-3xl mb-2"></i>
+                                    <p>Error generating preview: ${error.message}</p>
+                                </div>`;
+                            }
+                        } else {
+                            console.warn("window.BluetoothPrinting is not available");
+                        }
+                    }
+
+                    // Fallback to default preview if no template or BluetoothPrinting not available
+                    return `
+                        <div class="text-center">
+                            <div class="w-20 h-20 mx-auto bg-red-100 rounded-full flex items-center justify-center mb-2">
+                                <i class="ph ph-storefront text-red-500 text-2xl"></i>
+                            </div>
+                            <h2 class="text-xl font-bold">${seller?.businessName || 'Your Business Name'}</h2>
+                        </div>
+                        <div class="text-center text-sm text-gray-600 mt-2">
+                            <p>Phone: ${seller?.phone || '1234567890'}</p>
+                            <p>Address: ${seller?.address || '123 Main St'}</p>
+                            <p>Web: ${seller?.storeLink || 'www.yourbusiness.com'}</p>
+                            <p>GST: ${seller?.gstIN || 'GSTIN12345'}</p>
+                        </div>
+                        <div class="mt-4">
+                            <p>Bill No: #12345</p>
+                            <p>Order from: Dine-in</p>
+                        </div>
+                        <div class="mt-4 border-t border-b py-2">
+                            <table class="w-full">
+                                <thead>
+                                    <tr class="text-left">
+                                        <th class="py-1 px-2">Qt</th>
+                                        <th class="py-1">Item</th>
+                                        <th class="py-1 text-right">Price</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="py-1 px-2">2</td>
+                                        <td class="py-1">Butter Chicken</td>
+                                        <td class="py-1 text-right">₹599</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-1 px-2">1</td>
+                                        <td class="py-1">Jeera Rice</td>
+                                        <td class="py-1 text-right">₹149</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="mt-4 text-right">
+                            <p>Sub Total: ₹748</p>
+                            <p>Discount: -₹50</p>
+                            <p>GST: ₹35</p>
+                            <p class="font-bold mt-2">TOTAL: ₹733</p>
+                        </div>
+                        <div class="mt-4 text-right">
+                            <p>Payment mode: Cash</p>
+                        </div>
+                        ${templateType === 'bill' ? `
+                            <div class="mt-4 flex justify-center">
+                                <div class="w-32 h-32 bg-gray-200 flex items-center justify-center">
+                                    <i class="ph ph-qr-code text-4xl"></i>
+                                </div>
+                            </div>
+                        ` : ''}
+                        <div class="mt-4 text-center text-sm">
+                            <p>Thank you!</p>
+                            <p>${new Date().toLocaleString()}</p>
+                        </div>
+                    `;
+                }
+
                 // Render template sections
                 function renderTemplateSections() {
                     templateSections.innerHTML = '';
@@ -1607,37 +1761,41 @@ function Dashboard() {
                         const fontSizeSelect = document.createElement('select');
                         fontSizeSelect.className = 'px-2 py-1 border rounded text-sm';
                         fontSizeSelect.innerHTML = `
-                            <option value="18" ${section.fontSize === 18 ? 'selected' : ''}>Size 18</option>
                             <option value="20" ${section.fontSize === 20 ? 'selected' : ''}>Size 20</option>
                             <option value="22" ${section.fontSize === 22 ? 'selected' : ''}>Size 22</option>
                             <option value="24" ${section.fontSize === 24 ? 'selected' : ''}>Size 24</option>
+                            <option value="26" ${section.fontSize === 26 ? 'selected' : ''}>Size 26</option>
                             <option value="28" ${section.fontSize === 28 ? 'selected' : ''}>Size 28</option>
-                            <option value="32" ${section.fontSize === 32 ? 'selected' : ''}>Size 32</option>
+                            <option value="30" ${section.fontSize === 30 ? 'selected' : ''}>Size 30</option>
                         `;
-                        fontSizeSelect.addEventListener('change', (e) => {
-                            templates[currentTemplateType].sections[index].fontSize = parseInt(e.target.value);
+
+                        fontSizeSelect.addEventListener('change', () => {
+                            templates[currentTemplateType].sections[index].fontSize = parseInt(fontSizeSelect.value);
+                            updateLivePreview();
                         });
 
                         // Alignment selector
                         const alignmentSelect = document.createElement('select');
-                        alignmentSelect.className = 'px-2 py-1 border rounded text-sm ml-2';
+                        alignmentSelect.className = 'px-2 py-1 border rounded text-sm';
                         alignmentSelect.innerHTML = `
                             <option value="TextAlign.left" ${section.alignment === 'TextAlign.left' ? 'selected' : ''}>Left</option>
                             <option value="TextAlign.center" ${section.alignment === 'TextAlign.center' ? 'selected' : ''}>Center</option>
                             <option value="TextAlign.right" ${section.alignment === 'TextAlign.right' ? 'selected' : ''}>Right</option>
                         `;
-                        alignmentSelect.addEventListener('change', (e) => {
-                            templates[currentTemplateType].sections[index].alignment = e.target.value;
-                            // Update display alignment
+
+                        alignmentSelect.addEventListener('change', () => {
+                            templates[currentTemplateType].sections[index].alignment = alignmentSelect.value;
+
+                            // Update the text area alignment
                             const textArea = sectionCard.querySelector('textarea');
                             if (textArea) {
-                                textArea.className = textArea.className.replace(/text-(left|center|right)/, '');
-                                textArea.classList.add(
-                                    e.target.value === 'TextAlign.center' ? 'text-center' :
-                                        e.target.value === 'TextAlign.right' ? 'text-right' :
+                                textArea.className = textArea.className.replace(/text-(left|center|right)/,
+                                    alignmentSelect.value === 'TextAlign.center' ? 'text-center' :
+                                        alignmentSelect.value === 'TextAlign.right' ? 'text-right' :
                                             'text-left'
                                 );
                             }
+                            updateLivePreview();
                         });
 
                         formatControls.appendChild(fontSizeSelect);
@@ -1658,6 +1816,7 @@ function Dashboard() {
                             if (textArea) {
                                 textArea.classList.toggle('font-bold');
                             }
+                            updateLivePreview();
                         });
 
                         const underlineBtn = document.createElement('button');
@@ -1671,51 +1830,70 @@ function Dashboard() {
                             if (textArea) {
                                 textArea.classList.toggle('underline');
                             }
+                            updateLivePreview();
                         });
 
                         styleBtns.appendChild(boldBtn);
                         styleBtns.appendChild(underlineBtn);
 
                         formatControls.appendChild(styleBtns);
+                        toolbar.appendChild(formatControls);
 
                         // Delete button
                         const deleteBtn = document.createElement('button');
-                        deleteBtn.className = 'p-1 text-gray-500 hover:text-red-500';
+                        deleteBtn.className = 'text-gray-400 hover:text-red-500';
                         deleteBtn.innerHTML = '<i class="ph ph-trash"></i>';
                         deleteBtn.addEventListener('click', () => {
-                            templates[currentTemplateType].sections.splice(index, 1);
-                            renderTemplateSections();
+                            if (templates[currentTemplateType].sections.length <= 1) {
+                                errorContainer.textContent = 'Cannot delete the last section. You need at least one section.';
+                                errorContainer.classList.remove('hidden');
+                                return;
+                            }
+
+                            if (confirm('Are you sure you want to delete this section?')) {
+                                templates[currentTemplateType].sections.splice(index, 1);
+                                renderTemplateSections();
+                                updateLivePreview();
+                            }
                         });
 
-                        toolbar.appendChild(formatControls);
                         toolbar.appendChild(deleteBtn);
+                        sectionCard.appendChild(toolbar);
 
-                        // Text area for template
+                        // Template content
+                        const textAreaContainer = document.createElement('div');
+                        textAreaContainer.className = 'relative';
+
                         const textArea = document.createElement('textarea');
-                        textArea.className = `w-full p-2 border rounded ${alignmentClass} ${section.isBold ? 'font-bold' : ''} ${section.isUnderlined ? 'underline' : ''}`;
-                        textArea.style.minHeight = '80px';
-                        textArea.value = section.template;
-                        textArea.addEventListener('input', (e) => {
-                            templates[currentTemplateType].sections[index].template = e.target.value;
+                        textArea.className = `w-full min-h-24 p-3 border rounded-lg transition-all ${alignmentClass} ${section.isBold ? 'font-bold' : ''} ${section.isUnderlined ? 'underline' : ''}`;
+                        textArea.value = section.template || '';
+
+                        // Add input event listener to update preview when text changes
+                        textArea.addEventListener('input', () => {
+                            const sectionIndex = parseInt(textArea.closest('[data-index]').dataset.index);
+                            templates[currentTemplateType].sections[sectionIndex].template = textArea.value;
+                            updateLivePreview();
                         });
-                        textArea.addEventListener('focus', () => {
+
+                        const insertVariableBtn = document.createElement('button');
+                        insertVariableBtn.className = 'absolute right-2 top-2 text-gray-500 hover:text-red-500';
+                        insertVariableBtn.innerHTML = '<i class="ph ph-brackets-curly"></i>';
+                        insertVariableBtn.addEventListener('click', () => {
                             showVariablesList(textArea);
                         });
 
-                        // Create variable helper
-                        const variableHelper = document.createElement('div');
-                        variableHelper.className = 'text-sm text-gray-500 mt-2';
-                        variableHelper.innerHTML = 'Type # to insert a variable';
-
-                        sectionCard.appendChild(toolbar);
-                        sectionCard.appendChild(textArea);
-                        sectionCard.appendChild(variableHelper);
+                        textAreaContainer.appendChild(textArea);
+                        textAreaContainer.appendChild(insertVariableBtn);
+                        sectionCard.appendChild(textAreaContainer);
 
                         templateSections.appendChild(sectionCard);
                     });
+
+                    // Update the live preview after rendering sections
+                    updateLivePreview();
                 }
 
-                // Show variables list
+                // Show variables list for insertion
                 function showVariablesList(textArea) {
                     // Create dropdown for variables if it doesn't exist
                     let variablesDropdown = document.getElementById('variables-dropdown');
@@ -1760,6 +1938,9 @@ function Dashboard() {
                             const sectionIndex = parseInt(textArea.closest('[data-index]').dataset.index);
                             templates[currentTemplateType].sections[sectionIndex].template = newText;
 
+                            // Update the live preview
+                            updateLivePreview();
+
                             // Hide dropdown
                             variablesDropdown.style.display = 'none';
                         });
@@ -1783,20 +1964,20 @@ function Dashboard() {
                         isUnderlined: false
                     });
                     renderTemplateSections();
+                    updateLivePreview();
                 }
 
                 // Reset to default
                 function resetToDefault() {
-                    if (currentTemplateType === 'bill') {
-                        templates.bill = getDefaultBillTemplate();
-                    } else {
-                        templates.kot = getDefaultKOTTemplate();
+                    if (confirm('Are you sure you want to reset to default template? All changes will be lost.')) {
+                        templates[currentTemplateType] = currentTemplateType === 'bill' ?
+                            getDefaultBillTemplate() : getDefaultKOTTemplate();
+                        renderTemplateSections();
+                        updateLivePreview();
                     }
-                    renderTemplateSections();
-                    window.ModalManager.showToast(`${currentTemplateType.toUpperCase()} template reset to default`);
                 }
 
-                // Preview template
+                // Preview template in a standalone modal
                 function previewTemplate() {
                     window.ModalManager.createCenterModal({
                         id: 'preview-modal',
@@ -1804,65 +1985,7 @@ function Dashboard() {
                         content: `
                             <div class="p-4 bg-white">
                                 <div class="border-2 border-dashed border-gray-300 p-4 rounded-lg">
-                                    <div class="text-center">
-                                        <div class="w-20 h-20 mx-auto bg-red-100 rounded-full flex items-center justify-center mb-2">
-                                            <i class="ph ph-storefront text-red-500 text-2xl"></i>
-                                        </div>
-                                        <h2 class="text-xl font-bold">${seller?.businessName || 'Your Business Name'}</h2>
-                                    </div>
-                                    <div class="text-center text-sm text-gray-600 mt-2">
-                                        <p>Phone: ${seller?.phone || '1234567890'}</p>
-                                        <p>Address: ${seller?.address || '123 Main St'}</p>
-                                        <p>Web: ${seller?.storeLink || 'www.yourbusiness.com'}</p>
-                                        <p>GST: ${seller?.gstIN || 'GSTIN12345'}</p>
-                                    </div>
-                                    <div class="mt-4">
-                                        <p>Bill No: #12345</p>
-                                        <p>Order from: Dine-in</p>
-                                    </div>
-                                    <div class="mt-4 border-t border-b py-2">
-                                        <table class="w-full">
-                                            <thead>
-                                                <tr class="text-left">
-                                                    <th class="py-1 px-2">Qt</th>
-                                                    <th class="py-1">Item</th>
-                                                    <th class="py-1 text-right">Price</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <tr>
-                                                    <td class="py-1 px-2">2</td>
-                                                    <td class="py-1">Butter Chicken</td>
-                                                    <td class="py-1 text-right">₹599</td>
-                                                </tr>
-                                                <tr>
-                                                    <td class="py-1 px-2">1</td>
-                                                    <td class="py-1">Jeera Rice</td>
-                                                    <td class="py-1 text-right">₹149</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    <div class="mt-4 text-right">
-                                        <p>Sub Total: ₹748</p>
-                                        <p>Discount: -₹50</p>
-                                        <p>GST: ₹35</p>
-                                        <p class="font-bold mt-2">TOTAL: ₹733</p>
-                                    </div>
-                                    <div class="mt-4 text-right">
-                                        <p>Payment mode: Cash</p>
-                                    </div>
-                                    ${currentTemplateType === 'bill' ? `
-                                        <div class="mt-4 flex justify-center">
-                                            <div class="w-32 h-32 bg-gray-200 flex items-center justify-center">
-                                                <i class="ph ph-qr-code text-4xl"></i>
-                                            </div>
-                                        </div>
-                                    ` : ''}
-                                    <div class="mt-4 text-center text-sm">
-                                        <p>Thank you!</p>
-                                        <p>${new Date().toLocaleString()}</p>
-                                    </div>
+                                    ${generatePreviewHTML(currentTemplateType)}
                                 </div>
                             </div>
                         `,
@@ -1902,6 +2025,7 @@ function Dashboard() {
                     kotTab.classList.remove('bg-red-500', 'text-white');
                     kotTab.classList.add('border', 'border-gray-200', 'text-gray-700');
                     renderTemplateSections();
+                    updateLivePreview();
                 });
 
                 kotTab.addEventListener('click', () => {
@@ -1911,15 +2035,131 @@ function Dashboard() {
                     billTab.classList.remove('bg-red-500', 'text-white');
                     billTab.classList.add('border', 'border-gray-200', 'text-gray-700');
                     renderTemplateSections();
+                    updateLivePreview();
                 });
 
                 addSectionBtn.addEventListener('click', addNewSection);
-                previewBtn.addEventListener('click', previewTemplate);
+                refreshPreviewBtn.addEventListener('click', updateLivePreview);
                 resetBtn.addEventListener('click', resetToDefault);
                 saveBtn.addEventListener('click', saveTemplate);
+                previewFullscreenBtn.addEventListener('click', showFullscreenPreview);
 
-                // Initial render
+                // Show fullscreen preview in a side modal
+                function showFullscreenPreview() {
+                    // Generate the preview HTML once to ensure consistency
+                    const previewHtml = generatePreviewHTML(currentTemplateType);
+
+                    window.ModalManager.createSideDrawerModal({
+                        id: 'fullscreen-preview-modal',
+                        title: `${currentTemplateType.toUpperCase()} Template Preview`,
+                        content: `
+                            <div class="p-4 bg-white">
+                                <!-- Mobile handle bar - only visible on mobile -->
+                                <div class="lg:hidden w-full flex justify-center mb-2">
+                                    <div class="w-12 h-1 bg-gray-300 rounded-full"></div>
+                                </div>
+                                
+                                <!-- Content -->
+                                <div class="flex flex-col lg:flex-row gap-4">
+                                    <div class="w-full lg:w-1/2">
+                                        <div class="border-2 border-dashed border-gray-300 p-4 rounded-lg">
+                                            ${previewHtml}
+                                        </div>
+                                    </div>
+                                    <div class="w-full lg:w-1/2 mt-4 lg:mt-0">
+                                        <div class="bg-gray-50 p-4 rounded-lg">
+                                            <h3 class="font-medium text-gray-700 mb-2">What You're Seeing</h3>
+                                            <p class="text-sm text-gray-600 mb-3">This is a preview of how your ${currentTemplateType} will look when printed.</p>
+                                            
+                                            <h4 class="font-medium text-gray-700 mt-4 mb-1">Applied Settings</h4>
+                                            <ul class="text-sm text-gray-600 list-disc pl-5 space-y-1">
+                                                <li>Paper width: 58mm (standard thermal receipt)</li>
+                                                <li>Font: Courier (standard receipt font)</li>
+                                                <li>${templates[currentTemplateType].sections.length} template sections</li>
+                                                <li>Formatting includes alignment, font size, and styles</li>
+                                                <li>All variables will be replaced with actual values when printing</li>
+                                            </ul>
+                                            
+                                            <h4 class="font-medium text-gray-700 mt-4 mb-1">When Printing</h4>
+                                            <p class="text-sm text-gray-600">The actual printed receipt will have proper spacing and formatting for thermal printers.</p>
+                                            
+                                            <div class="mt-5 pt-5 border-t border-gray-200">
+                                                <div class="flex flex-col sm:flex-row sm:justify-between gap-2">
+                                                    <button id="print-test-button" class="px-4 py-2 border rounded-md hover:bg-gray-50 flex justify-center items-center">
+                                                        <i class="ph ph-printer mr-1"></i> Print Test
+                                                    </button>
+                                                    <button id="continue-editing-btn" class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 flex justify-center items-center">
+                                                        Continue Editing
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `,
+                        width: '95%',
+                        customClass: 'rounded-t-xl lg:rounded-l-xl lg:rounded-tr-none',
+                        onShown: (previewModalControl) => {
+                            // Continue editing button closes the preview
+                            document.getElementById('continue-editing-btn').addEventListener('click', () => {
+                                previewModalControl.close();
+                            });
+
+                            // Print test button would show a preview using browser printing
+                            const printTestBtn = document.getElementById('print-test-button');
+                            if (printTestBtn) {
+                                printTestBtn.addEventListener('click', async () => {
+                                    try {
+                                        // Check if BluetoothPrinting is available
+                                        if (!window.BluetoothPrinting) {
+                                            window.ModalManager.showToast('Bluetooth printing service not available', 'error');
+                                            return;
+                                        }
+
+                                        // Create a mock test order
+                                        const testOrder = {
+                                            id: 'TEST-' + Math.floor(Math.random() * 10000),
+                                            billNo: 'TEST-' + Math.floor(Math.random() * 10000),
+                                            date: new Date(),
+                                            tableId: 'Test',
+                                            priceVariant: 'Dine-in',
+                                            items: [
+                                                { title: 'Test Item 1', quantity: 2, price: 299.50 },
+                                                { title: 'Test Item 2', quantity: 1, price: 199.00 }
+                                            ],
+                                            discount: 50,
+                                            charges: [
+                                                { name: 'Service Charge', value: 30 }
+                                            ],
+                                            total: 479.00,
+                                            payMode: 'CASH'
+                                        };
+
+                                        // Generate HTML using the current template
+                                        let receiptHtml;
+                                        if (currentTemplateType === 'bill') {
+                                            receiptHtml = window.BluetoothPrinting.generateReceiptHTML(testOrder, 'bill', 'CASH');
+                                        } else {
+                                            receiptHtml = window.BluetoothPrinting.generateReceiptHTML(testOrder, 'kot');
+                                        }
+
+                                        // Show browser preview instead of actual printing
+                                        await window.BluetoothPrinting.browserPrint(receiptHtml, false);
+
+                                    } catch (error) {
+                                        console.error('Test print error:', error);
+                                        window.ModalManager.showToast('Error generating preview: ' + error.message, 'error');
+                                    }
+                                });
+                            }
+                        }
+                    });
+                }
+
+                // Initial render and preview
                 renderTemplateSections();
+                updateLivePreview();
             }
         });
     };

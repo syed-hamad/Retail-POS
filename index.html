@@ -297,33 +297,12 @@
     <div id="root"> </div>
     <!-- Load our modular Scripts -->
     <script type="text/babel" src="js/utils.js"></script>
-    <script type="text/babel" src="js/utils/BluetoothPrinting.js"></script>
+    <!-- BluetoothPrinting.js is now loaded in a single place with version parameter -->
     <script>
         // Check if BluetoothPrinting initialized properly
         document.addEventListener('DOMContentLoaded', function () {
             console.log('Checking BluetoothPrinting initialization');
-            if (!window.BluetoothPrinting) {
-                console.error('BluetoothPrinting not initialized! Attempting to fix...');
-                try {
-                    // Load the script directly
-                    var script = document.createElement('script');
-                    script.src = 'js/utils/BluetoothPrinting.js';
-                    script.type = 'text/babel';
-                    document.head.appendChild(script);
-
-                    script.onload = function () {
-                        console.log('BluetoothPrinting script loaded. Available:', !!window.BluetoothPrinting);
-                        if (!window.BluetoothPrinting && typeof BluetoothPrinting === 'function') {
-                            window.BluetoothPrinting = new BluetoothPrinting();
-                            console.log('BluetoothPrinting initialized manually');
-                        }
-                    };
-                } catch (e) {
-                    console.error('Failed to load BluetoothPrinting:', e);
-                }
-            } else {
-                console.log('BluetoothPrinting initialized successfully');
-            }
+            // Will be loaded below with version parameter
 
             // Add a convenience function for printing test
             window.printTest = async function (orderId) {
@@ -390,6 +369,42 @@
 
     <!-- Ensure ModalManager is loaded before any component that might use it -->
     <script src="js/components/ModalManager.js"></script>
+    <!-- Load BluetoothPrinting with version parameter to force refresh -->
+    <script type="text/babel" src="js/utils/BluetoothPrinting.js?v=20240529_113500"></script>
+    <script>
+        // Ensure BluetoothPrinting is properly initialized
+        (function () {
+            const maxRetries = 5;
+            let retryCount = 0;
+
+            function checkAndInitialize() {
+                console.log("Checking BluetoothPrinting initialization status...");
+                if (window.BluetoothPrinting) {
+                    console.log("BluetoothPrinting is available and initialized.");
+                    return;
+                }
+
+                if (retryCount >= maxRetries) {
+                    console.error("Failed to initialize BluetoothPrinting after multiple attempts.");
+                    return;
+                }
+
+                console.log("BluetoothPrinting not available yet, attempting to initialize...");
+
+                if (typeof BluetoothPrinting === 'function') {
+                    window.BluetoothPrinting = new BluetoothPrinting();
+                    console.log("BluetoothPrinting initialized manually.");
+                } else {
+                    retryCount++;
+                    console.log(`Retry ${retryCount}/${maxRetries} in 500ms...`);
+                    setTimeout(checkAndInitialize, 500);
+                }
+            }
+
+            // Start the initialization check after a short delay
+            setTimeout(checkAndInitialize, 100);
+        })();
+    </script>
 
     <script type="text/babel" src="js/components/Navigation.js"></script>
     <script type="text/babel" src="js/components/DashboardCard.js"></script>
