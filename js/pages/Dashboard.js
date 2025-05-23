@@ -1872,7 +1872,7 @@ function Dashboard() {
 
                         // Create textarea
                         const textArea = document.createElement('textarea');
-                        textArea.className = `w-full min-h-24 p-3 border rounded-lg transition-all ${alignmentClass} ${section.isBold ? 'font-bold' : ''} ${section.isUnderlined ? 'underline' : ''} focus:outline-none focus:ring-2 focus:ring-red-500`;
+                        textArea.className = `w-full min-h-24 p-3 border rounded-lg transition-all ${alignmentClass} ${section.isBold ? 'font-bold' : ''} ${section.isUnderlined ? 'underline' : ''} focus:outline-none focus:ring-2 focus:ring-red-500 text-sm`;
                         textArea.value = section.template || '';
                         textArea.placeholder = 'Enter template content here... Use # to insert variables';
 
