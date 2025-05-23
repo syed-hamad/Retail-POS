@@ -1,6 +1,9 @@
 // BluetoothPrinting.js - Service for handling Bluetooth thermal printer connections
 // This service uses Web Bluetooth API which is supported in Chrome and Edge, but not Safari or Firefox
 
+// Import PrintTemplate classes (will be loaded via script tag in browser)
+// The PrintTemplate.js file must be loaded before this file
+
 /**
  * BluetoothPrinting provides methods to connect to and print to Bluetooth thermal printers
  * using Web Bluetooth API
@@ -38,6 +41,16 @@ class BluetoothPrinting {
 
         // Initialize active printer selection - defaults to the most recently used printer
         this.activePrinterId = this.getActivePrinterId();
+
+        // Make PrintTemplate and PrintSection classes accessible as properties
+        // These should be available globally from PrintTemplate.js
+        this.PrintTemplate = window.PrintTemplate;
+        this.PrintSection = window.PrintSection;
+
+        // Check if the classes are available
+        if (!this.PrintTemplate || !this.PrintSection) {
+            console.error("PrintTemplate.js must be loaded before BluetoothPrinting.js");
+        }
     }
 
     /**
@@ -138,9 +151,6 @@ class BluetoothPrinting {
             channel = orderData.priceVariant;
         }
 
-        // Generate HTML for the receipt
-        const receiptHtml = this.generateReceiptHTML(orderData, type, paymentMode);
-
         // Find the appropriate printer for this channel and receipt type
         const printer = this.getPrinterForChannel(channel, type);
 
@@ -153,8 +163,38 @@ class BluetoothPrinting {
                 // Try printer-specific or default connection
                 await this._connectToPrinter(printer, receiptName);
 
-                // Convert HTML to printer-compatible canvas data and send
-                await this._sendReceiptToPrinter(receiptHtml, receiptName);
+                // Get seller information and template
+                const seller = window.UserSession?.seller || {};
+
+                // Check if we have a custom template
+                const hasCustomTemplate = seller.printTemplate &&
+                    seller.printTemplate[type.toLowerCase()] &&
+                    seller.printTemplate[type.toLowerCase()].sections &&
+                    seller.printTemplate[type.toLowerCase()].sections.length > 0;
+
+                // Get template data if available
+                const templateData = hasCustomTemplate ? seller.printTemplate[type.toLowerCase()] : null;
+
+                // Create print template directly
+                const template = this.PrintTemplate.create({
+                    type: type,
+                    orderData: orderData,
+                    seller: seller,
+                    templateData: templateData
+                });
+
+                // We're connected now, show a single printing message
+                this._showToast(`Printing ${receiptName}...`, "info");
+
+                // Generate printer commands directly from the template
+                const data = template.toPrinterCommands();
+
+                // Send to printer
+                await this.sendData(data);
+                this._showToast(`${receiptName} printed successfully`, "success");
+
+                // Save the connected printer to the printer list
+                this.savePrinter();
 
                 return true;
             } catch (error) {
@@ -167,104 +207,48 @@ class BluetoothPrinting {
                 }
 
                 // Try browser printing as fallback
-                return await this._fallbackToBrowserPrinting(receiptHtml, receiptName, autoPrint);
+                return await this._fallbackToBrowserPrinting(orderData, type, paymentMode, receiptName, autoPrint);
             }
         } else {
             // No Bluetooth support, use browser print directly
-            return await this._fallbackToBrowserPrinting(receiptHtml, receiptName, autoPrint);
+            return await this._fallbackToBrowserPrinting(orderData, type, paymentMode, receiptName, autoPrint);
         }
-    }
-
-    /**
-     * Attempts to connect to a specific printer or default printer
-     * @param {Object} printer - Specific printer to use or null for default flow
-     * @param {string} receiptName - Name of receipt for user messages
-     * @returns {Promise<boolean>} True if successfully connected
-     * @private
-     */
-    async _connectToPrinter(printer, receiptName) {
-        // If we have a specific printer for this channel, use it
-        if (printer) {
-            // Save current connection state
-            const previousDevice = this.device;
-            const previousConnected = this.connected;
-            const previousCharacteristic = this.characteristic;
-
-            try {
-                // Temporarily set this device as the last connected device
-                this.lastConnectedDevice = {
-                    id: printer.deviceId,
-                    name: printer.name
-                };
-
-                // Only show a connection message if we're not already connected
-                if (!this.connected) {
-                    this._showToast(`Connecting to ${printer.name || 'printer'}...`, "info");
-                }
-
-                // Connect to this specific printer
-                await this.ensurePrinterConnection();
-                return true;
-            } catch (specificPrinterError) {
-                console.error(`Error using specific printer:`, specificPrinterError);
-
-                // Restore previous connection state for fallback
-                this.device = previousDevice;
-                this.connected = previousConnected;
-                this.characteristic = previousCharacteristic;
-
-                // Continue to default connection path
-            }
-        }
-
-        // Default printing path - only show connection messages if we're not connected yet
-        if (!this.connected) {
-            if (this.lastConnectedDevice) {
-                this._showToast("Connecting to printer...", "info");
-            } else {
-                this._showToast(`Select a printer for ${receiptName}`, "info");
-            }
-        }
-
-        await this.ensurePrinterConnection();
-        return true;
-    }
-
-    /**
-     * Send receipt to the connected printer
-     * @param {string} receiptHtml - HTML content to print
-     * @param {string} receiptName - Name of receipt for user messages
-     * @returns {Promise<boolean>} True if successfully sent to printer
-     * @private
-     */
-    async _sendReceiptToPrinter(receiptHtml, receiptName) {
-        // We're connected now, show a single printing message
-        this._showToast(`Printing ${receiptName}...`, "info");
-
-        // Convert HTML to printer-compatible canvas data
-        const data = await this.htmlToCanvas(receiptHtml);
-
-        // Send to printer
-        await this.sendData(data);
-        this._showToast(`${receiptName} printed successfully`, "success");
-
-        // Save the connected printer to the printer list
-        this.savePrinter();
-
-        return true;
     }
 
     /**
      * Fallback to browser printing when Bluetooth printing fails
-     * @param {string} receiptHtml - HTML content to print
+     * @param {Object} orderData - The order data
+     * @param {string} type - The type of receipt ('kot' or 'bill')
+     * @param {string} paymentMode - The payment mode
      * @param {string} receiptName - Name of receipt for user messages
      * @param {boolean} autoPrint - Whether to attempt auto-printing
      * @returns {Promise<boolean>} True if browser printing was successful
      * @private
      */
-    async _fallbackToBrowserPrinting(receiptHtml, receiptName, autoPrint) {
+    async _fallbackToBrowserPrinting(orderData, type, paymentMode, receiptName, autoPrint) {
         this._showToast(`Attempting browser print for ${receiptName}...`, "info");
         try {
+            // Get seller information
+            const seller = window.UserSession?.seller || {};
+
+            // Check if we have a custom template
+            const hasCustomTemplate = seller.printTemplate &&
+                seller.printTemplate[type.toLowerCase()] &&
+                seller.printTemplate[type.toLowerCase()].sections &&
+                seller.printTemplate[type.toLowerCase()].sections.length > 0;
+
+            // Get template data if available
+            const templateData = hasCustomTemplate ? seller.printTemplate[type.toLowerCase()] : null;
+
+            // Generate HTML using PrintTemplate directly
+            const template = this.PrintTemplate.create({
+                type: type,
+                orderData: orderData,
+                seller: seller,
+                templateData: templateData
+            });
+            const receiptHtml = template.toHTML();
+
             await this.browserPrint(receiptHtml, autoPrint);
             this._showToast(`${receiptName} printed successfully via browser`, "success");
             return true;
@@ -640,6 +624,7 @@ class BluetoothPrinting {
     /**
      * Handle printer connection errors with appropriate user feedback
      * @param {Error} error - The error to handle
+     * @param {boolean} [showToasts=true] - Whether to show toast notifications
      * @returns {string} - Classification of the error
      * @private
      */
@@ -687,830 +672,6 @@ class BluetoothPrinting {
     }
 
     /**
-     * Generate HTML for a receipt or KOT based on order data and template
-     * This centralized method generates consistent HTML for both browser printing and Bluetooth printing
-     * @param {Object} orderData - The order data object
-     * @param {string} type - 'bill' or 'kot' to determine the type of receipt
-     * @param {string} [paymentMode] - Optional payment mode for bills
-     * @returns {string} HTML content for the receipt
-     */
-    generateReceiptHTML(orderData, type, paymentMode) {
-        const seller = window.UserSession?.seller || {};
-        const paperWidth = '58mm'; // Standard thermal paper width
-
-        // Check if we have a custom template
-        const hasCustomTemplate = seller.printTemplate &&
-            seller.printTemplate[type.toLowerCase()] &&
-            seller.printTemplate[type.toLowerCase()].sections &&
-            seller.printTemplate[type.toLowerCase()].sections.length > 0;
-
-        // If we have a custom template, use it
-        if (hasCustomTemplate) {
-            return this.generateTemplateBasedReceiptHTML(orderData, type, paymentMode, seller.printTemplate[type.toLowerCase()]);
-        }
-
-        // If no custom template, create a default template based on receipt type
-        const defaultTemplate = this.createDefaultTemplate(type, orderData);
-
-        // Use the template-based generation with our default template
-        return this.generateTemplateBasedReceiptHTML(orderData, type, paymentMode, defaultTemplate);
-    }
-
-    /**
-     * Create a default template based on receipt type
-     * @param {string} type - 'bill' or 'kot'
-     * @param {Object} orderData - Order data for context-specific templates
-     * @returns {Object} A template object with sections
-     * @private
-     */
-    createDefaultTemplate(type, orderData) {
-        const isKOT = type.toLowerCase() === 'kot';
-        const template = { sections: [] };
-
-        // Header section
-        template.sections.push({
-            template: isKOT ?
-                `<div style="font-size: 20px; font-weight: 800; text-align: center;">KOT</div>
-                 ${orderData.tableId ? `<div style="font-size: 18px; text-align: center;">TABLE ${orderData.tableId}</div>` : ''}` :
-                `${orderData.gstEnabled ? 'TAX INVOICE' : 'BILL/RECEIPT'}
-                 #businessName
-                 #address
-                 Phone: #phone
-                 Web: #storeLink
-                 GST: #gstIN`,
-            alignment: 'TextAlign.center',
-            fontSize: 24,
-            isBold: true
-        });
-
-        // Order details section
-        template.sections.push({
-            template: `${isKOT ? 'KOT' : 'Bill'} #: #billNo
-                      Date: #timestamp
-                      ${orderData.custName || orderData.customer?.name ? `Customer: ${orderData.custName || orderData.customer?.name}` : ''}
-                      ${orderData.tableId ? `Table: ${orderData.tableId}` : ''}
-                      ${!isKOT ? `Order from: #orderSource` : ''}`,
-            alignment: 'TextAlign.left',
-            fontSize: 20,
-            isBold: false
-        });
-
-        // Items section
-        template.sections.push({
-            template: isKOT ? '#kotItemsList' : '#itemsList',
-            alignment: 'TextAlign.left',
-            fontSize: 20,
-            isBold: false
-        });
-
-        // Totals section (for bills only)
-        if (!isKOT) {
-            template.sections.push({
-                template: `Sub Total: #subtotal
-                          ${orderData.discount && parseFloat(orderData.discount) > 0 ? 'Discount: #discount' : ''}
-                          #charges
-                          TOTAL: #total`,
-                alignment: 'TextAlign.right',
-                fontSize: 20,
-                isBold: true
-            });
-
-            // Payment section
-            template.sections.push({
-                template: `Payment Mode: #payMode
-                          ${orderData.notes ? orderData.notes : ''}`,
-                alignment: 'TextAlign.left',
-                fontSize: 20,
-                isBold: false
-            });
-
-            // Footer
-            template.sections.push({
-                template: `Thank You!
-                          Visit Again
-                          #storeLink`,
-                alignment: 'TextAlign.center',
-                fontSize: 20,
-                isBold: false
-            });
-        } else if (orderData.instructions) {
-            // Notes section for KOT
-            template.sections.push({
-                template: `NOTES:
-                          ${orderData.instructions.trim()}`,
-                alignment: 'TextAlign.left',
-                fontSize: 20,
-                isBold: false
-            });
-        }
-
-        return template;
-    }
-
-    /**
-     * Process template variables and replace with actual values
-     * @param {string} template - Template string with variables
-     * @param {Object} orderData - Order data
-     * @param {string} type - 'bill' or 'kot'
-     * @param {string} paymentMode - Payment mode for bills
-     * @param {Object} seller - Seller data
-     * @returns {string} Processed template with variables replaced
-     * @private
-     */
-    processTemplateVariables(template, orderData, type, paymentMode, seller) {
-        if (!template) return '';
-
-        let processedTemplate = template;
-
-        // Basic replacements with printer-specific classes
-        const replacements = {
-            '#logo': seller.logo ?
-                `<div class="printer-center"><img src="${seller.logo}" alt="Logo" style="max-width: 45mm; max-height: 15mm;"></div>` :
-                '<div class="printer-center"><i class="ph ph-storefront" style="font-size: 24px;"></i></div>',
-            '#businessName': `<div class="printer-center printer-large printer-bold">${seller.businessName || 'Your Business'}</div>`,
-            '#phone': seller.phone ? `<div class="printer-center">Tel: ${seller.phone}</div>` : '',
-            '#address': seller.address ? `<div class="printer-center">${seller.address}</div>` : '',
-            '#storeLink': seller.website ? `<div class="printer-center">${seller.website}</div>` : '',
-            '#gstIN': seller.gstIN ? `<div class="printer-center">GSTIN: ${seller.gstIN}</div>` : '',
-            '#billNo': `<div class="printer-line">Bill #: ${orderData.billNo || orderData.id?.substring(0, 8) || 'N/A'}</div>`,
-            '#orderSource': `<div class="printer-line">Source: ${orderData.priceVariant || 'Default'}</div>`,
-            '#payMode': `<div class="printer-right">Payment: ${paymentMode || orderData.payMode || 'CASH'}</div>`,
-            '#timestamp': `<div class="printer-center">${new Date(orderData.date?.toDate ? orderData.date.toDate() : orderData.date || new Date()).toLocaleString()}</div>`,
-            '#cut': '<div class="printer-divider"></div>',
-            '#upiQR': orderData.upiQR ? `<div class="printer-center"><div class="printer-qr"><i class="ph ph-qr-code"></i></div></div>` : ''
-        };
-
-        // Replace all simple variables
-        Object.keys(replacements).forEach(key => {
-            processedTemplate = processedTemplate.replace(new RegExp(key, 'g'), replacements[key]);
-        });
-
-        // Special handling for items list
-        if (processedTemplate.includes('#itemsList')) {
-            let itemsHtml = '';
-
-            if (orderData.items && orderData.items.length > 0) {
-                // Add header
-                itemsHtml += `
-                    <div class="printer-divider"></div>
-                    <div class="printer-table">
-                        <div class="printer-table-header">
-                            <div class="printer-col-qty">Qty</div>
-                            <div class="printer-col-name">Item</div>
-                            <div class="printer-col-price">Amount</div>
-                        </div>
-                    </div>
-                    <div class="printer-divider"></div>
-                `;
-
-                // Add items
-                itemsHtml += '<div class="printer-table">';
-                orderData.items.forEach(item => {
-                    const quantity = parseFloat(item.quantity || item.qnt || 1);
-                    const price = parseFloat(item.price || 0);
-                    const amount = quantity * price;
-
-                    // Pad quantity and price for alignment
-                    const paddedQty = quantity.toString().padStart(2, ' ');
-                    const paddedAmount = amount.toFixed(2).padStart(8, ' ');
-                    const itemName = (item.title || 'Unknown Item').substring(0, 20); // Limit item name length
-
-                    itemsHtml += `
-                        <div class="printer-table-row">
-                            <div class="printer-col-qty">${paddedQty}</div>
-                            <div class="printer-col-name">${itemName}</div>
-                            <div class="printer-col-price">${paddedAmount}</div>
-                        </div>
-                    `;
-                });
-                itemsHtml += '</div><div class="printer-divider"></div>';
-            }
-
-            processedTemplate = processedTemplate.replace('#itemsList', itemsHtml);
-        }
-
-        // Special handling for KOT items list
-        if (processedTemplate.includes('#kotItemsList')) {
-            let kotItemsHtml = '';
-
-            if (orderData.items && orderData.items.length > 0) {
-                kotItemsHtml += `
-                    <div class="printer-center printer-large printer-bold">KITCHEN ORDER</div>
-                    <div class="printer-divider"></div>
-                `;
-
-                orderData.items.forEach(item => {
-                    const quantity = parseFloat(item.quantity || item.qnt || 1);
-
-                    kotItemsHtml += `
-                        <div class="printer-item printer-large">
-                            <div class="printer-item-qty">${quantity}x</div>
-                            <div class="printer-item-name printer-bold">${item.title || 'Unknown Item'}</div>
-                        </div>
-                    `;
-
-                    if (item.instructions) {
-                        kotItemsHtml += `
-                            <div class="printer-line" style="padding-left: 30px; font-style: italic;">
-                                Note: ${item.instructions.trim()}
-                            </div>
-                        `;
-                    }
-                });
-
-                kotItemsHtml += '<div class="printer-divider"></div>';
-            }
-
-            processedTemplate = processedTemplate.replace('#kotItemsList', kotItemsHtml);
-        }
-
-        // Handle totals section
-        if (processedTemplate.includes('#subtotal')) {
-            let subtotal = 0;
-            if (orderData.items && orderData.items.length > 0) {
-                subtotal = orderData.items.reduce((total, item) => {
-                    const quantity = parseFloat(item.quantity || item.qnt || 1);
-                    const price = parseFloat(item.price || 0);
-                    return total + (quantity * price);
-                }, 0);
-            }
-            processedTemplate = processedTemplate.replace('#subtotal', `
-                <div class="printer-total-row">
-                    <div class="printer-total-label">Subtotal:</div>
-                    <div class="printer-total-value">${subtotal.toFixed(2)}</div>
-                </div>
-            `);
-        }
-
-        // Handle discount
-        if (processedTemplate.includes('#discount')) {
-            const discount = orderData.discount ? parseFloat(orderData.discount) : 0;
-            if (discount > 0) {
-                processedTemplate = processedTemplate.replace('#discount', `
-                    <div class="printer-total-row">
-                        <div class="printer-total-label">Discount:</div>
-                        <div class="printer-total-value">-${discount.toFixed(2)}</div>
-                    </div>
-                `);
-            } else {
-                processedTemplate = processedTemplate.replace('#discount', '');
-            }
-        }
-
-        // Handle charges
-        if (processedTemplate.includes('#charges')) {
-            let chargesHtml = '';
-            if (orderData.charges && Array.isArray(orderData.charges)) {
-                orderData.charges.forEach(charge => {
-                    if (charge.value && parseFloat(charge.value) !== 0) {
-                        chargesHtml += `
-                            <div class="printer-total-row">
-                                <div class="printer-total-label">${charge.name}:</div>
-                                <div class="printer-total-value">${parseFloat(charge.value).toFixed(2)}</div>
-                            </div>
-                        `;
-                    }
-                });
-            }
-            processedTemplate = processedTemplate.replace('#charges', chargesHtml);
-        }
-
-        // Handle total
-        if (processedTemplate.includes('#total')) {
-            let total = orderData.total;
-            if (!total && orderData.items) {
-                let subtotal = 0;
-                if (orderData.items && orderData.items.length > 0) {
-                    subtotal = orderData.items.reduce((total, item) => {
-                        const quantity = parseFloat(item.quantity || item.qnt || 1);
-                        const price = parseFloat(item.price || 0);
-                        return total + (quantity * price);
-                    }, 0);
-                }
-
-                if (orderData.charges && Array.isArray(orderData.charges)) {
-                    orderData.charges.forEach(charge => {
-                        if (charge.value) {
-                            subtotal += parseFloat(charge.value);
-                        }
-                    });
-                }
-
-                if (orderData.discount) {
-                    subtotal -= parseFloat(orderData.discount);
-                }
-
-                total = subtotal;
-            }
-
-            processedTemplate = processedTemplate.replace('#total', `
-                <div class="printer-total-row printer-bold printer-large">
-                    <div class="printer-total-label">TOTAL:</div>
-                    <div class="printer-total-value">${typeof total === 'number' ? total.toFixed(2) : total || '0.00'}</div>
-                </div>
-            `);
-        }
-
-        return processedTemplate;
-    }
-
-    /**
-     * Generate HTML receipt based on a custom template
-     * @param {Object} orderData - The order data
-     * @param {string} type - 'bill' or 'kot'
-     * @param {string} paymentMode - Payment mode for bills
-     * @param {Object} template - The template object with sections
-     * @returns {string} Generated HTML
-     * @private
-     */
-    generateTemplateBasedReceiptHTML(orderData, type, paymentMode, template) {
-        const seller = window.UserSession?.seller || {};
-        const paperWidth = '58mm'; // Standard thermal paper width
-
-        // Initialize HTML with printer-specific container
-        let html = `<div class="printer-container">`;
-
-        // Process each template section
-        if (template && template.sections && template.sections.length > 0) {
-            template.sections.forEach(section => {
-                // Get the content with variables replaced
-                const content = this.processTemplateVariables(section.template, orderData, type, paymentMode, seller);
-
-                // Determine alignment class
-                let alignClass = 'printer-left';
-                if (section.alignment === 'TextAlign.center') alignClass = 'printer-center';
-                if (section.alignment === 'TextAlign.right') alignClass = 'printer-right';
-
-                // Determine font size class
-                const fontSize = section.fontSize || 24;
-                const fontSizeClass = fontSize > 24 ? 'printer-large' : '';
-
-                // Add the section content with appropriate classes
-                html += `<div class="${alignClass} ${fontSizeClass} ${section.isBold ? 'printer-bold' : ''} printer-line">`;
-
-                // Split by newlines and process each line
-                const lines = content.split('\n');
-                lines.forEach((line, index) => {
-                    if (line.trim()) {
-                        html += `${line}${index < lines.length - 1 ? '<br>' : ''}`;
-                    }
-                });
-
-                html += `</div>`;
-
-                // Add separator after non-empty sections
-                if (content.trim()) {
-                    html += `<div class="printer-divider"></div>`;
-                }
-            });
-        }
-
-        // Close the main container
-        html += `</div>`;
-
-        return html;
-    }
-
-    /**
-     * Create a printable HTML document with proper styling
-     * @param {string} contentHtml - The inner HTML content
-     * @returns {string} Complete HTML document ready for printing
-     */
-    createPrintableHTML(contentHtml) {
-        return `
-            <html>
-                <head>
-                    <title>Print</title>
-                    <style>
-                        @font-face {
-                            font-family: 'PrinterFont';
-                            src: local('Courier New');
-                            font-weight: normal;
-                            font-style: normal;
-                        }
-                        
-                        @media print {
-                            @page { 
-                                size: 58mm auto;
-                                margin: 0mm;
-                                padding: 0mm;
-                            }
-                            body { 
-                                margin: 0;
-                                padding: 0;
-                                width: 58mm;
-                                color: #000;
-                                background: #fff;
-                            }
-                        }
-                        
-                        body {
-                            font-family: 'PrinterFont', 'Courier New', monospace;
-                            line-height: 1.2;
-                            font-size: 12px;
-                            width: 58mm;
-                            margin: 0 auto;
-                            padding: 4px;
-                            background: white;
-                            color: black;
-                            -webkit-font-smoothing: none;
-                        }
-
-                        .printer-container {
-                            width: 100%;
-                            max-width: 58mm;
-                            margin: 0 auto;
-                            padding: 0;
-                        }
-                        
-                        /* Table formatting for items */
-                        .printer-table {
-                            width: 100%;
-                            table-layout: fixed;
-                            border-collapse: collapse;
-                        }
-
-                        .printer-table-header {
-                            display: flex;
-                            width: 100%;
-                            font-weight: bold;
-                            border-bottom: 1px dashed #000;
-                            padding: 2px 0;
-                        }
-
-                        .printer-table-row {
-                            display: flex;
-                            width: 100%;
-                            padding: 2px 0;
-                            white-space: pre;
-                        }
-
-                        .printer-col-qty {
-                            width: 30px;
-                            text-align: left;
-                            flex-shrink: 0;
-                            font-family: 'PrinterFont', 'Courier New', monospace;
-                        }
-
-                        .printer-col-name {
-                            flex: 1;
-                            padding: 0 4px;
-                            white-space: nowrap;
-                            overflow: hidden;
-                            text-overflow: ellipsis;
-                            font-family: 'PrinterFont', 'Courier New', monospace;
-                        }
-
-                        .printer-col-price {
-                            width: 60px;
-                            text-align: right;
-                            flex-shrink: 0;
-                            font-family: 'PrinterFont', 'Courier New', monospace;
-                        }
-                        
-                        .printer-line {
-                            white-space: pre;
-                            overflow: hidden;
-                            width: 100%;
-                            margin: 2px 0;
-                            font-family: 'PrinterFont', 'Courier New', monospace;
-                        }
-                        
-                        .printer-center {
-                            text-align: center;
-                            width: 100%;
-                        }
-                        
-                        .printer-right {
-                            text-align: right;
-                            width: 100%;
-                        }
-
-                        .printer-left {
-                            text-align: left;
-                            width: 100%;
-                        }
-                        
-                        .printer-bold {
-                            font-weight: bold;
-                        }
-                        
-                        .printer-large {
-                            font-size: 14px;
-                            line-height: 1.4;
-                        }
-                        
-                        .printer-divider {
-                            border-top: 1px dashed #000;
-                            margin: 4px 0;
-                            width: 100%;
-                        }
-                        
-                        .printer-qr {
-                            width: 100px;
-                            height: 100px;
-                            margin: 8px auto;
-                            border: 1px solid #000;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                        }
-
-                        /* Ensure consistent spacing */
-                        .printer-text {
-                            letter-spacing: 0;
-                            word-spacing: normal;
-                        }
-
-                        /* Totals section */
-                        .printer-totals {
-                            margin-top: 4px;
-                            padding-top: 4px;
-                            border-top: 1px dashed #000;
-                        }
-
-                        .printer-total-row {
-                            display: flex;
-                            justify-content: space-between;
-                            padding: 2px 0;
-                            white-space: pre;
-                        }
-
-                        .printer-total-label {
-                            text-align: right;
-                            padding-right: 8px;
-                        }
-
-                        .printer-total-value {
-                            text-align: right;
-                            width: 60px;
-                        }
-                    </style>
-                </head>
-                <body>${contentHtml}</body>
-            </html>
-        `;
-    }
-
-    /**
-     * Creates a hidden iframe with the content to be printed
-     * @param {string} htmlContent - The HTML content to render
-     * @returns {Promise<HTMLIFrameElement>} The iframe element with rendered content
-     * @private
-     */
-    async _createPrintFrame(htmlContent) {
-        return new Promise((resolve, reject) => {
-            try {
-                const printFrame = document.createElement('iframe');
-                Object.assign(printFrame.style, {
-                    position: 'fixed',
-                    top: '-9999px',
-                    left: '-9999px',
-                    width: '0',
-                    height: '0',
-                    border: '0'
-                });
-
-                document.body.appendChild(printFrame);
-                printFrame.contentDocument.open();
-                printFrame.contentDocument.write(this.createPrintableHTML(htmlContent));
-                printFrame.contentDocument.close();
-
-                if (printFrame.contentWindow.document.readyState === 'complete') {
-                    resolve(printFrame);
-                } else {
-                    printFrame.onload = () => resolve(printFrame);
-                }
-            } catch (error) {
-                console.error('Error creating print frame:', error);
-                reject(error);
-            }
-        });
-    }
-
-    /**
-     * Browser-based print function using hidden iframe
-     * @param {string} htmlContent - The HTML content to print
-     * @param {boolean} autoPrint - Whether to attempt auto-printing without dialog
-     * @returns {Promise<boolean>} True if printing was successful
-     */
-    async browserPrint(htmlContent, autoPrint = false) {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const printFrame = await this._createPrintFrame(htmlContent);
-
-                const doPrint = () => {
-                    try {
-                        // If autoPrint is enabled, try to use techniques that might suppress the dialog
-                        if (autoPrint && window.navigator.userAgent.indexOf("Chrome") > -1) {
-                            try {
-                                printFrame.contentWindow.focus();
-                                printFrame.contentWindow.document.execCommand('print', false, null);
-                                resolve(true);
-                            } catch (execErr) {
-                                // Fall back to regular print if execCommand fails
-                                console.warn("ExecCommand print failed, falling back:", execErr);
-                                printFrame.contentWindow.print();
-                                resolve(true);
-                            }
-                        } else {
-                            // Regular print dialog for non-Chrome browsers or when autoPrint is disabled
-                            printFrame.contentWindow.focus();
-                            printFrame.contentWindow.print();
-                            resolve(true);
-                        }
-                    } catch (printError) {
-                        console.error("Error triggering browser print:", printError);
-                        reject(new Error("Could not open print dialog. Please check browser pop-up settings."));
-                    }
-
-                    // Clean up the iframe after printing
-                    setTimeout(() => {
-                        if (document.body.contains(printFrame)) {
-                            document.body.removeChild(printFrame);
-                        }
-                    }, 1500);
-                };
-
-                doPrint();
-            } catch (error) {
-                console.error("Error setting up browser print:", error);
-                reject(error);
-            }
-        });
-    }
-
-    /**
-     * Convert HTML to printer-compatible commands
-     * This approach provides consistent output between browser and Bluetooth printing
-     * @param {string} html - HTML content to convert
-     * @returns {Promise<Uint8Array>} Commands for printing via Bluetooth
-     */
-    async htmlToCanvas(html) {
-        try {
-            const printFrame = await this._createPrintFrame(html);
-
-            try {
-                // Get the body element from the iframe
-                const body = printFrame.contentDocument.body;
-
-                // Initialize commands array for ESC/POS
-                const commands = [];
-
-                // Initialize printer
-                commands.push(0x1B, 0x40); // ESC @ - Initialize printer
-
-                // Process the content
-                this.processDocumentForPrinting(body, commands);
-
-                // Add feed and cut at the end
-                commands.push(0x1B, 0x64, 5); // Feed 5 lines
-                commands.push(0x1D, 0x56, 0x41); // Partial cut
-
-                // Clean up
-                document.body.removeChild(printFrame);
-
-                // Return ESC/POS commands
-                return new Uint8Array(commands);
-            } catch (error) {
-                if (document.body.contains(printFrame)) {
-                    document.body.removeChild(printFrame);
-                }
-                console.error('Error processing HTML for printing:', error);
-                throw error;
-            }
-        } catch (error) {
-            console.error('Error setting up HTML to commands conversion:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Process a document to generate ESC/POS commands
-     * @param {HTMLElement} element - The element to process
-     * @param {Array} commands - Array to append commands to
-     * @private
-     */
-    processDocumentForPrinting(element, commands) {
-        // Initialize printer
-        commands.push(0x1B, 0x40); // ESC @ - Initialize printer
-
-        // Process flex container items specially
-        const flexContainers = element.querySelectorAll('div[style*="display: flex"]');
-        if (flexContainers.length > 0) {
-            // This is likely an items list with flex layout
-            flexContainers.forEach(container => {
-                const spans = container.querySelectorAll('span');
-                if (spans.length === 3) { // Qty, Item, Amount format
-                    const qty = spans[0].textContent.trim().padEnd(4);
-                    const item = spans[1].textContent.trim();
-                    const amount = spans[2].textContent.trim().padStart(8);
-
-                    // Calculate available space for item name
-                    const availableSpace = this.printerWidth - 12; // 4 for qty + 8 for amount
-                    const truncatedItem = item.length > availableSpace
-                        ? item.substring(0, availableSpace - 3) + '...'
-                        : item.padEnd(availableSpace);
-
-                    // Combine into single line with proper spacing
-                    commands.push(...this.encoder.encode(qty + truncatedItem + amount + '\n'));
-                }
-            });
-            return; // Skip regular processing for flex containers
-        }
-
-        // For regular content, process line by line
-        const lines = this.extractTextContent(element).split('\n');
-
-        lines.forEach(line => {
-            const trimmedLine = line.trim();
-            if (trimmedLine) {
-                // Check if this line appears to be a header
-                const isHeader =
-                    (trimmedLine === trimmedLine.toUpperCase() &&
-                        trimmedLine.length > 3) ||
-                    /BILL|RECEIPT|KOT|INVOICE|TOTAL/.test(trimmedLine);
-
-                // Check if this is an items header
-                const isItemsHeader = /^Qty\s+Item\s+Amount$/.test(trimmedLine);
-
-                if (isHeader) {
-                    commands.push(0x1B, 0x61, 0x01); // Center align
-                    commands.push(0x1B, 0x45, 0x01); // Bold ON
-                    commands.push(...this.encoder.encode(trimmedLine + '\n'));
-                    commands.push(0x1B, 0x45, 0x00); // Bold OFF
-                    commands.push(0x1B, 0x61, 0x00); // Left align
-                } else if (isItemsHeader) {
-                    // Format items header with proper spacing
-                    const header = 'Qty  Item' + ' '.repeat(this.printerWidth - 20) + 'Amount\n';
-                    commands.push(0x1B, 0x45, 0x01); // Bold ON
-                    commands.push(...this.encoder.encode(header));
-                    commands.push(0x1B, 0x45, 0x00); // Bold OFF
-                    commands.push(...this.encoder.encode('-'.repeat(this.printerWidth) + '\n'));
-                } else {
-                    commands.push(...this.encoder.encode(trimmedLine + '\n'));
-                }
-            }
-        });
-
-        // Reset to default line spacing
-        commands.push(0x1B, 0x32); // ESC 2 - Default line spacing
-    }
-
-    /**
-     * Extract text content from an HTML element, preserving structure
-     * @param {HTMLElement} element - The element to extract text from
-     * @returns {string} Extracted text with preserved line breaks
-     * @private
-     */
-    extractTextContent(element) {
-        let result = '';
-
-        // Skip flex containers as they're handled separately
-        if (element.getAttribute('style')?.includes('display: flex')) {
-            return '';
-        }
-
-        // Process all child nodes
-        const processNode = (node) => {
-            if (node.nodeType === Node.TEXT_NODE) {
-                result += node.textContent;
-            } else if (node.nodeType === Node.ELEMENT_NODE) {
-                const tagName = node.tagName.toLowerCase();
-                const style = node.getAttribute('style') || '';
-
-                // Skip flex containers
-                if (style.includes('display: flex')) {
-                    return;
-                }
-
-                if (tagName === 'br') {
-                    result += '\n';
-                } else if (['div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li'].includes(tagName)) {
-                    if (result && !result.endsWith('\n')) {
-                        result += '\n';
-                    }
-
-                    for (const child of node.childNodes) {
-                        processNode(child);
-                    }
-
-                    if (!result.endsWith('\n')) {
-                        result += '\n';
-                    }
-                } else {
-                    for (const child of node.childNodes) {
-                        processNode(child);
-                    }
-                }
-            }
-        };
-
-        processNode(element);
-        return result.replace(/\n{3,}/g, '\n\n').trim();
-    }
-
-    /**
      * Set the printer width configuration
      * @param {string} size - The printer size ('2inch', '3inch', '4inch')
      */
@@ -1525,6 +686,49 @@ class BluetoothPrinting {
             console.error('Invalid printer size. Supported sizes are: 2inch, 3inch, 4inch');
             throw new Error('Invalid printer size. Supported sizes are: 2inch, 3inch, 4inch');
         }
+    }
+
+    /**
+     * Open a browser print dialog with the provided HTML content
+     * This is used as a fallback when Bluetooth printing is not available
+     * @param {string} html - The HTML content to print
+     * @param {boolean} autoPrint - Whether to automatically trigger the print dialog
+     * @returns {Promise<boolean>} True if the print dialog was opened successfully
+     */
+    async browserPrint(html, autoPrint = true) {
+        return new Promise((resolve, reject) => {
+            try {
+                // Open a new window for printing
+                const printWindow = window.open('', '_blank');
+                if (!printWindow) {
+                    reject(new Error('Please allow popups to print'));
+                    return;
+                }
+
+                printWindow.document.write(html);
+                printWindow.document.close();
+
+                // Wait for resources to load then print
+                setTimeout(() => {
+                    if (autoPrint) {
+                        printWindow.print();
+                    }
+
+                    // Resolve after print dialog is shown
+                    resolve(true);
+
+                    // Optional: close the window after print dialog is closed
+                    if (autoPrint) {
+                        setTimeout(() => {
+                            printWindow.close();
+                        }, 500);
+                    }
+                }, 500);
+            } catch (error) {
+                console.error('Browser print error:', error);
+                reject(error);
+            }
+        });
     }
 
     /**
@@ -2173,141 +1377,61 @@ class BluetoothPrinting {
         });
     }
 
-    generatePreviewHTML(contentHtml) {
-        return `
-            <html>
-                <head>
-                    <title>Print</title>
-                    <style>
-                        @font-face {
-                            font-family: 'PrinterFont';
-                            src: local('Courier New');
-                            font-weight: normal;
-                            font-style: normal;
-                        }
-                        
-                        @media print {
-                            @page { 
-                                size: 58mm auto;
-                                margin: 0mm;
-                                padding: 0mm;
-                            }
-                            body { 
-                                margin: 0;
-                                padding: 0;
-                                width: 58mm;
-                                color: #000;
-                                background: #fff;
-                            }
-                        }
-                        
-                        body {
-                            font-family: 'PrinterFont', 'Courier New', monospace;
-                            line-height: 1.2;
-                            font-size: 12px;
-                            width: 58mm;
-                            margin: 0 auto;
-                            padding: 8px;
-                            background: white;
-                            color: black;
-                            -webkit-font-smoothing: none;
-                        }
-                        
-                        /* Exact character width matching */
-                        .printer-line {
-                            white-space: pre;
-                            overflow: hidden;
-                            width: 100%;
-                        }
-                        
-                        /* Center alignment that matches thermal printer */
-                        .printer-center {
-                            text-align: center;
-                            width: 100%;
-                        }
-                        
-                        /* Right alignment that matches thermal printer */
-                        .printer-right {
-                            text-align: right;
-                            width: 100%;
-                        }
-                        
-                        /* Bold text that matches thermal printer */
-                        .printer-bold {
-                            font-weight: bold;
-                        }
-                        
-                        /* Double height text simulation */
-                        .printer-large {
-                            font-size: 14px;
-                            line-height: 1.4;
-                        }
-                        
-                        /* Divider lines that match thermal printer */
-                        .printer-divider {
-                            border-top: 1px dashed #000;
-                            margin: 4px 0;
-                        }
-                        
-                        /* Item list formatting */
-                        .printer-item {
-                            display: flex;
-                            justify-content: space-between;
-                            margin: 2px 0;
-                        }
-                        
-                        .printer-item-qty {
-                            width: 30px;
-                            text-align: left;
-                        }
-                        
-                        .printer-item-name {
-                            flex: 1;
-                            padding: 0 4px;
-                        }
-                        
-                        .printer-item-price {
-                            width: 60px;
-                            text-align: right;
-                        }
-                        
-                        /* QR code placeholder */
-                        .printer-qr {
-                            width: 100px;
-                            height: 100px;
-                            margin: 8px auto;
-                            border: 1px solid #000;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                        }
-                    </style>
-                </head>
-                <body>${contentHtml}</body>
-            </html>
-        `;
+    /**
+     * Attempts to connect to a specific printer or default printer
+     * @param {Object} printer - Specific printer to use or null for default flow
+     * @param {string} receiptName - Name of receipt for user messages
+     * @returns {Promise<boolean>} True if successfully connected
+     * @private
+     */
+    async _connectToPrinter(printer, receiptName) {
+        // If we have a specific printer for this channel, use it
+        if (printer) {
+            // Save current connection state
+            const previousDevice = this.device;
+            const previousConnected = this.connected;
+            const previousCharacteristic = this.characteristic;
+
+            try {
+                // Temporarily set this device as the last connected device
+                this.lastConnectedDevice = {
+                    id: printer.deviceId,
+                    name: printer.name
+                };
+
+                // Only show a connection message if we're not already connected
+                if (!this.connected) {
+                    this._showToast(`Connecting to ${printer.name || 'printer'}...`, "info");
+                }
+
+                // Connect to this specific printer
+                await this.ensurePrinterConnection();
+                return true;
+            } catch (specificPrinterError) {
+                console.error(`Error using specific printer:`, specificPrinterError);
+
+                // Restore previous connection state for fallback
+                this.device = previousDevice;
+                this.connected = previousConnected;
+                this.characteristic = previousCharacteristic;
+
+                // Continue to default connection path
+            }
+        }
+
+        // Default printing path - only show connection messages if we're not connected yet
+        if (!this.connected) {
+            if (this.lastConnectedDevice) {
+                this._showToast("Connecting to printer...", "info");
+            } else {
+                this._showToast(`Select a printer for ${receiptName}`, "info");
+            }
+        }
+
+        await this.ensurePrinterConnection();
+        return true;
     }
 }
 
 // Create a singleton instance
 window.BluetoothPrinting = new BluetoothPrinting();
-
-// Global test function for direct console access
-window.testPrinting = async function (orderId) {
-    try {
-        console.log("Test printing function called with orderId:", orderId);
-        if (!window.BluetoothPrinting) {
-            console.error("BluetoothPrinting is not initialized!");
-            window.BluetoothPrinting = new BluetoothPrinting();
-            console.log("Created new BluetoothPrinting instance");
-        }
-
-        console.log("About to call printBill...");
-        await window.BluetoothPrinting.printBill(orderId);
-        console.log("Print bill completed successfully");
-        return true;
-    } catch (error) {
-        console.error("Error in test printing:", error);
-        return false;
-    }
-};

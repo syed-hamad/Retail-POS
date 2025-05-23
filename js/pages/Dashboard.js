@@ -1238,6 +1238,31 @@ function Dashboard() {
                 console.log(`[Dashboard] Using SDK bill.print function`);
                 await window.sdk.bill.print(orderId);
                 showToast("Bill printed successfully");
+            } else if (window.BluetoothPrinting && window.PrintTemplate) {
+                // Use our own implementation with PrintTemplate and BluetoothPrinting
+                console.log(`[Dashboard] Using BluetoothPrinting with PrintTemplate`);
+
+                try {
+                    // Fetch the order data
+                    const orderDoc = await window.sdk.db.collection("Orders").doc(orderId).get();
+                    const orderData = orderDoc.data();
+
+                    if (!orderData) {
+                        throw new Error("Order not found");
+                    }
+
+                    // Print the bill using BluetoothPrinting
+                    const success = await window.BluetoothPrinting.printBill(orderId);
+
+                    if (success) {
+                        showToast("Bill printed successfully");
+                    } else {
+                        throw new Error("Printing failed");
+                    }
+                } catch (printError) {
+                    console.error('Error in BluetoothPrinting:', printError);
+                    throw printError;
+                }
             } else if (window.sdk.kot && typeof window.sdk.kot.print === 'function') {
                 // Fallback to KOT printing if bill printing is not available
                 console.log(`[Dashboard] Bill print not available, falling back to KOT print`);
@@ -1396,6 +1421,27 @@ function Dashboard() {
             return;
         }
 
+        // Ensure PrintTemplate is available
+        if (!window.PrintTemplate) {
+            console.error("PrintTemplate class is not available. Loading from PrintTemplate.js");
+            showToast("Loading print template system...");
+
+            // Try to load PrintTemplate.js dynamically if not already loaded
+            const scriptElement = document.createElement('script');
+            scriptElement.src = 'js/utils/PrintTemplate.js';
+            scriptElement.onload = () => {
+                console.log("PrintTemplate.js loaded successfully");
+                // Retry after loading
+                setTimeout(() => handlePrintTemplateManagement(), 500);
+            };
+            scriptElement.onerror = () => {
+                console.error("Failed to load PrintTemplate.js");
+                showToast("Failed to load print template system", "error");
+            };
+            document.head.appendChild(scriptElement);
+            return;
+        }
+
         // Create modal
         const modal = window.ModalManager.createCenterModal({
             id: 'print-template-modal',
@@ -1471,145 +1517,71 @@ function Dashboard() {
                 const previewFullscreenBtn = document.getElementById('preview-fullscreen-btn');
 
                 let currentTemplateType = 'bill';
-                let templates = seller?.printTemplate || {
-                    'bill': getDefaultBillTemplate(),
-                    'kot': getDefaultKOTTemplate()
-                };
+                let templates = {};
 
-                // Bill variable definitions (matches the Flutter implementation)
-                const billVariables = [
-                    { name: 'logo', label: 'Business Logo' },
-                    { name: 'businessName', label: 'Business Name' },
-                    { name: 'phone', label: 'Phone' },
-                    { name: 'address', label: 'Address' },
-                    { name: 'storeLink', label: 'Website' },
-                    { name: 'gstIN', label: 'GST Number' },
-                    { name: 'billNo', label: 'Bill Number' },
-                    { name: 'orderSource', label: 'Order Source' },
-                    { name: 'itemsList', label: 'Items List' },
-                    { name: 'subtotal', label: 'Subtotal' },
-                    { name: 'discount', label: 'Discount' },
-                    { name: 'charges', label: 'Charges' },
-                    { name: 'total', label: 'Total' },
-                    { name: 'payMode', label: 'Payment Mode' },
-                    { name: 'upiQR', label: 'UPI QR Code' },
-                    { name: 'timestamp', label: 'Timestamp' },
-                    { name: 'cut', label: 'Cut Paper' }
-                ];
+                // Check if seller has saved templates
+                if (seller && seller.printTemplate) {
+                    console.log("Loading saved print templates from seller profile:", seller.printTemplate);
+                    templates = seller.printTemplate;
+                } else {
+                    console.log("No saved templates found, using defaults from PrintTemplate.js");
+                    // Use PrintTemplate.js to create default templates
+                    if (window.PrintTemplate) {
+                        try {
+                            // Ensure seller data has necessary fields
+                            const sellerData = {
+                                businessName: seller?.businessName || 'Your Business',
+                                logo: seller?.logo || '',
+                                phone: seller?.phone || '',
+                                address: seller?.address || '',
+                                website: seller?.storeLink || seller?.website || '',
+                                gstIN: seller?.gstIN || seller?.gstNo || ''
+                            };
 
-                // Get default templates
-                function getDefaultBillTemplate() {
-                    return {
-                        type: 'bill',
-                        sections: [
-                            {
-                                template: '#logo\n#businessName',
-                                fontSize: 24,
-                                alignment: 'TextAlign.center',
-                                isBold: true,
-                                isUnderlined: false
-                            },
-                            {
-                                template: 'Phone: #phone\nAddress: #address\nWeb: #storeLink\nGST: #gstIN',
-                                fontSize: 24,
-                                alignment: 'TextAlign.center',
-                                isBold: false,
-                                isUnderlined: false
-                            },
-                            {
-                                template: 'Bill No: ##billNo\nOrder from: #orderSource \n',
-                                fontSize: 24,
-                                alignment: 'TextAlign.left',
-                                isBold: false,
-                                isUnderlined: false
-                            },
-                            {
-                                template: '#itemsList \n',
-                                fontSize: 24,
-                                alignment: 'TextAlign.left',
-                                isBold: false,
-                                isUnderlined: false
-                            },
-                            {
-                                template: 'Sub Total: #subtotal\nDiscount: #discount\n#charges',
-                                fontSize: 24,
-                                alignment: 'TextAlign.right',
-                                isBold: false,
-                                isUnderlined: false
-                            },
-                            {
-                                template: 'TOTAL: #total\n',
-                                fontSize: 24,
-                                alignment: 'TextAlign.right',
-                                isBold: true,
-                                isUnderlined: false
-                            },
-                            {
-                                template: 'Payment mode: #payMode\n',
-                                fontSize: 24,
-                                alignment: 'TextAlign.right',
-                                isBold: false,
-                                isUnderlined: false
-                            },
-                            {
-                                template: '#upiQR \n',
-                                fontSize: 24,
-                                alignment: 'TextAlign.center',
-                                isBold: false,
-                                isUnderlined: false
-                            },
-                            {
-                                template: 'Thank you!\n#timestamp',
-                                fontSize: 24,
-                                alignment: 'TextAlign.center',
-                                isBold: false,
-                                isUnderlined: false
-                            }
-                        ]
-                    };
+                            // Create default bill template
+                            const defaultBill = window.PrintTemplate.create({
+                                type: 'bill',
+                                orderData: {}, // Empty order for default template
+                                seller: sellerData
+                            });
+
+                            // Create default KOT template
+                            const defaultKOT = window.PrintTemplate.create({
+                                type: 'kot',
+                                orderData: {}, // Empty order for default template
+                                seller: sellerData
+                            });
+
+                            templates = {
+                                'bill': defaultBill.templateData || getDefaultBillTemplate(),
+                                'kot': defaultKOT.templateData || getDefaultKOTTemplate()
+                            };
+                        } catch (error) {
+                            console.error("Error creating default templates from PrintTemplate.js:", error);
+                            console.log("Falling back to built-in default templates");
+                            templates = {
+                                'bill': getDefaultBillTemplate(),
+                                'kot': getDefaultKOTTemplate()
+                            };
+                        }
+                    } else {
+                        console.warn("PrintTemplate.js not available, using built-in default templates");
+                        templates = {
+                            'bill': getDefaultBillTemplate(),
+                            'kot': getDefaultKOTTemplate()
+                        };
+                    }
                 }
 
-                function getDefaultKOTTemplate() {
-                    return {
-                        type: 'kot',
-                        sections: [
-                            {
-                                template: '#logo\n#businessName',
-                                fontSize: 24,
-                                alignment: 'TextAlign.center',
-                                isBold: true,
-                                isUnderlined: false
-                            },
-                            {
-                                template: 'Bill No: ##billNo\nOrder from: #orderSource\n',
-                                fontSize: 24,
-                                alignment: 'TextAlign.center',
-                                isBold: false,
-                                isUnderlined: false
-                            },
-                            {
-                                template: 'KITCHEN ORDER TICKET',
-                                fontSize: 24,
-                                alignment: 'TextAlign.center',
-                                isBold: false,
-                                isUnderlined: false
-                            },
-                            {
-                                template: '#itemsList',
-                                fontSize: 24,
-                                alignment: 'TextAlign.left',
-                                isBold: false,
-                                isUnderlined: false
-                            },
-                            {
-                                template: '#timestamp',
-                                fontSize: 24,
-                                alignment: 'TextAlign.center',
-                                isBold: false,
-                                isUnderlined: false
-                            }
-                        ]
-                    };
+                // Ensure both bill and kot templates exist and have valid sections
+                if (!templates.bill || !templates.bill.sections || templates.bill.sections.length === 0) {
+                    console.log("Bill template missing or invalid, using default");
+                    templates.bill = getDefaultBillTemplate();
+                }
+
+                if (!templates.kot || !templates.kot.sections || templates.kot.sections.length === 0) {
+                    console.log("KOT template missing or invalid, using default");
+                    templates.kot = getDefaultKOTTemplate();
                 }
 
                 // Generate live preview content based on the current template
@@ -1622,6 +1594,7 @@ function Dashboard() {
                 // Generate HTML for the preview
                 function generatePreviewHTML(templateType) {
                     console.log("generatePreviewHTML called with templateType:", templateType);
+
                     // Create a mock test order for the preview
                     const testOrder = {
                         id: 'PREVIEW-123',
@@ -1646,30 +1619,50 @@ function Dashboard() {
                     console.log("Current template:", currentTemplate);
 
                     if (currentTemplate && currentTemplate.sections && currentTemplate.sections.length > 0) {
-                        // Use the BluetoothPrinting utility to generate HTML based on the current template
-                        if (window.BluetoothPrinting) {
+                        // Use the PrintTemplate class directly to generate HTML based on the current template
+                        if (window.PrintTemplate) {
                             try {
-                                console.log("Using BluetoothPrinting.generateTemplateBasedReceiptHTML");
-                                // Use the template-based generation with the current template
-                                return window.BluetoothPrinting.generateTemplateBasedReceiptHTML(
-                                    testOrder,
-                                    templateType,
-                                    'CASH',
-                                    currentTemplate
-                                );
+                                console.log("Using PrintTemplate for preview with seller data:", seller);
+
+                                // Ensure seller data has necessary fields
+                                const sellerData = {
+                                    businessName: seller?.businessName || 'Your Business',
+                                    logo: seller?.logo || '',
+                                    phone: seller?.phone || '',
+                                    address: seller?.address || '',
+                                    website: seller?.storeLink || seller?.website || '',
+                                    gstIN: seller?.gstIN || seller?.gstNo || ''
+                                };
+
+                                // Create a PrintTemplate instance and generate HTML
+                                const template = window.PrintTemplate.create({
+                                    orderData: testOrder,
+                                    seller: sellerData,
+                                    type: templateType,
+                                    templateData: currentTemplate
+                                });
+
+                                const html = template.toHTML();
+                                console.log("Generated HTML preview successfully");
+                                return html;
                             } catch (error) {
                                 console.error('Error generating template preview:', error);
                                 return `<div class="text-center text-red-500 p-4">
                                     <i class="ph ph-warning-circle text-3xl mb-2"></i>
                                     <p>Error generating preview: ${error.message}</p>
+                                    <pre class="mt-2 text-xs text-left bg-gray-100 p-2 rounded overflow-auto">${error.stack}</pre>
                                 </div>`;
                             }
                         } else {
-                            console.warn("window.BluetoothPrinting is not available");
+                            console.warn("window.PrintTemplate is not available");
+                            return `<div class="text-center text-amber-500 p-4">
+                                <i class="ph ph-warning-circle text-3xl mb-2"></i>
+                                <p>PrintTemplate class is not available. Please refresh the page and try again.</p>
+                            </div>`;
                         }
                     }
 
-                    // Fallback to default preview if no template or BluetoothPrinting not available
+                    // Fallback to default preview if no template or PrintTemplate not available
                     return `
                         <div class="text-center">
                             <div class="w-20 h-20 mx-auto bg-red-100 rounded-full flex items-center justify-center mb-2">
@@ -1735,31 +1728,34 @@ function Dashboard() {
 
                 // Render template sections
                 function renderTemplateSections() {
+                    console.log("Starting renderTemplateSections for type:", currentTemplateType);
                     templateSections.innerHTML = '';
 
                     const currentTemplate = templates[currentTemplateType];
-                    if (!currentTemplate || !currentTemplate.sections) return;
+                    if (!currentTemplate || !currentTemplate.sections) {
+                        console.error("No template or sections found for type:", currentTemplateType);
+                        return;
+                    }
+
+                    console.log("Rendering sections:", currentTemplate.sections);
 
                     currentTemplate.sections.forEach((section, index) => {
-                        const sectionCard = document.createElement('div');
-                        sectionCard.className = 'border rounded-lg p-4 bg-white shadow-sm';
-                        sectionCard.dataset.index = index;
+                        console.log("Rendering section", index, ":", section);
 
-                        // Get text alignment class
-                        let alignmentClass = 'text-left';
-                        if (section.alignment === 'TextAlign.center') alignmentClass = 'text-center';
-                        if (section.alignment === 'TextAlign.right') alignmentClass = 'text-right';
+                        const sectionCard = document.createElement('div');
+                        sectionCard.className = 'border rounded-lg p-4 bg-white shadow-sm mb-4';
+                        sectionCard.dataset.index = index;
 
                         // Format toolbar
                         const toolbar = document.createElement('div');
                         toolbar.className = 'flex justify-between items-center mb-3';
 
                         const formatControls = document.createElement('div');
-                        formatControls.className = 'flex space-x-2';
+                        formatControls.className = 'flex items-center space-x-2';
 
                         // Font size selector
                         const fontSizeSelect = document.createElement('select');
-                        fontSizeSelect.className = 'px-2 py-1 border rounded text-sm';
+                        fontSizeSelect.className = 'px-2 py-1 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-red-500';
                         fontSizeSelect.innerHTML = `
                             <option value="20" ${section.fontSize === 20 ? 'selected' : ''}>Size 20</option>
                             <option value="22" ${section.fontSize === 22 ? 'selected' : ''}>Size 22</option>
@@ -1769,24 +1765,45 @@ function Dashboard() {
                             <option value="30" ${section.fontSize === 30 ? 'selected' : ''}>Size 30</option>
                         `;
 
-                        fontSizeSelect.addEventListener('change', () => {
-                            templates[currentTemplateType].sections[index].fontSize = parseInt(fontSizeSelect.value);
-                            updateLivePreview();
-                        });
-
                         // Alignment selector
                         const alignmentSelect = document.createElement('select');
-                        alignmentSelect.className = 'px-2 py-1 border rounded text-sm';
+                        alignmentSelect.className = 'px-2 py-1 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-red-500';
                         alignmentSelect.innerHTML = `
                             <option value="TextAlign.left" ${section.alignment === 'TextAlign.left' ? 'selected' : ''}>Left</option>
                             <option value="TextAlign.center" ${section.alignment === 'TextAlign.center' ? 'selected' : ''}>Center</option>
                             <option value="TextAlign.right" ${section.alignment === 'TextAlign.right' ? 'selected' : ''}>Right</option>
                         `;
 
+                        // Style buttons container
+                        const styleBtns = document.createElement('div');
+                        styleBtns.className = 'flex items-center space-x-1';
+
+                        // Bold button
+                        const boldBtn = document.createElement('button');
+                        boldBtn.className = `p-1.5 rounded ${section.isBold ? 'bg-red-100 text-red-500' : 'text-gray-500 hover:bg-gray-100'}`;
+                        boldBtn.innerHTML = '<i class="ph ph-text-b"></i>';
+                        boldBtn.title = 'Bold';
+
+                        // Underline button
+                        const underlineBtn = document.createElement('button');
+                        underlineBtn.className = `p-1.5 rounded ${section.isUnderlined ? 'bg-red-100 text-red-500' : 'text-gray-500 hover:bg-gray-100'}`;
+                        underlineBtn.innerHTML = '<i class="ph ph-text-underline"></i>';
+                        underlineBtn.title = 'Underline';
+
+                        // Delete button
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.className = 'p-1.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50';
+                        deleteBtn.innerHTML = '<i class="ph ph-trash"></i>';
+                        deleteBtn.title = 'Delete Section';
+
+                        // Add event listeners
+                        fontSizeSelect.addEventListener('change', () => {
+                            templates[currentTemplateType].sections[index].fontSize = parseInt(fontSizeSelect.value);
+                            updateLivePreview();
+                        });
+
                         alignmentSelect.addEventListener('change', () => {
                             templates[currentTemplateType].sections[index].alignment = alignmentSelect.value;
-
-                            // Update the text area alignment
                             const textArea = sectionCard.querySelector('textarea');
                             if (textArea) {
                                 textArea.className = textArea.className.replace(/text-(left|center|right)/,
@@ -1798,16 +1815,6 @@ function Dashboard() {
                             updateLivePreview();
                         });
 
-                        formatControls.appendChild(fontSizeSelect);
-                        formatControls.appendChild(alignmentSelect);
-
-                        // Bold and underline buttons
-                        const styleBtns = document.createElement('div');
-                        styleBtns.className = 'flex';
-
-                        const boldBtn = document.createElement('button');
-                        boldBtn.className = `p-1 rounded ${section.isBold ? 'bg-red-100 text-red-500' : 'text-gray-500'}`;
-                        boldBtn.innerHTML = '<i class="ph ph-text-b"></i>';
                         boldBtn.addEventListener('click', () => {
                             templates[currentTemplateType].sections[index].isBold = !templates[currentTemplateType].sections[index].isBold;
                             boldBtn.classList.toggle('bg-red-100');
@@ -1819,9 +1826,6 @@ function Dashboard() {
                             updateLivePreview();
                         });
 
-                        const underlineBtn = document.createElement('button');
-                        underlineBtn.className = `p-1 rounded ml-1 ${section.isUnderlined ? 'bg-red-100 text-red-500' : 'text-gray-500'}`;
-                        underlineBtn.innerHTML = '<i class="ph ph-text-underline"></i>';
                         underlineBtn.addEventListener('click', () => {
                             templates[currentTemplateType].sections[index].isUnderlined = !templates[currentTemplateType].sections[index].isUnderlined;
                             underlineBtn.classList.toggle('bg-red-100');
@@ -1833,16 +1837,6 @@ function Dashboard() {
                             updateLivePreview();
                         });
 
-                        styleBtns.appendChild(boldBtn);
-                        styleBtns.appendChild(underlineBtn);
-
-                        formatControls.appendChild(styleBtns);
-                        toolbar.appendChild(formatControls);
-
-                        // Delete button
-                        const deleteBtn = document.createElement('button');
-                        deleteBtn.className = 'text-gray-400 hover:text-red-500';
-                        deleteBtn.innerHTML = '<i class="ph ph-trash"></i>';
                         deleteBtn.addEventListener('click', () => {
                             if (templates[currentTemplateType].sections.length <= 1) {
                                 errorContainer.textContent = 'Cannot delete the last section. You need at least one section.';
@@ -1857,40 +1851,57 @@ function Dashboard() {
                             }
                         });
 
+                        // Assemble toolbar
+                        formatControls.appendChild(fontSizeSelect);
+                        formatControls.appendChild(alignmentSelect);
+                        styleBtns.appendChild(boldBtn);
+                        styleBtns.appendChild(underlineBtn);
+                        formatControls.appendChild(styleBtns);
+                        toolbar.appendChild(formatControls);
                         toolbar.appendChild(deleteBtn);
                         sectionCard.appendChild(toolbar);
 
-                        // Template content
+                        // Create textarea container
                         const textAreaContainer = document.createElement('div');
                         textAreaContainer.className = 'relative';
 
-                        const textArea = document.createElement('textarea');
-                        textArea.className = `w-full min-h-24 p-3 border rounded-lg transition-all ${alignmentClass} ${section.isBold ? 'font-bold' : ''} ${section.isUnderlined ? 'underline' : ''}`;
-                        textArea.value = section.template || '';
+                        // Get text alignment class
+                        let alignmentClass = 'text-left';
+                        if (section.alignment === 'TextAlign.center') alignmentClass = 'text-center';
+                        if (section.alignment === 'TextAlign.right') alignmentClass = 'text-right';
 
-                        // Add input event listener to update preview when text changes
+                        // Create textarea
+                        const textArea = document.createElement('textarea');
+                        textArea.className = `w-full min-h-24 p-3 border rounded-lg transition-all ${alignmentClass} ${section.isBold ? 'font-bold' : ''} ${section.isUnderlined ? 'underline' : ''} focus:outline-none focus:ring-2 focus:ring-red-500`;
+                        textArea.value = section.template || '';
+                        textArea.placeholder = 'Enter template content here... Use # to insert variables';
+
+                        // Add input event listener
                         textArea.addEventListener('input', () => {
                             const sectionIndex = parseInt(textArea.closest('[data-index]').dataset.index);
                             templates[currentTemplateType].sections[sectionIndex].template = textArea.value;
                             updateLivePreview();
                         });
 
+                        // Create insert variable button
                         const insertVariableBtn = document.createElement('button');
-                        insertVariableBtn.className = 'absolute right-2 top-2 text-gray-500 hover:text-red-500';
+                        insertVariableBtn.className = 'absolute right-2 top-2 p-1.5 rounded text-gray-500 hover:text-red-500 hover:bg-red-50';
                         insertVariableBtn.innerHTML = '<i class="ph ph-brackets-curly"></i>';
+                        insertVariableBtn.title = 'Insert Variable';
                         insertVariableBtn.addEventListener('click', () => {
                             showVariablesList(textArea);
                         });
 
+                        // Assemble textarea container
                         textAreaContainer.appendChild(textArea);
                         textAreaContainer.appendChild(insertVariableBtn);
                         sectionCard.appendChild(textAreaContainer);
 
+                        // Add section to template
                         templateSections.appendChild(sectionCard);
                     });
 
-                    // Update the live preview after rendering sections
-                    updateLivePreview();
+                    console.log("Finished rendering sections");
                 }
 
                 // Show variables list for insertion
@@ -1934,30 +1945,36 @@ function Dashboard() {
                             const newText = text.substring(0, currentPos) + `#${variable}` + text.substring(currentPos);
                             textArea.value = newText;
 
-                            // Update the section template
+                            // Update the section content
                             const sectionIndex = parseInt(textArea.closest('[data-index]').dataset.index);
                             templates[currentTemplateType].sections[sectionIndex].template = newText;
 
                             // Update the live preview
                             updateLivePreview();
 
-                            // Hide dropdown
+                            // Close the dropdown
                             variablesDropdown.style.display = 'none';
                         });
                     });
 
-                    // Hide dropdown when clicking elsewhere
-                    document.addEventListener('click', (e) => {
+                    // Close dropdown when clicking elsewhere
+                    const handleClickOutside = (e) => {
                         if (!variablesDropdown.contains(e.target) && e.target !== textArea) {
                             variablesDropdown.style.display = 'none';
+                            document.removeEventListener('click', handleClickOutside);
                         }
-                    });
+                    };
+
+                    // Delay adding the event listener to prevent immediate closure
+                    setTimeout(() => {
+                        document.addEventListener('click', handleClickOutside);
+                    }, 10);
                 }
 
                 // Add new section
                 function addNewSection() {
                     templates[currentTemplateType].sections.push({
-                        template: '',
+                        content: '',
                         fontSize: 24,
                         alignment: 'TextAlign.left',
                         isBold: false,
@@ -2005,7 +2022,8 @@ function Dashboard() {
                 // Save template
                 async function saveTemplate() {
                     try {
-                        await sdk.profile.update({
+                        console.log("Saving templates to profile:", templates);
+                        await window.sdk.profile.update({
                             printTemplate: templates
                         });
                         window.ModalManager.showToast('Print template saved successfully');
@@ -2111,9 +2129,9 @@ function Dashboard() {
                             if (printTestBtn) {
                                 printTestBtn.addEventListener('click', async () => {
                                     try {
-                                        // Check if BluetoothPrinting is available
-                                        if (!window.BluetoothPrinting) {
-                                            window.ModalManager.showToast('Bluetooth printing service not available', 'error');
+                                        // Check if BluetoothPrinting is available for browser printing
+                                        if (!window.BluetoothPrinting || !window.PrintTemplate) {
+                                            window.ModalManager.showToast('Printing service not available', 'error');
                                             return;
                                         }
 
@@ -2136,15 +2154,16 @@ function Dashboard() {
                                             payMode: 'CASH'
                                         };
 
-                                        // Generate HTML using the current template
-                                        let receiptHtml;
-                                        if (currentTemplateType === 'bill') {
-                                            receiptHtml = window.BluetoothPrinting.generateReceiptHTML(testOrder, 'bill', 'CASH');
-                                        } else {
-                                            receiptHtml = window.BluetoothPrinting.generateReceiptHTML(testOrder, 'kot');
-                                        }
+                                        // Generate HTML using PrintTemplate directly
+                                        const currentTemplate = templates[currentTemplateType];
+                                        const template = window.PrintTemplate.create({
+                                            orderData: testOrder,
+                                            type: currentTemplateType,
+                                            templateData: currentTemplate
+                                        });
+                                        const receiptHtml = template.toHTML();
 
-                                        // Show browser preview instead of actual printing
+                                        // Use BluetoothPrinting for browser printing
                                         await window.BluetoothPrinting.browserPrint(receiptHtml, false);
 
                                     } catch (error) {
@@ -2157,7 +2176,25 @@ function Dashboard() {
                     });
                 }
 
-                // Initial render and preview
+                // Add this right after templates initialization in onShown
+                // Debug logging for template initialization
+                console.log('Template initialization:', {
+                    seller,
+                    hasTemplates: !!seller?.printTemplate,
+                    loadedTemplates: templates,
+                    currentType: currentTemplateType,
+                    currentTemplate: templates[currentTemplateType],
+                    hasSections: templates[currentTemplateType]?.sections?.length > 0
+                });
+
+                // Ensure we have valid templates
+                if (!templates[currentTemplateType]?.sections?.length) {
+                    console.log('No valid template found, creating default');
+                    templates[currentTemplateType] = currentTemplateType === 'bill' ? getDefaultBillTemplate() : getDefaultKOTTemplate();
+                }
+
+                // Initial render
+                console.log('Starting initial render with template:', templates[currentTemplateType]);
                 renderTemplateSections();
                 updateLivePreview();
             }
