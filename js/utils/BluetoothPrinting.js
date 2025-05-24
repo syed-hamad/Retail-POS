@@ -176,7 +176,7 @@ class BluetoothPrinting {
                 const templateData = hasCustomTemplate ? seller.printTemplate[type.toLowerCase()] : null;
 
                 // Create print template directly
-                const template = this.PrintTemplate.create({
+                const template = new this.PrintTemplate({
                     type: type,
                     orderData: orderData,
                     seller: seller,
@@ -186,8 +186,8 @@ class BluetoothPrinting {
                 // We're connected now, show a single printing message
                 this._showToast(`Printing ${receiptName}...`, "info");
 
-                // Generate printer commands directly from the template
-                const data = template.toPrinterCommands();
+                // Generate printer commands directly from the template - AWAIT HERE
+                const data = await template.toPrinterCommands();
 
                 // Send to printer
                 await this.sendData(data);
@@ -241,7 +241,7 @@ class BluetoothPrinting {
             const templateData = hasCustomTemplate ? seller.printTemplate[type.toLowerCase()] : null;
 
             // Generate HTML using PrintTemplate directly
-            const template = this.PrintTemplate.create({
+            const template = new this.PrintTemplate({
                 type: type,
                 orderData: orderData,
                 seller: seller,

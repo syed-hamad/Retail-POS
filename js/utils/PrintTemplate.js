@@ -71,67 +71,6 @@ class PrintSection {
 
         return html;
     }
-
-    /**
-     * Generate ESC/POS commands for this section
-     * @param {TextEncoder} encoder - TextEncoder instance for converting text to bytes
-     * @returns {Array} Array of command bytes
-     */
-    toPrinterCommands(encoder) {
-        const commands = [];
-        const content = this.resolveVariables();
-
-        if (!content.trim()) return commands;
-
-        // Initialize formatting
-        commands.push(0x1B, 0x40); // ESC @ - Initialize printer
-
-        // Set alignment
-        switch (this.alignment) {
-            case 'TextAlign.center':
-                commands.push(0x1B, 0x61, 0x01); // Center align
-                break;
-            case 'TextAlign.right':
-                commands.push(0x1B, 0x61, 0x02); // Right align
-                break;
-            default:
-                commands.push(0x1B, 0x61, 0x00); // Left align
-                break;
-        }
-
-        // Set bold if needed
-        if (this.isBold) {
-            commands.push(0x1B, 0x45, 0x01); // Bold ON
-        }
-
-        // Set font size if needed
-        if (this.fontSize > 24) {
-            commands.push(0x1D, 0x21, 0x11); // Double height and width
-        }
-
-        // Process and send each line
-        const lines = content.split('\n');
-        lines.forEach(line => {
-            const trimmedLine = line.trim();
-            if (trimmedLine) {
-                commands.push(...encoder.encode(trimmedLine + '\n'));
-            }
-        });
-
-        // Reset formatting after this section
-        if (this.fontSize > 24) {
-            commands.push(0x1D, 0x21, 0x00); // Normal size
-        }
-
-        if (this.isBold) {
-            commands.push(0x1B, 0x45, 0x00); // Bold OFF
-        }
-
-        // Return to default alignment
-        commands.push(0x1B, 0x61, 0x00);
-
-        return commands;
-    }
 }
 
 /**
@@ -139,12 +78,48 @@ class PrintSection {
  * for generating complete print output
  */
 class PrintTemplate {
+    /**
+     * Create a new PrintTemplate
+     * @param {Object} options - Options for template creation
+     * @param {string} options.type - 'bill' or 'kot'
+     * @param {number} options.printerWidth - The printer width in characters
+     * @param {Array} options.sections - Array of section configurations
+     * @param {Object} options.orderData - Order data for context-specific templates
+     * @param {Object} options.seller - Seller data with business information
+     * @param {Object} options.templateData - Custom template data (optional)
+     */
     constructor(options = {}) {
-        this.type = options.type || 'bill'; // 'bill' or 'kot'
-        this.printerWidth = options.printerWidth || 48; // Default to 3-inch width
+        const {
+            type = 'bill',
+            printerWidth = 48,
+            sections = [],
+            orderData = {},
+            seller = {},
+            templateData = null
+        } = options;
+
+        this.type = type;
+        this.printerWidth = printerWidth;
         this.encoder = new TextEncoder();
         this.variables = {};
-        this.sections = (options.sections || []).map(section => new PrintSection(section));
+
+        // Initialize sections based on provided template data, sections, or defaults
+        if (templateData) {
+            this.type = templateData.type || type;
+            this.sections = (templateData.sections || []).map(section => new PrintSection(section));
+        } else if (sections && sections.length > 0) {
+            this.sections = sections.map(section => new PrintSection(section));
+        } else {
+            // Create default template based on type
+            this.sections = this.type.toLowerCase() === 'kot'
+                ? this._createDefaultKOTSections(orderData)
+                : this._createDefaultBillSections(orderData);
+        }
+
+        // Process order data if provided
+        if (orderData && Object.keys(orderData).length > 0) {
+            this.processOrderData(orderData, { seller });
+        }
     }
 
     /**
@@ -215,31 +190,125 @@ class PrintTemplate {
 
     /**
      * Generate complete ESC/POS commands for all sections
-     * @returns {Uint8Array} Complete command bytes
+     * @returns {Promise<Uint8Array>} Complete command bytes
      */
-    toPrinterCommands() {
+    async toPrinterCommands() {
+        // Get HTML content from toHTML method
+        const htmlContent = this.toHTML();
+
+        // Create an iframe to render the HTML
+        const iframe = document.createElement('iframe');
+        iframe.style.visibility = 'hidden';
+        iframe.style.position = 'absolute';
+        iframe.style.width = '58mm'; // The HTML content is designed for 58mm
+        iframe.style.height = 'auto'; // Let height adjust to content
+        document.body.appendChild(iframe);
+
+        // Write HTML content to iframe
+        iframe.contentDocument.open();
+        iframe.contentDocument.write(htmlContent);
+        iframe.contentDocument.close();
+
+        // Wait for iframe content to load
+        await new Promise(resolve => {
+            iframe.onload = resolve;
+            setTimeout(resolve, 1000); // Fallback timeout
+        });
+
+        // Create canvas and get context
+        const canvas = document.createElement('canvas');
+        const receiptContent = iframe.contentDocument.body;
+
+        // Increase the width to match standard 58mm thermal printer (384 dots)
+        // Most 58mm thermal printers have a print width of 48mm (384 dots at 8 dots/mm)
+        const width = 384;
+
+        // Calculate height based on content and apply a scaling factor to make text larger
+        const scaleFactor = 1.5; // Increase this for larger print
+        const height = Math.ceil(receiptContent.scrollHeight * (width / receiptContent.offsetWidth) * scaleFactor);
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, width, height);
+
+        // Scale up the content before rendering
+        ctx.scale(scaleFactor, scaleFactor);
+
+        // Use html2canvas to render the content to canvas
+        // Check if html2canvas is available
+        if (typeof html2canvas === 'undefined') {
+            console.error('html2canvas library is required but not loaded');
+            throw new Error('html2canvas library is required');
+        }
+
+        const canvasResult = await html2canvas(receiptContent, {
+            canvas: canvas,
+            width: width / scaleFactor, // Adjust for scaling
+            height: height / scaleFactor, // Adjust for scaling
+            scale: scaleFactor, // Apply scaling factor
+            useCORS: true,
+            backgroundColor: 'white'
+        });
+
+        // Get image data
+        const imageDataUrl = canvasResult.toDataURL('image/png');
+
+        // Preview image in new tab
+        const previewWindow = window.open();
+        previewWindow.document.write(`<img src="${imageDataUrl}" alt="Receipt Preview">`);
+
+        // Clean up
+        document.body.removeChild(iframe);
+
+        // Generate ESC/POS commands for printing the image
         const commands = [];
 
         // Initialize printer
         commands.push(0x1B, 0x40); // ESC @ - Initialize printer
 
-        // Process each section
-        this.sections.forEach(section => {
-            const sectionCommands = section.toPrinterCommands(this.encoder);
-            commands.push(...sectionCommands);
+        // Convert the canvas to 1-bit monochrome bitmap data
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const pixels = imageData.data;
+        const widthBytes = Math.ceil(width / 8);
+        const monochromeData = new Uint8Array(widthBytes * height);
 
-            // Add separator between sections (if not empty)
-            if (sectionCommands.length > 0) {
-                commands.push(0x1B, 0x64, 1); // Feed 1 line
-                commands.push(0x1D, 0x2A, 1, Math.min(255, this.printerWidth), 0); // Set horizontal line
-                commands.push(0x1D, 0x2F, 0); // Print horizontal line
-                commands.push(0x1B, 0x64, 1); // Feed 1 line
+        // Convert RGBA to 1-bit monochrome with improved contrast
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const pixelIndex = (y * width + x) * 4;
+                // Calculate grayscale value with better weighting for human perception
+                const grayscale =
+                    0.299 * pixels[pixelIndex] +
+                    0.587 * pixels[pixelIndex + 1] +
+                    0.114 * pixels[pixelIndex + 2];
+
+                // Use a lower threshold to make more pixels print (darker output)
+                if (grayscale < 180) { // Higher threshold = more black pixels
+                    const byteIndex = y * widthBytes + Math.floor(x / 8);
+                    const bitIndex = 7 - (x % 8); // MSB first
+                    monochromeData[byteIndex] |= (1 << bitIndex);
+                }
             }
-        });
+        }
+
+        // GS v 0 - Print raster bit image
+        commands.push(0x1D, 0x76, 0x30, 0);
+
+        // Set image dimensions
+        commands.push(widthBytes & 0xFF, (widthBytes >> 8) & 0xFF); // xL, xH - width bytes
+        commands.push(height & 0xFF, (height >> 8) & 0xFF); // yL, yH - height pixels
+
+        // Add the monochrome image data
+        for (let i = 0; i < monochromeData.length; i++) {
+            commands.push(monochromeData[i]);
+        }
 
         // Add feed and cut at the end
         commands.push(0x1B, 0x64, 4); // Feed 4 lines
-        commands.push(0x1D, 0x56, 0x41); // Partial cut
+        commands.push(0x1D, 0x56, 0x41, 0); // Partial cut
 
         return new Uint8Array(commands);
     }
@@ -393,58 +462,16 @@ class PrintTemplate {
     }
 
     /**
-     * Create a default template for bills or KOT
-     * @param {Object} options - Options for template creation
-     * @param {string} options.type - 'bill' or 'kot'
-     * @param {Object} options.orderData - Order data for context-specific templates
-     * @param {Object} options.seller - Seller data with business information
-     * @param {number} options.printerWidth - The printer width in characters (optional)
-     * @param {Object} options.templateData - Custom template data (optional)
-     * @returns {PrintTemplate} A new PrintTemplate instance
-     */
-    static create(options = {}) {
-        const {
-            type = 'bill',
-            orderData = {},
-            seller = {},
-            printerWidth = 48,
-            templateData = null
-        } = options;
-
-        // Create template based on provided template data or default templates
-        const template = templateData
-            ? new PrintTemplate({
-                type: templateData.type || type,
-                printerWidth,
-                sections: templateData.sections || []
-            })
-            : type.toLowerCase() === 'kot'
-                ? this._createDefaultKOT(orderData, printerWidth)
-                : this._createDefaultBill(orderData, printerWidth);
-
-        // Process order data if provided
-        if (orderData && Object.keys(orderData).length > 0) {
-            template.processOrderData(orderData, { seller });
-        }
-
-        return template;
-    }
-
-    /**
-     * Create a default template for bills (private method)
+     * Create default sections for bills
      * @param {Object} orderData - Order data for context-specific templates 
-     * @param {number} printerWidth - The printer width in characters
-     * @returns {PrintTemplate} A new PrintTemplate instance
+     * @returns {Array} Array of PrintSection instances
      * @private
      */
-    static _createDefaultBill(orderData = {}, printerWidth = 48) {
-        const template = new PrintTemplate({
-            type: 'bill',
-            printerWidth: printerWidth
-        });
+    _createDefaultBillSections(orderData = {}) {
+        const sections = [];
 
         // Header section
-        template.sections.push(new PrintSection({
+        sections.push(new PrintSection({
             template: `${orderData.gstEnabled ? 'TAX INVOICE' : 'BILL/RECEIPT'}\n#businessName\n#address\nPhone: #phone\nWeb: #storeLink\nGST: #gstIN`,
             alignment: 'TextAlign.center',
             fontSize: 24,
@@ -452,7 +479,7 @@ class PrintTemplate {
         }));
 
         // Order details section
-        template.sections.push(new PrintSection({
+        sections.push(new PrintSection({
             template: `Bill #: #billNo\nDate: #timestamp\n${orderData.custName || orderData.customer?.name ? `Customer: ${orderData.custName || orderData.customer?.name}` : ''}\n${orderData.tableId ? `Table: ${orderData.tableId}` : ''}\nOrder from: #orderSource`,
             alignment: 'TextAlign.left',
             fontSize: 20,
@@ -460,7 +487,7 @@ class PrintTemplate {
         }));
 
         // Items section - use itemsListText for printer commands
-        template.sections.push(new PrintSection({
+        sections.push(new PrintSection({
             template: '#itemsList',
             alignment: 'TextAlign.left',
             fontSize: 20,
@@ -468,7 +495,7 @@ class PrintTemplate {
         }));
 
         // Totals section
-        template.sections.push(new PrintSection({
+        sections.push(new PrintSection({
             template: `Sub Total: #subtotal\n${orderData.discount && parseFloat(orderData.discount) > 0 ? 'Discount: #discount\n' : ''}#charges\nTOTAL: #total`,
             alignment: 'TextAlign.right',
             fontSize: 20,
@@ -476,7 +503,7 @@ class PrintTemplate {
         }));
 
         // Payment section
-        template.sections.push(new PrintSection({
+        sections.push(new PrintSection({
             template: `Payment Mode: #payMode\n${orderData.notes ? orderData.notes : ''}`,
             alignment: 'TextAlign.left',
             fontSize: 20,
@@ -484,31 +511,27 @@ class PrintTemplate {
         }));
 
         // Footer
-        template.sections.push(new PrintSection({
+        sections.push(new PrintSection({
             template: `Thank You!\nVisit Again\n#storeLink`,
             alignment: 'TextAlign.center',
             fontSize: 20,
             isBold: false
         }));
 
-        return template;
+        return sections;
     }
 
     /**
-     * Create a default template for KOT (Kitchen Order Ticket) (private method)
+     * Create default sections for KOT (Kitchen Order Ticket)
      * @param {Object} orderData - Order data for context-specific templates
-     * @param {number} printerWidth - The printer width in characters
-     * @returns {PrintTemplate} A new PrintTemplate instance
+     * @returns {Array} Array of PrintSection instances
      * @private
      */
-    static _createDefaultKOT(orderData = {}, printerWidth = 48) {
-        const template = new PrintTemplate({
-            type: 'kot',
-            printerWidth: printerWidth
-        });
+    _createDefaultKOTSections(orderData = {}) {
+        const sections = [];
 
         // Header section
-        template.sections.push(new PrintSection({
+        sections.push(new PrintSection({
             template: `KOT\n${orderData.tableId ? `TABLE ${orderData.tableId}` : ''}`,
             alignment: 'TextAlign.center',
             fontSize: 24,
@@ -516,7 +539,7 @@ class PrintTemplate {
         }));
 
         // Order details section
-        template.sections.push(new PrintSection({
+        sections.push(new PrintSection({
             template: `KOT #: #billNo\nDate: #timestamp\n${orderData.tableId ? `Table: ${orderData.tableId}` : ''}`,
             alignment: 'TextAlign.left',
             fontSize: 20,
@@ -524,7 +547,7 @@ class PrintTemplate {
         }));
 
         // Items section - use kotItemsListText for printer commands
-        template.sections.push(new PrintSection({
+        sections.push(new PrintSection({
             template: '#kotItemsList',
             alignment: 'TextAlign.left',
             fontSize: 20,
@@ -533,7 +556,7 @@ class PrintTemplate {
 
         // Notes section if instructions exist
         if (orderData.instructions) {
-            template.sections.push(new PrintSection({
+            sections.push(new PrintSection({
                 template: `NOTES:\n${orderData.instructions.trim()}`,
                 alignment: 'TextAlign.left',
                 fontSize: 20,
@@ -541,7 +564,7 @@ class PrintTemplate {
             }));
         }
 
-        return template;
+        return sections;
     }
 }
 

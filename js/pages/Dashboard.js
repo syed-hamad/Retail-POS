@@ -1539,14 +1539,14 @@ function Dashboard() {
                             };
 
                             // Create default bill template
-                            const defaultBill = window.PrintTemplate.create({
+                            const defaultBill = new window.PrintTemplate({
                                 type: 'bill',
                                 orderData: {}, // Empty order for default template
                                 seller: sellerData
                             });
 
                             // Create default KOT template
-                            const defaultKOT = window.PrintTemplate.create({
+                            const defaultKOT = new window.PrintTemplate({
                                 type: 'kot',
                                 orderData: {}, // Empty order for default template
                                 seller: sellerData
@@ -1635,7 +1635,7 @@ function Dashboard() {
                                 };
 
                                 // Create a PrintTemplate instance and generate HTML
-                                const template = window.PrintTemplate.create({
+                                const template = new window.PrintTemplate({
                                     orderData: testOrder,
                                     seller: sellerData,
                                     type: templateType,
@@ -2156,7 +2156,7 @@ function Dashboard() {
 
                                         // Generate HTML using PrintTemplate directly
                                         const currentTemplate = templates[currentTemplateType];
-                                        const template = window.PrintTemplate.create({
+                                        const template = new window.PrintTemplate({
                                             orderData: testOrder,
                                             type: currentTemplateType,
                                             templateData: currentTemplate
