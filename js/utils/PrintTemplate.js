@@ -340,9 +340,9 @@ class PrintTemplate {
      */
     _generateBillItemsList(items) {
         let html = `<div class="flex w-full font-bold border-b border-dashed border-gray-400">
-            <div class="w-6">Qty</div>
-            <div class="flex-1">Item</div>
-            <div class="w-12 text-right">Amt</div>
+            <div class="w-[10%]">Qty</div>
+            <div class="w-[70%]">Item</div>
+            <div class="w-[20%] text-right">Amt</div>
         </div>`;
 
         // Add items
@@ -353,9 +353,9 @@ class PrintTemplate {
             const itemName = (item.title || 'Unknown Item').substring(0, 20); // Limit item name length
 
             html += `<div class="flex w-full text-xs">
-                <div class="w-6">${quantity}</div>
-                <div class="flex-1">${itemName}</div>
-                <div class="w-12 text-right">${amount.toFixed(2)}</div>
+                <div class="w-[10%]">${quantity}</div>
+                <div class="w-[70%]">${itemName}</div>
+                <div class="w-[20%] text-right">${amount.toFixed(2)}</div>
             </div>`;
         });
 
@@ -445,7 +445,7 @@ class PrintTemplate {
 
         // Header section
         template.sections.push(new PrintSection({
-            content: `${orderData.gstEnabled ? 'TAX INVOICE' : 'BILL/RECEIPT'}\n#businessName\n#address\nPhone: #phone\nWeb: #storeLink\nGST: #gstIN`,
+            template: `${orderData.gstEnabled ? 'TAX INVOICE' : 'BILL/RECEIPT'}\n#businessName\n#address\nPhone: #phone\nWeb: #storeLink\nGST: #gstIN`,
             alignment: 'TextAlign.center',
             fontSize: 24,
             isBold: true
@@ -453,15 +453,15 @@ class PrintTemplate {
 
         // Order details section
         template.sections.push(new PrintSection({
-            content: `Bill #: #billNo\nDate: #timestamp\n${orderData.custName || orderData.customer?.name ? `Customer: ${orderData.custName || orderData.customer?.name}` : ''}\n${orderData.tableId ? `Table: ${orderData.tableId}` : ''}\nOrder from: #orderSource`,
+            template: `Bill #: #billNo\nDate: #timestamp\n${orderData.custName || orderData.customer?.name ? `Customer: ${orderData.custName || orderData.customer?.name}` : ''}\n${orderData.tableId ? `Table: ${orderData.tableId}` : ''}\nOrder from: #orderSource`,
             alignment: 'TextAlign.left',
             fontSize: 20,
             isBold: false
         }));
 
-        // Items section
+        // Items section - use itemsListText for printer commands
         template.sections.push(new PrintSection({
-            content: '#itemsList',
+            template: '#itemsList',
             alignment: 'TextAlign.left',
             fontSize: 20,
             isBold: false
@@ -469,7 +469,7 @@ class PrintTemplate {
 
         // Totals section
         template.sections.push(new PrintSection({
-            content: `Sub Total: #subtotal\n${orderData.discount && parseFloat(orderData.discount) > 0 ? 'Discount: #discount\n' : ''}#charges\nTOTAL: #total`,
+            template: `Sub Total: #subtotal\n${orderData.discount && parseFloat(orderData.discount) > 0 ? 'Discount: #discount\n' : ''}#charges\nTOTAL: #total`,
             alignment: 'TextAlign.right',
             fontSize: 20,
             isBold: true
@@ -477,7 +477,7 @@ class PrintTemplate {
 
         // Payment section
         template.sections.push(new PrintSection({
-            content: `Payment Mode: #payMode\n${orderData.notes ? orderData.notes : ''}`,
+            template: `Payment Mode: #payMode\n${orderData.notes ? orderData.notes : ''}`,
             alignment: 'TextAlign.left',
             fontSize: 20,
             isBold: false
@@ -485,7 +485,7 @@ class PrintTemplate {
 
         // Footer
         template.sections.push(new PrintSection({
-            content: `Thank You!\nVisit Again\n#storeLink`,
+            template: `Thank You!\nVisit Again\n#storeLink`,
             alignment: 'TextAlign.center',
             fontSize: 20,
             isBold: false
@@ -509,7 +509,7 @@ class PrintTemplate {
 
         // Header section
         template.sections.push(new PrintSection({
-            content: `KOT\n${orderData.tableId ? `TABLE ${orderData.tableId}` : ''}`,
+            template: `KOT\n${orderData.tableId ? `TABLE ${orderData.tableId}` : ''}`,
             alignment: 'TextAlign.center',
             fontSize: 24,
             isBold: true
@@ -517,15 +517,15 @@ class PrintTemplate {
 
         // Order details section
         template.sections.push(new PrintSection({
-            content: `KOT #: #billNo\nDate: #timestamp\n${orderData.tableId ? `Table: ${orderData.tableId}` : ''}`,
+            template: `KOT #: #billNo\nDate: #timestamp\n${orderData.tableId ? `Table: ${orderData.tableId}` : ''}`,
             alignment: 'TextAlign.left',
             fontSize: 20,
             isBold: false
         }));
 
-        // Items section
+        // Items section - use kotItemsListText for printer commands
         template.sections.push(new PrintSection({
-            content: '#kotItemsList',
+            template: '#kotItemsList',
             alignment: 'TextAlign.left',
             fontSize: 20,
             isBold: false
@@ -534,7 +534,7 @@ class PrintTemplate {
         // Notes section if instructions exist
         if (orderData.instructions) {
             template.sections.push(new PrintSection({
-                content: `NOTES:\n${orderData.instructions.trim()}`,
+                template: `NOTES:\n${orderData.instructions.trim()}`,
                 alignment: 'TextAlign.left',
                 fontSize: 20,
                 isBold: false
