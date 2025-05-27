@@ -274,7 +274,7 @@ class BluetoothPrinting {
         const MAX_RETRIES = 3;
         const RETRY_DELAY_MS = 300; // Increased retry delay
         const INTER_CHUNK_DELAY_MS = 20; // Increased delay between chunks
-        const DEFAULT_CHUNK_SIZE = 300; // Smaller chunk size for better reliability
+        const DEFAULT_CHUNK_SIZE = 200; // Smaller chunk size for better reliability
 
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
