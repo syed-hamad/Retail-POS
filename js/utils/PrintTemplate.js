@@ -182,6 +182,7 @@ class PrintTemplate {
                             padding: 1px;
                         }
                     </style>
+                    <script src="https://cdn.tailwindcss.com"></script>
                 </head>
                 <body>${contentHtml}</body>
             </html>
@@ -219,13 +220,30 @@ class PrintTemplate {
         const canvas = document.createElement('canvas');
         const receiptContent = iframe.contentDocument.body;
 
+        // Force a layout calculation to ensure accurate dimensions
+        receiptContent.style.width = '58mm';
+        receiptContent.style.margin = '0';
+        receiptContent.style.padding = '0';
+
+        // Wait a bit for layout to stabilize
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Get the content dimensions after layout is stable
+        const contentWidth = receiptContent.scrollWidth;
+        const contentHeight = receiptContent.scrollHeight;
+
+        console.log(`Receipt content dimensions: ${contentWidth}x${contentHeight}`);
+
         // Increase the width to match standard 58mm thermal printer (384 dots)
         // Most 58mm thermal printers have a print width of 48mm (384 dots at 8 dots/mm)
         const width = 384;
 
-        // Calculate height based on content and apply a scaling factor to make text larger
-        const scaleFactor = 1.5; // Increase this for larger print
-        const height = Math.ceil(receiptContent.scrollHeight * (width / receiptContent.offsetWidth) * scaleFactor);
+        // Calculate height based on content with proper scaling
+        // Use a fixed scale factor that maintains the aspect ratio
+        const scaleFactor = width / contentWidth;
+        const height = Math.ceil(contentHeight * scaleFactor);
+
+        console.log(`Canvas dimensions: ${width}x${height} (scale: ${scaleFactor})`);
 
         canvas.width = width;
         canvas.height = height;
@@ -234,7 +252,7 @@ class PrintTemplate {
         ctx.fillStyle = 'white';
         ctx.fillRect(0, 0, width, height);
 
-        // Scale up the content before rendering
+        // Apply the scale to maintain aspect ratio
         ctx.scale(scaleFactor, scaleFactor);
 
         // Use html2canvas to render the content to canvas
@@ -246,17 +264,51 @@ class PrintTemplate {
 
         const canvasResult = await html2canvas(receiptContent, {
             canvas: canvas,
-            width: width / scaleFactor, // Adjust for scaling
-            height: height / scaleFactor, // Adjust for scaling
-            scale: scaleFactor, // Apply scaling factor
+            width: contentWidth,
+            height: contentHeight,
+            scale: 1, // We're already handling scaling above
             useCORS: true,
-            backgroundColor: 'white'
+            backgroundColor: 'white',
+            logging: true, // Enable logging for debugging
+            onclone: (clonedDoc) => {
+                // Ensure the cloned document has proper styling
+                const clonedBody = clonedDoc.body;
+                clonedBody.style.width = '58mm';
+                clonedBody.style.margin = '0';
+                clonedBody.style.padding = '0';
+            }
         });
 
-        // Preview image in new tab
-        const imageDataUrl = canvasResult.toDataURL('image/png');
-        const previewWindow = window.open();
-        previewWindow.document.write(`<img src="${imageDataUrl}" alt="Receipt Preview">`);
+        // // Preview image in new tab with both the image and HTML for comparison
+        // const imageDataUrl = canvasResult.toDataURL('image/png');
+        // const previewWindow = window.open();
+        // previewWindow.document.write(`
+        //     <html>
+        //     <head>
+        //         <title>Receipt Preview</title>
+        //         <style>
+        //             body { display: flex; flex-direction: column; align-items: center; }
+        //             .preview-container { display: flex; gap: 20px; margin-top: 20px; }
+        //             .preview-section { border: 1px solid #ccc; padding: 10px; }
+        //         </style>
+        //     </head>
+        //     <body>
+        //         <h2>Receipt Preview</h2>
+        //         <div class="preview-container">
+        //             <div class="preview-section">
+        //                 <h3>Canvas Render</h3>
+        //                 <img src="${imageDataUrl}" alt="Receipt Preview">
+        //             </div>
+        //             <div class="preview-section">
+        //                 <h3>HTML Render</h3>
+        //                 <div style="width: 58mm; border: 1px dashed #ccc;">
+        //                     ${receiptContent.innerHTML}
+        //                 </div>
+        //             </div>
+        //         </div>
+        //     </body>
+        //     </html>
+        // `);
 
         // Clean up
         document.body.removeChild(iframe);
