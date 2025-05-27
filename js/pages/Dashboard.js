@@ -2,7 +2,12 @@
 function Dashboard() {
     const { profile: seller, tables: profileTables } = window.useProfile ? window.useProfile() : { profile: null, tables: [] };
     const {
+        activeOrders,
+        completedOrders,
         isLoading,
+        error: orderError,
+        getOrdersByTableAndChannel,
+        loadCompletedOrders,
         getOrdersForSource
     } = window.useOrders ? window.useOrders() : {
         activeOrders: [],
@@ -15,6 +20,7 @@ function Dashboard() {
     };
 
     const [error, setError] = React.useState(null);
+    const [isProfileOpen, setIsProfileOpen] = React.useState(false);
     const [showCompletedOrders, setShowCompletedOrders] = React.useState(false);
     const [qrOrders, setQrOrders] = React.useState([]);
     const [loadingQrOrders, setLoadingQrOrders] = React.useState(true);
@@ -157,7 +163,7 @@ function Dashboard() {
                     }
                 }
             });
-            // --- End Manual Grouping Logic ---
+            // --- End Manual Grouping Logic --- 
 
             // Summarize the final assignment counts
             console.log(`[Dashboard Grouping Summary] Final assignments:`);
@@ -327,7 +333,121 @@ function Dashboard() {
 
     // Function to show the add table modal
     const showAddTableModal = () => {
-        setIsAddTableModalOpen(true);
+        // Check if ModalManager is available
+        if (window.ModalManager && typeof window.ModalManager.createCenterModal === 'function') {
+            // Use ModalManager directly
+            const modalId = 'add-table-modal-' + Date.now();
+            const content = `
+                <div id="add-table-form">
+                    <div id="add-table-error-container" class="mb-4 hidden p-3 bg-red-50 text-red-700 rounded-md"></div>
+                    <div class="mb-6">
+                        <label class="block text-gray-700 mb-2" for="table-title">
+                            Title
+                        </label>
+                        <input
+                            type="text"
+                            id="table-title"
+                            class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="eg. T1"
+                        />
+                    </div>
+                    <div class="mb-6">
+                        <label class="block text-gray-700 mb-2" for="table-desc">
+                            Description (optional)
+                        </label>
+                        <input
+                            type="text"
+                            id="table-desc"
+                            class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="eg. Corner Table"
+                        />
+                    </div>
+                </div>
+            `;
+
+            const actions = `
+                <div class="flex justify-end gap-3">
+                    <button
+                        id="cancel-add-table"
+                        type="button"
+                        class="px-4 py-2 border rounded-md hover:bg-gray-50"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        id="save-add-table"
+                        type="button"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                    >
+                        Add Table
+                    </button>
+                </div>
+            `;
+
+            const modal = window.ModalManager.createCenterModal({
+                id: modalId,
+                title: "Add Table",
+                content: content,
+                actions: actions,
+                onShown: (modalControl) => {
+                    const titleInput = document.getElementById('table-title');
+                    const descInput = document.getElementById('table-desc');
+                    const errorContainer = document.getElementById('add-table-error-container');
+                    const cancelButton = document.getElementById('cancel-add-table');
+                    const saveButton = document.getElementById('save-add-table');
+
+                    if (titleInput && cancelButton && saveButton) {
+                        titleInput.focus();
+
+                        cancelButton.addEventListener('click', () => {
+                            modalControl.close();
+                        });
+
+                        saveButton.addEventListener('click', async () => {
+                            const newTitle = titleInput.value.trim();
+                            const newDesc = descInput.value.trim();
+
+                            // Validate form
+                            if (!newTitle) {
+                                errorContainer.textContent = 'Please enter a title';
+                                errorContainer.classList.remove('hidden');
+                                return;
+                            }
+
+                            try {
+                                // Get current tables
+                                const currentTables = seller?.tables || [];
+
+                                // Check if table already exists
+                                if (currentTables.some(t => t.title === newTitle)) {
+                                    errorContainer.textContent = 'A table with this name already exists';
+                                    errorContainer.classList.remove('hidden');
+                                    return;
+                                }
+
+                                // Add the new table
+                                const updatedTables = [...currentTables, { title: newTitle, desc: newDesc }];
+
+                                // Update seller document in Firestore
+                                await sdk.profile.update({
+                                    tables: updatedTables
+                                });
+
+                                window.ModalManager.showToast('Table added successfully');
+                                modalControl.close();
+                            } catch (err) {
+                                console.error('Error adding table:', err);
+                                errorContainer.textContent = 'Failed to add table. Please try again.';
+                                errorContainer.classList.remove('hidden');
+                            }
+                        });
+                    }
+                }
+            });
+        } else {
+            // Fallback to original React component modal
+            setIsAddTableModalOpen(true);
+        }
     };
 
     // Function to show the rename room modal
@@ -376,11 +496,131 @@ function Dashboard() {
                 </div>
             `;
 
+            const modal = window.ModalManager.createCenterModal({
+                id: modalId,
+                title: modalTitle,
+                content: content,
+                actions: actions,
+                onShown: (modalControl) => {
+                    const titleInput = document.getElementById('room-title');
+                    const errorContainer = document.getElementById('rename-error-container');
+                    const cancelButton = document.getElementById('cancel-rename');
+                    const saveButton = document.getElementById('save-rename');
+
+                    if (titleInput && cancelButton && saveButton) {
+                        titleInput.focus();
+                        titleInput.select();
+
+                        cancelButton.addEventListener('click', () => {
+                            modalControl.close();
+                        });
+
+                        saveButton.addEventListener('click', async () => {
+                            const newTitle = titleInput.value.trim();
+
+                            // Validate form
+                            if (!newTitle) {
+                                errorContainer.textContent = 'Please enter a title';
+                                errorContainer.classList.remove('hidden');
+                                return;
+                            }
+
+                            try {
+                                if (variant) {
+                                    // Rename price variant
+                                    const vars = seller?.priceVariants || [];
+                                    const index = vars.findIndex(v => v.title === variant);
+
+                                    if (index === -1) {
+                                        errorContainer.textContent = "Can't rename this default room";
+                                        errorContainer.classList.remove('hidden');
+                                        return;
+                                    }
+
+                                    const updatedVars = [...vars];
+                                    updatedVars[index] = { title: newTitle };
+
+                                    await sdk.profile.update({ priceVariants: updatedVars });
+                                } else if (tableId) {
+                                    // Rename table
+                                    const tables = seller?.tables || [];
+                                    const index = tables.findIndex(t => t.title === tableId);
+
+                                    if (index === -1) {
+                                        errorContainer.textContent = "Can't rename this table";
+                                        errorContainer.classList.remove('hidden');
+                                        return;
+                                    }
+
+                                    const updatedTables = [...tables];
+                                    updatedTables[index] = { ...updatedTables[index], title: newTitle };
+
+                                    await sdk.profile.update({ tables: updatedTables });
+                                } else {
+                                    errorContainer.textContent = "Can't rename room";
+                                    errorContainer.classList.remove('hidden');
+                                    return;
+                                }
+
+                                window.ModalManager.showToast('Renamed successfully');
+                                modalControl.close();
+                            } catch (err) {
+                                console.error('Error renaming:', err);
+                                errorContainer.textContent = 'Failed to rename. Please try again.';
+                                errorContainer.classList.remove('hidden');
+                            }
+                        });
+                    }
+                }
+            });
         } else {
             // Fallback to original React component modal
             setSelectedTableId(tableId);
             setSelectedVariant(variant);
             setIsRenameRoomModalOpen(true);
+        }
+    };
+
+    // Function to remove a table
+    const removeTable = async (tableId) => {
+        try {
+            // Use confirmDialog utility instead of native confirm
+            confirmDialog({
+                title: 'Remove Table',
+                content: `Are you sure you want to remove table ${tableId}?`,
+                confirmText: 'Remove',
+                cancelText: 'Cancel',
+                onConfirm: async () => {
+                    try {
+                        // Get current tables from seller
+                        const currentTables = seller?.tables || [];
+
+                        // Remove the table
+                        const updatedTables = currentTables.filter(table => table.title !== tableId);
+
+                        // Update seller document in Firestore
+                        await sdk.profile.update({
+                            tables: updatedTables
+                        });
+
+                        // Trigger UI refresh
+                        if (window.refreshTables && typeof window.refreshTables === 'function') {
+                            window.refreshTables();
+                        }
+
+                        showToast('Table removed successfully');
+
+                        // Analytics tracking (if needed)
+                        // analytics.track("REMOVE_TABLE");
+                    } catch (err) {
+                        console.error('Error removing table:', err);
+                        showToast('Failed to remove table. Please try again.');
+                    }
+                }
+            });
+        } catch (err) {
+            console.error('Error in confirm dialog:', err);
+            showToast('An error occurred. Please try again.');
         }
     };
 
@@ -998,6 +1238,31 @@ function Dashboard() {
                 console.log(`[Dashboard] Using SDK bill.print function`);
                 await window.sdk.bill.print(orderId);
                 showToast("Bill printed successfully");
+            } else if (window.BluetoothPrinting && window.PrintTemplate) {
+                // Use our own implementation with PrintTemplate and BluetoothPrinting
+                console.log(`[Dashboard] Using BluetoothPrinting with PrintTemplate`);
+
+                try {
+                    // Fetch the order data
+                    const orderDoc = await window.sdk.db.collection("Orders").doc(orderId).get();
+                    const orderData = orderDoc.data();
+
+                    if (!orderData) {
+                        throw new Error("Order not found");
+                    }
+
+                    // Print the bill using BluetoothPrinting
+                    const success = await window.BluetoothPrinting.printBill(orderId);
+
+                    if (success) {
+                        showToast("Bill printed successfully");
+                    } else {
+                        throw new Error("Printing failed");
+                    }
+                } catch (printError) {
+                    console.error('Error in BluetoothPrinting:', printError);
+                    throw printError;
+                }
             } else if (window.sdk.kot && typeof window.sdk.kot.print === 'function') {
                 // Fallback to KOT printing if bill printing is not available
                 console.log(`[Dashboard] Bill print not available, falling back to KOT print`);
@@ -1013,6 +1278,27 @@ function Dashboard() {
             showToast(`Failed to print bill: ${err.message}`, "error");
         }
     };
+
+    const filteredTables = React.useMemo(() => {
+        return tables.filter(table => {
+            if (table.type === 'dine_in') return true;
+            if (table.type === 'qr' && table.orders.length > 0) return true;
+            if (table.type === 'aggregator' && table.orders.length > 0) return true;
+            return false;
+        });
+    }, [tables]);
+
+    // Group dining tables by section
+    const groupedDiningTables = React.useMemo(() => {
+        return filteredTables.reduce((acc, table) => {
+            if (table.type !== 'dine_in') return acc;
+            if (!acc[table.section]) {
+                acc[table.section] = [];
+            }
+            acc[table.section].push(table);
+            return acc;
+        }, {});
+    }, [filteredTables]);
 
     // Format a number with commas
     const formatNumber = (num) => {
@@ -1105,6 +1391,10 @@ function Dashboard() {
     };
 
     // Handle date range selection for custom filter
+    const handleDateRangeSelect = (startDate, endDate) => {
+        setCustomDateRange({ startDate, endDate });
+        setDateFilter('custom');
+    };
 
     // Handle scroll to load more items (restore this function)
     const handleScroll = (e) => {
@@ -1131,7 +1421,640 @@ function Dashboard() {
             return;
         }
 
+        // Ensure PrintTemplate is available
+        if (!window.PrintTemplate) {
+            console.error("PrintTemplate class is not available. Loading from PrintTemplate.js");
+            showToast("Loading print template system...");
+
+            // Try to load PrintTemplate.js dynamically if not already loaded
+            const scriptElement = document.createElement('script');
+            scriptElement.src = 'js/utils/PrintTemplate.js';
+            scriptElement.onload = () => {
+                console.log("PrintTemplate.js loaded successfully");
+                // Retry after loading
+                setTimeout(() => handlePrintTemplateManagement(), 500);
+            };
+            scriptElement.onerror = () => {
+                console.error("Failed to load PrintTemplate.js");
+                showToast("Failed to load print template system", "error");
+            };
+            document.head.appendChild(scriptElement);
+            return;
+        }
+
         // Create modal
+        const modal = window.ModalManager.createCenterModal({
+            id: 'print-template-modal',
+            title: "Print Template",
+            content: `
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Left column: Template editor -->
+                    <div class="space-y-6">
+                        <div id="print-template-error-container" class="hidden p-3 bg-red-50 text-red-700 rounded-md"></div>
+
+                        <div class="flex space-x-2 border-b">
+                            <button id="bill-tab" class="px-4 py-2 bg-red-500 text-white focus:outline-none">BILL</button>
+                            <button id="kot-tab" class="px-4 py-2 border border-gray-200 text-gray-700 focus:outline-none">KOT</button>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center">
+                                <h3 class="text-lg font-medium">Template Sections</h3>
+                                <button id="add-section-btn" class="p-2 text-red-500 hover:bg-red-50 rounded-full">
+                                    <i class="ph ph-plus"></i>
+                                </button>
+                            </div>
+                            <div id="template-sections" class="space-y-4">
+                                <!-- Template sections will be rendered here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right column: Live preview -->
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-lg font-medium">Live Preview</h3>
+                        </div>
+                        
+                        <div class="bg-gray-50 p-3 rounded-md text-sm text-gray-700 flex items-start">
+                            <i class="ph ph-info mr-2 mt-0.5 text-gray-500"></i>
+                            <p>Make changes to the template sections on the left, then click <strong>Refresh Preview</strong> to see how your receipt will look.</p>
+                        </div>
+                        
+                        <div class="border-2 border-dashed border-gray-300 p-4 rounded-lg min-h-[500px] overflow-auto">
+                            <div id="live-preview-container" class="text-sm">
+                                <!-- Live preview content will be rendered here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `,
+            actions: `
+                <div class="flex justify-between p-4">
+                    <button id="refresh-preview-btn" class="px-4 py-2 border rounded-md hover:bg-gray-50">
+                        <i class="ph ph-arrows-clockwise mr-1"></i> Refresh Preview
+                    </button>
+                    <div class="space-x-3">
+                        <button id="reset-template-btn" class="px-4 py-2 border text-red-500 rounded-md hover:bg-red-50">Reset</button>
+                        <button id="save-template-btn" class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600">Save</button>
+                    </div>
+                </div>
+            `,
+            size: '2xl',
+            onShown: (modalControl) => {
+                const billTab = document.getElementById('bill-tab');
+                const kotTab = document.getElementById('kot-tab');
+                const templateSections = document.getElementById('template-sections');
+                const addSectionBtn = document.getElementById('add-section-btn');
+                const refreshPreviewBtn = document.getElementById('refresh-preview-btn');
+                const resetBtn = document.getElementById('reset-template-btn');
+                const saveBtn = document.getElementById('save-template-btn');
+                const errorContainer = document.getElementById('print-template-error-container');
+                const livePreviewContainer = document.getElementById('live-preview-container');
+
+                let currentTemplateType = 'bill';
+                let templates = {};
+
+                // Check if seller has saved templates
+                if (seller && seller.printTemplate) {
+                    console.log("Loading saved print templates from seller profile:", seller.printTemplate);
+                    templates = seller.printTemplate;
+                } else {
+                    console.log("No saved templates found, using defaults from PrintTemplate.js");
+                    // Use PrintTemplate.js to create default templates
+                    if (window.PrintTemplate) {
+                        try {
+                            // Ensure seller data has necessary fields
+                            const sellerData = {
+                                businessName: seller?.businessName || 'Your Business',
+                                logo: seller?.logo || '',
+                                phone: seller?.phone || '',
+                                address: seller?.address || '',
+                                website: seller?.storeLink || seller?.website || '',
+                                gstIN: seller?.gstIN || seller?.gstNo || ''
+                            };
+
+                            // Create default bill template
+                            const defaultBill = new window.PrintTemplate({
+                                type: 'bill',
+                                orderData: {}, // Empty order for default template
+                                seller: sellerData
+                            });
+
+                            // Create default KOT template
+                            const defaultKOT = new window.PrintTemplate({
+                                type: 'kot',
+                                orderData: {}, // Empty order for default template
+                                seller: sellerData
+                            });
+
+                            templates = {
+                                'bill': defaultBill.templateData || getDefaultBillTemplate(),
+                                'kot': defaultKOT.templateData || getDefaultKOTTemplate()
+                            };
+                        } catch (error) {
+                            console.error("Error creating default templates from PrintTemplate.js:", error);
+                            console.log("Falling back to built-in default templates");
+                            templates = {
+                                'bill': getDefaultBillTemplate(),
+                                'kot': getDefaultKOTTemplate()
+                            };
+                        }
+                    } else {
+                        console.warn("PrintTemplate.js not available, using built-in default templates");
+                        templates = {
+                            'bill': getDefaultBillTemplate(),
+                            'kot': getDefaultKOTTemplate()
+                        };
+                    }
+                }
+
+                // Ensure both bill and kot templates exist and have valid sections
+                if (!templates.bill || !templates.bill.sections || templates.bill.sections.length === 0) {
+                    console.log("Bill template missing or invalid, using default");
+                    templates.bill = getDefaultBillTemplate();
+                }
+
+                if (!templates.kot || !templates.kot.sections || templates.kot.sections.length === 0) {
+                    console.log("KOT template missing or invalid, using default");
+                    templates.kot = getDefaultKOTTemplate();
+                }
+
+                // Generate live preview content based on the current template
+                function updateLivePreview() {
+                    console.log("updateLivePreview called - generating HTML for template type:", currentTemplateType);
+                    livePreviewContainer.innerHTML = generatePreviewHTML(currentTemplateType);
+                    console.log("Live preview updated");
+                }
+
+                // Generate HTML for the preview
+                function generatePreviewHTML(templateType) {
+                    console.log("generatePreviewHTML called with templateType:", templateType);
+
+                    // Create a mock test order for the preview
+                    const testOrder = {
+                        id: 'PREVIEW-123',
+                        billNo: 'PREVIEW-123',
+                        date: new Date(),
+                        tableId: 'Preview',
+                        priceVariant: 'Dine-in',
+                        items: [
+                            { title: 'Butter Chicken', quantity: 2, price: 299.50 },
+                            { title: 'Jeera Rice', quantity: 1, price: 149.00 }
+                        ],
+                        discount: 50,
+                        charges: [
+                            { name: 'Service Charge', value: 30 }
+                        ],
+                        total: 733.00,
+                        payMode: 'CASH'
+                    };
+
+                    // Check if we have a custom template and it has sections
+                    const currentTemplate = templates[templateType];
+                    console.log("Current template:", currentTemplate);
+
+                    if (currentTemplate && currentTemplate.sections && currentTemplate.sections.length > 0) {
+                        // Use the PrintTemplate class directly to generate HTML based on the current template
+                        if (window.PrintTemplate) {
+                            try {
+                                console.log("Using PrintTemplate for preview with seller data:", seller);
+
+                                // Ensure seller data has necessary fields
+                                const sellerData = {
+                                    businessName: seller?.businessName || 'Your Business',
+                                    logo: seller?.logo || '',
+                                    phone: seller?.phone || '',
+                                    address: seller?.address || '',
+                                    website: seller?.storeLink || seller?.website || '',
+                                    gstIN: seller?.gstIN || seller?.gstNo || ''
+                                };
+
+                                // Create a PrintTemplate instance and generate HTML
+                                const template = new window.PrintTemplate({
+                                    orderData: testOrder,
+                                    seller: sellerData,
+                                    type: templateType,
+                                    templateData: currentTemplate
+                                });
+
+                                const html = template.toHTML();
+                                console.log("Generated HTML preview successfully");
+                                return html;
+                            } catch (error) {
+                                console.error('Error generating template preview:', error);
+                                return `<div class="text-center text-red-500 p-4">
+                                    <i class="ph ph-warning-circle text-3xl mb-2"></i>
+                                    <p>Error generating preview: ${error.message}</p>
+                                    <pre class="mt-2 text-xs text-left bg-gray-100 p-2 rounded overflow-auto">${error.stack}</pre>
+                                </div>`;
+                            }
+                        } else {
+                            console.warn("window.PrintTemplate is not available");
+                            return `<div class="text-center text-amber-500 p-4">
+                                <i class="ph ph-warning-circle text-3xl mb-2"></i>
+                                <p>PrintTemplate class is not available. Please refresh the page and try again.</p>
+                            </div>`;
+                        }
+                    }
+
+                    // Fallback to default preview if no template or PrintTemplate not available
+                    return `
+                        <div class="text-center">
+                            <div class="w-20 h-20 mx-auto bg-red-100 rounded-full flex items-center justify-center mb-2">
+                                <i class="ph ph-storefront text-red-500 text-2xl"></i>
+                            </div>
+                            <h2 class="text-xl font-bold">${seller?.businessName || 'Your Business Name'}</h2>
+                        </div>
+                        <div class="text-center text-sm text-gray-600 mt-2">
+                            <p>Phone: ${seller?.phone || '1234567890'}</p>
+                            <p>Address: ${seller?.address || '123 Main St'}</p>
+                            <p>Web: ${seller?.storeLink || 'www.yourbusiness.com'}</p>
+                            <p>GST: ${seller?.gstIN || 'GSTIN12345'}</p>
+                        </div>
+                        <div class="mt-4">
+                            <p>Bill No: #12345</p>
+                            <p>Order from: Dine-in</p>
+                        </div>
+                        <div class="mt-4 border-t border-b py-2">
+                            <table class="w-full">
+                                <thead>
+                                    <tr class="text-left">
+                                        <th class="py-1 px-2">Qt</th>
+                                        <th class="py-1">Item</th>
+                                        <th class="py-1 text-right">Price</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="py-1 px-2">2</td>
+                                        <td class="py-1">Butter Chicken</td>
+                                        <td class="py-1 text-right">₹599</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-1 px-2">1</td>
+                                        <td class="py-1">Jeera Rice</td>
+                                        <td class="py-1 text-right">₹149</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="mt-4 text-right">
+                            <p>Sub Total: ₹748</p>
+                            <p>Discount: -₹50</p>
+                            <p>GST: ₹35</p>
+                            <p class="font-bold mt-2">TOTAL: ₹733</p>
+                        </div>
+                        <div class="mt-4 text-right">
+                            <p>Payment mode: Cash</p>
+                        </div>
+                        ${templateType === 'bill' ? `
+                            <div class="mt-4 flex justify-center">
+                                <div class="w-32 h-32 bg-gray-200 flex items-center justify-center">
+                                    <i class="ph ph-qr-code text-4xl"></i>
+                                </div>
+                            </div>
+                        ` : ''}
+                        <div class="mt-4 text-center text-sm">
+                            <p>Thank you!</p>
+                            <p>${new Date().toLocaleString()}</p>
+                        </div>
+                    `;
+                }
+
+                // Render template sections
+                function renderTemplateSections() {
+                    console.log("Starting renderTemplateSections for type:", currentTemplateType);
+                    templateSections.innerHTML = '';
+
+                    const currentTemplate = templates[currentTemplateType];
+                    if (!currentTemplate || !currentTemplate.sections) {
+                        console.error("No template or sections found for type:", currentTemplateType);
+                        return;
+                    }
+
+                    console.log("Rendering sections:", currentTemplate.sections);
+
+                    currentTemplate.sections.forEach((section, index) => {
+                        console.log("Rendering section", index, ":", section);
+
+                        const sectionCard = document.createElement('div');
+                        sectionCard.className = 'border rounded-lg p-4 bg-white shadow-sm mb-4';
+                        sectionCard.dataset.index = index;
+
+                        // Format toolbar
+                        const toolbar = document.createElement('div');
+                        toolbar.className = 'flex justify-between items-center mb-3';
+
+                        const formatControls = document.createElement('div');
+                        formatControls.className = 'flex items-center space-x-2';
+
+                        // Font size selector
+                        const fontSizeSelect = document.createElement('select');
+                        fontSizeSelect.className = 'px-2 py-1 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-red-500';
+                        fontSizeSelect.innerHTML = `
+                            <option value="20" ${section.fontSize === 20 ? 'selected' : ''}>Size 20</option>
+                            <option value="22" ${section.fontSize === 22 ? 'selected' : ''}>Size 22</option>
+                            <option value="24" ${section.fontSize === 24 ? 'selected' : ''}>Size 24</option>
+                            <option value="26" ${section.fontSize === 26 ? 'selected' : ''}>Size 26</option>
+                            <option value="28" ${section.fontSize === 28 ? 'selected' : ''}>Size 28</option>
+                            <option value="30" ${section.fontSize === 30 ? 'selected' : ''}>Size 30</option>
+                        `;
+
+                        // Alignment selector
+                        const alignmentSelect = document.createElement('select');
+                        alignmentSelect.className = 'px-2 py-1 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-red-500';
+                        alignmentSelect.innerHTML = `
+                            <option value="TextAlign.left" ${section.alignment === 'TextAlign.left' ? 'selected' : ''}>Left</option>
+                            <option value="TextAlign.center" ${section.alignment === 'TextAlign.center' ? 'selected' : ''}>Center</option>
+                            <option value="TextAlign.right" ${section.alignment === 'TextAlign.right' ? 'selected' : ''}>Right</option>
+                        `;
+
+                        // Style buttons container
+                        const styleBtns = document.createElement('div');
+                        styleBtns.className = 'flex items-center space-x-1';
+
+                        // Bold button
+                        const boldBtn = document.createElement('button');
+                        boldBtn.className = `p-1.5 rounded ${section.isBold ? 'bg-red-100 text-red-500' : 'text-gray-500 hover:bg-gray-100'}`;
+                        boldBtn.innerHTML = '<i class="ph ph-text-b"></i>';
+                        boldBtn.title = 'Bold';
+
+                        // Underline button
+                        const underlineBtn = document.createElement('button');
+                        underlineBtn.className = `p-1.5 rounded ${section.isUnderlined ? 'bg-red-100 text-red-500' : 'text-gray-500 hover:bg-gray-100'}`;
+                        underlineBtn.innerHTML = '<i class="ph ph-text-underline"></i>';
+                        underlineBtn.title = 'Underline';
+
+                        // Delete button
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.className = 'p-1.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50';
+                        deleteBtn.innerHTML = '<i class="ph ph-trash"></i>';
+                        deleteBtn.title = 'Delete Section';
+
+                        // Add event listeners
+                        fontSizeSelect.addEventListener('change', () => {
+                            templates[currentTemplateType].sections[index].fontSize = parseInt(fontSizeSelect.value);
+                            updateLivePreview();
+                        });
+
+                        alignmentSelect.addEventListener('change', () => {
+                            templates[currentTemplateType].sections[index].alignment = alignmentSelect.value;
+                            const textArea = sectionCard.querySelector('textarea');
+                            if (textArea) {
+                                textArea.className = textArea.className.replace(/text-(left|center|right)/,
+                                    alignmentSelect.value === 'TextAlign.center' ? 'text-center' :
+                                        alignmentSelect.value === 'TextAlign.right' ? 'text-right' :
+                                            'text-left'
+                                );
+                            }
+                            updateLivePreview();
+                        });
+
+                        boldBtn.addEventListener('click', () => {
+                            templates[currentTemplateType].sections[index].isBold = !templates[currentTemplateType].sections[index].isBold;
+                            boldBtn.classList.toggle('bg-red-100');
+                            boldBtn.classList.toggle('text-red-500');
+                            const textArea = sectionCard.querySelector('textarea');
+                            if (textArea) {
+                                textArea.classList.toggle('font-bold');
+                            }
+                            updateLivePreview();
+                        });
+
+                        underlineBtn.addEventListener('click', () => {
+                            templates[currentTemplateType].sections[index].isUnderlined = !templates[currentTemplateType].sections[index].isUnderlined;
+                            underlineBtn.classList.toggle('bg-red-100');
+                            underlineBtn.classList.toggle('text-red-500');
+                            const textArea = sectionCard.querySelector('textarea');
+                            if (textArea) {
+                                textArea.classList.toggle('underline');
+                            }
+                            updateLivePreview();
+                        });
+
+                        deleteBtn.addEventListener('click', () => {
+                            if (templates[currentTemplateType].sections.length <= 1) {
+                                errorContainer.textContent = 'Cannot delete the last section. You need at least one section.';
+                                errorContainer.classList.remove('hidden');
+                                return;
+                            }
+
+                            if (confirm('Are you sure you want to delete this section?')) {
+                                templates[currentTemplateType].sections.splice(index, 1);
+                                renderTemplateSections();
+                                updateLivePreview();
+                            }
+                        });
+
+                        // Assemble toolbar
+                        formatControls.appendChild(fontSizeSelect);
+                        formatControls.appendChild(alignmentSelect);
+                        styleBtns.appendChild(boldBtn);
+                        styleBtns.appendChild(underlineBtn);
+                        formatControls.appendChild(styleBtns);
+                        toolbar.appendChild(formatControls);
+                        toolbar.appendChild(deleteBtn);
+                        sectionCard.appendChild(toolbar);
+
+                        // Create textarea container
+                        const textAreaContainer = document.createElement('div');
+                        textAreaContainer.className = 'relative';
+
+                        // Get text alignment class
+                        let alignmentClass = 'text-left';
+                        if (section.alignment === 'TextAlign.center') alignmentClass = 'text-center';
+                        if (section.alignment === 'TextAlign.right') alignmentClass = 'text-right';
+
+                        // Create textarea
+                        const textArea = document.createElement('textarea');
+                        textArea.className = `w-full min-h-24 p-3 border rounded-lg transition-all ${alignmentClass} ${section.isBold ? 'font-bold' : ''} ${section.isUnderlined ? 'underline' : ''} focus:outline-none focus:ring-2 focus:ring-red-500 text-sm`;
+                        textArea.value = section.template || '';
+                        textArea.placeholder = 'Enter template content here... Use # to insert variables';
+
+                        // Add input event listener
+                        textArea.addEventListener('input', () => {
+                            const sectionIndex = parseInt(textArea.closest('[data-index]').dataset.index);
+                            templates[currentTemplateType].sections[sectionIndex].template = textArea.value;
+                            updateLivePreview();
+                        });
+
+                        // Create insert variable button
+                        const insertVariableBtn = document.createElement('button');
+                        insertVariableBtn.className = 'absolute right-2 top-2 p-1.5 rounded text-gray-500 hover:text-red-500 hover:bg-red-50';
+                        insertVariableBtn.innerHTML = '<i class="ph ph-brackets-curly"></i>';
+                        insertVariableBtn.title = 'Insert Variable';
+                        insertVariableBtn.addEventListener('click', () => {
+                            showVariablesList(textArea);
+                        });
+
+                        // Assemble textarea container
+                        textAreaContainer.appendChild(textArea);
+                        textAreaContainer.appendChild(insertVariableBtn);
+                        sectionCard.appendChild(textAreaContainer);
+
+                        // Add section to template
+                        templateSections.appendChild(sectionCard);
+                    });
+
+                    console.log("Finished rendering sections");
+                }
+
+                // Show variables list for insertion
+                function showVariablesList(textArea) {
+                    // Create dropdown for variables if it doesn't exist
+                    let variablesDropdown = document.getElementById('variables-dropdown');
+                    if (!variablesDropdown) {
+                        variablesDropdown = document.createElement('div');
+                        variablesDropdown.id = 'variables-dropdown';
+                        variablesDropdown.className = 'absolute z-10 bg-white border rounded-md shadow-lg p-2 max-h-60 overflow-y-auto';
+                        variablesDropdown.style.width = '250px';
+                        variablesDropdown.style.display = 'none';
+                        document.body.appendChild(variablesDropdown);
+                    }
+
+                    // Populate dropdown with variables
+                    variablesDropdown.innerHTML = `
+                        <div class="text-sm font-medium text-gray-700 mb-2">Insert Variable</div>
+                        <div class="space-y-1">
+                            ${billVariables.map(variable => `
+                                <div class="variable-item p-1 hover:bg-gray-100 rounded cursor-pointer" data-variable="${variable.name}">
+                                    <span class="text-red-500">#${variable.name}</span> - ${variable.label}
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+
+                    // Position dropdown near text area
+                    const textAreaRect = textArea.getBoundingClientRect();
+                    variablesDropdown.style.top = `${textAreaRect.bottom + window.scrollY}px`;
+                    variablesDropdown.style.left = `${textAreaRect.left + window.scrollX}px`;
+                    variablesDropdown.style.display = 'block';
+
+                    // Handle variable click
+                    const variableItems = variablesDropdown.querySelectorAll('.variable-item');
+                    variableItems.forEach(item => {
+                        item.addEventListener('click', () => {
+                            const variable = item.dataset.variable;
+                            const currentPos = textArea.selectionStart;
+                            const text = textArea.value;
+                            const newText = text.substring(0, currentPos) + `#${variable}` + text.substring(currentPos);
+                            textArea.value = newText;
+
+                            // Update the section content
+                            const sectionIndex = parseInt(textArea.closest('[data-index]').dataset.index);
+                            templates[currentTemplateType].sections[sectionIndex].template = newText;
+
+                            // Update the live preview
+                            updateLivePreview();
+
+                            // Close the dropdown
+                            variablesDropdown.style.display = 'none';
+                        });
+                    });
+
+                    // Close dropdown when clicking elsewhere
+                    const handleClickOutside = (e) => {
+                        if (!variablesDropdown.contains(e.target) && e.target !== textArea) {
+                            variablesDropdown.style.display = 'none';
+                            document.removeEventListener('click', handleClickOutside);
+                        }
+                    };
+
+                    // Delay adding the event listener to prevent immediate closure
+                    setTimeout(() => {
+                        document.addEventListener('click', handleClickOutside);
+                    }, 10);
+                }
+
+                // Add new section
+                function addNewSection() {
+                    templates[currentTemplateType].sections.push({
+                        content: '',
+                        fontSize: 24,
+                        alignment: 'TextAlign.left',
+                        isBold: false,
+                        isUnderlined: false
+                    });
+                    renderTemplateSections();
+                    updateLivePreview();
+                }
+
+                // Reset to default
+                function resetToDefault() {
+                    if (confirm('Are you sure you want to reset to default template? All changes will be lost.')) {
+                        templates[currentTemplateType] = currentTemplateType === 'bill' ?
+                            getDefaultBillTemplate() : getDefaultKOTTemplate();
+                        renderTemplateSections();
+                        updateLivePreview();
+                    }
+                }
+
+                // Save template
+                async function saveTemplate() {
+                    try {
+                        console.log("Saving templates to profile:", templates);
+                        await window.sdk.profile.update({
+                            printTemplate: templates
+                        });
+                        window.ModalManager.showToast('Print template saved successfully');
+                        modalControl.close();
+                    } catch (error) {
+                        console.error('Error saving print template:', error);
+                        errorContainer.textContent = 'Failed to save template. Please try again.';
+                        errorContainer.classList.remove('hidden');
+                    }
+                }
+
+                // Initialize the modal
+                billTab.addEventListener('click', () => {
+                    currentTemplateType = 'bill';
+                    billTab.classList.add('bg-red-500', 'text-white');
+                    billTab.classList.remove('border', 'border-gray-200', 'text-gray-700');
+                    kotTab.classList.remove('bg-red-500', 'text-white');
+                    kotTab.classList.add('border', 'border-gray-200', 'text-gray-700');
+                    renderTemplateSections();
+                    updateLivePreview();
+                });
+
+                kotTab.addEventListener('click', () => {
+                    currentTemplateType = 'kot';
+                    kotTab.classList.add('bg-red-500', 'text-white');
+                    kotTab.classList.remove('border', 'border-gray-200', 'text-gray-700');
+                    billTab.classList.remove('bg-red-500', 'text-white');
+                    billTab.classList.add('border', 'border-gray-200', 'text-gray-700');
+                    renderTemplateSections();
+                    updateLivePreview();
+                });
+
+                addSectionBtn.addEventListener('click', addNewSection);
+                refreshPreviewBtn.addEventListener('click', updateLivePreview);
+                resetBtn.addEventListener('click', resetToDefault);
+                saveBtn.addEventListener('click', saveTemplate);
+
+                // Add this right after templates initialization in onShown
+                // Debug logging for template initialization
+                console.log('Template initialization:', {
+                    seller,
+                    hasTemplates: !!seller?.printTemplate,
+                    loadedTemplates: templates,
+                    currentType: currentTemplateType,
+                    currentTemplate: templates[currentTemplateType],
+                    hasSections: templates[currentTemplateType]?.sections?.length > 0
+                });
+
+                // Ensure we have valid templates
+                if (!templates[currentTemplateType]?.sections?.length) {
+                    console.log('No valid template found, creating default');
+                    templates[currentTemplateType] = currentTemplateType === 'bill' ? getDefaultBillTemplate() : getDefaultKOTTemplate();
+                }
+
+                // Initial render
+                console.log('Starting initial render with template:', templates[currentTemplateType]);
+                renderTemplateSections();
+                updateLivePreview();
+            }
+        });
     };
 
     // Handle bulk tax update management
@@ -1145,6 +2068,299 @@ function Dashboard() {
         }
 
         // Create modal
+        const modal = window.ModalManager.createCenterModal({
+            id: 'bulk-tax-update-modal',
+            title: "Bulk Tax Update",
+            content: `
+                <div class="p-4">
+                    <div id="tax-update-error-container" class="mb-4 hidden p-3 bg-red-50 text-red-700 rounded-md"></div>
+                    
+                    <div class="mb-4">
+                        <p class="text-sm text-gray-600 mb-4">
+                            Update tax rates for all products at once. This will replace existing tax configurations for all products.
+                        </p>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <div class="bg-amber-50 border border-amber-200 rounded-md p-3 mb-4">
+                            <div class="flex items-start">
+                                <i class="ph ph-warning-circle text-amber-500 mt-0.5 mr-2 text-lg"></i>
+                                <p class="text-sm text-amber-700">
+                                    This action will update tax settings for <strong>all products</strong> in your inventory. 
+                                    Individual product tax configurations will be overwritten.
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <div id="tax-config-container" class="space-y-4">
+                            <div class="tax-item border rounded-md p-3">
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="font-medium">Tax Configuration</div>
+                                    <button id="remove-tax-btn" class="text-gray-400 hover:text-red-500 hidden">
+                                        <i class="ph ph-trash"></i>
+                                    </button>
+                                </div>
+                                
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">Tax Name</label>
+                                        <input 
+                                            type="text" 
+                                            id="tax-name-input" 
+                                            class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-red-500" 
+                                            placeholder="e.g. GST" 
+                                            value="GST"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">Tax Value (%)</label>
+                                        <input 
+                                            type="number" 
+                                            id="tax-value-input" 
+                                            class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-red-500" 
+                                            placeholder="e.g. 18" 
+                                            min="0" 
+                                            max="100" 
+                                            value="18"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">Type</label>
+                                        <select 
+                                            id="tax-type-input" 
+                                            class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                                        >
+                                            <option value="percentage" selected>Percentage (%)</option>
+                                            <option value="fixed">Fixed Amount (₹)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `,
+            actions: `
+                <div class="flex justify-end p-4 space-x-3">
+                    <button id="cancel-tax-update-btn" class="px-4 py-2 border rounded-md hover:bg-gray-50">Cancel</button>
+                    <button id="save-tax-update-btn" class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600">Update All Products</button>
+                </div>
+            `,
+            size: 'md',
+            onShown: (modalControl) => {
+                const taxNameInput = document.getElementById('tax-name-input');
+                const taxValueInput = document.getElementById('tax-value-input');
+                const taxTypeInput = document.getElementById('tax-type-input');
+                const errorContainer = document.getElementById('tax-update-error-container');
+                const cancelButton = document.getElementById('cancel-tax-update-btn');
+                const saveButton = document.getElementById('save-tax-update-btn');
+
+                // Validation function
+                const validateForm = () => {
+                    if (!taxNameInput.value.trim()) {
+                        errorContainer.textContent = 'Tax name is required';
+                        errorContainer.classList.remove('hidden');
+                        return false;
+                    }
+
+                    const taxValue = parseFloat(taxValueInput.value);
+                    if (isNaN(taxValue) || taxValue < 0 || taxValue > 100) {
+                        errorContainer.textContent = 'Please enter a valid tax value between 0 and 100';
+                        errorContainer.classList.remove('hidden');
+                        return false;
+                    }
+
+                    return true;
+                };
+
+                // Event handlers
+                cancelButton.addEventListener('click', () => {
+                    modalControl.close();
+                });
+
+                saveButton.addEventListener('click', async () => {
+                    if (!validateForm()) return;
+
+                    try {
+                        // Show loading state
+                        saveButton.disabled = true;
+                        saveButton.innerHTML = `
+                            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Updating...
+                        `;
+
+                        // Prepare tax data
+                        const taxCharge = {
+                            name: taxNameInput.value.trim(),
+                            value: parseFloat(taxValueInput.value),
+                            type: taxTypeInput.value
+                        };
+
+                        // Get all products for this seller
+                        const productsSnapshot = await window.sdk.db.collection("Product")
+                            .where("sellerId", "==", seller.id)
+                            .get();
+
+                        let successCount = 0;
+                        const totalProducts = productsSnapshot.size;
+
+                        // Update each product with the new tax configuration
+                        const batch = window.sdk.db.firestore.batch();
+
+                        productsSnapshot.forEach(doc => {
+                            const productData = doc.data();
+
+                            // Replace existing tax charges with the new one
+                            productData.charges = [taxCharge];
+
+                            // Update the product in the batch
+                            batch.update(doc.ref, { charges: productData.charges });
+                            successCount++;
+                        });
+
+                        // Commit all updates
+                        await batch.commit();
+
+                        window.ModalManager.showToast(`Successfully updated tax for ${successCount} products`);
+                        modalControl.close();
+                    } catch (error) {
+                        console.error('Error updating product taxes:', error);
+                        errorContainer.textContent = 'Failed to update product taxes. Please try again.';
+                        errorContainer.classList.remove('hidden');
+
+                        // Reset button
+                        saveButton.disabled = false;
+                        saveButton.textContent = 'Update All Products';
+                    }
+                });
+            }
+        });
+    };
+
+    // Handle product import
+    const handleProductImport = () => {
+        if (!window.ModalManager || !window.sdk) {
+            showToast("System components not loaded. Please try again later.");
+            return;
+        }
+
+        // Create modal
+        const modal = window.ModalManager.createCenterModal({
+            id: 'import-products-modal',
+            title: "Bulk Import Products",
+            content: `
+                <div class="p-4 text-center">
+                    <div class="mb-6">
+                        <p class="font-medium text-gray-700">Step 1</p>
+                        <div class="flex justify-center items-center mt-2">
+                            <span class="text-gray-700 mr-2">Download template file:</span>
+                            <a href="https://firebasestorage.googleapis.com/v0/b/frihbi-app.appspot.com/o/assets%2FImport%20Product%20Sample%20sheet.xlsx?alt=media" class="text-red-500 font-medium hover:underline" download>Sample.xlsx</a>
+                        </div>
+                    </div>
+                    <div class="mb-6">
+                        <p class="font-medium text-gray-700">Step 2</p>
+                        <div id="file-upload-area" class="mt-2 border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:bg-gray-50">
+                            <i class="ph ph-upload text-gray-400 text-4xl"></i>
+                            <p class="mt-2 font-medium">Upload .csv / .xlsx</p>
+                            <p class="text-sm text-gray-500">Max file size 20mb and 100 products</p>
+                            <input type="file" id="import-file" class="hidden" accept=".csv, .xlsx" />
+                        </div>
+                    </div>
+                </div>
+            `,
+            actions: `
+                <div class="flex justify-center p-4">
+                    <button id="start-import-btn" class="px-8 py-3 bg-red-500 text-white rounded-md font-medium">Start</button>
+                </div>
+            `,
+            size: 'md',
+            onShown: (modalControl) => {
+                const fileUploadArea = document.getElementById('file-upload-area');
+                const importFileInput = document.getElementById('import-file');
+                const startImportBtn = document.getElementById('start-import-btn');
+
+                let selectedFile = null;
+
+                // Handle file upload area click
+                fileUploadArea.addEventListener('click', () => {
+                    importFileInput.click();
+                });
+
+                // Handle file selection
+                importFileInput.addEventListener('change', (e) => {
+                    if (e.target.files.length > 0) {
+                        selectedFile = e.target.files[0];
+
+                        // Update the upload area UI to show selected file
+                        fileUploadArea.innerHTML = `
+                            <i class="ph ph-check-circle text-green-500 text-4xl"></i>
+                            <p class="mt-2 font-medium">${selectedFile.name}</p>
+                            <p class="text-sm text-gray-500">${Math.round(selectedFile.size / 1024)} KB</p>
+                            <input type="file" id="import-file" class="hidden" accept=".csv, .xlsx" />
+                        `;
+                    }
+                });
+
+                // Handle import start
+                startImportBtn.addEventListener('click', async () => {
+                    if (!selectedFile) {
+                        window.ModalManager.showToast('Please select a file to import');
+                        return;
+                    }
+
+                    try {
+                        // Show loading state
+                        startImportBtn.disabled = true;
+                        startImportBtn.innerHTML = `
+                            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Uploading...
+                        `;
+
+                        // Read file as array buffer for Firebase Storage
+                        const fileReader = new FileReader();
+                        fileReader.onload = async (event) => {
+                            try {
+                                const fileData = event.target.result;
+
+                                // Generate a unique storage path
+                                const storagePath = `seller/${seller.id}/import_product_${Date.now()}.xlsx`;
+
+                                // Get a reference to the storage location
+                                const storageRef = window.sdk.storage.ref(storagePath);
+
+                                // Upload the file
+                                await storageRef.put(new Uint8Array(fileData));
+
+                                window.ModalManager.showToast('File uploaded successfully. Products will be imported in the background.');
+                                modalControl.close();
+                            } catch (error) {
+                                console.error('Error uploading file:', error);
+                                window.ModalManager.showToast('Failed to upload file. Please try again.');
+
+                                // Reset button
+                                startImportBtn.disabled = false;
+                                startImportBtn.textContent = 'Start';
+                            }
+                        };
+
+                        fileReader.readAsArrayBuffer(selectedFile);
+                    } catch (error) {
+                        console.error('Error starting import:', error);
+                        window.ModalManager.showToast('Failed to start import. Please try again.');
+
+                        // Reset button
+                        startImportBtn.disabled = false;
+                        startImportBtn.textContent = 'Start';
+                    }
+                });
+            }
+        });
     };
 
     // Handle printer management
@@ -1168,6 +2384,916 @@ function Dashboard() {
                 }
             });
         }
+
+        // Get managed printers from BluetoothPrinting
+        const bluetoothPrinting = window.BluetoothPrinting;
+        const managedPrinters = bluetoothPrinting ? bluetoothPrinting.getSavedPrinters() : [];
+
+        // Get currently connected printer info
+        const currentlyConnected = bluetoothPrinting && bluetoothPrinting.connected;
+        const connectedDevice = bluetoothPrinting && bluetoothPrinting.device;
+        const connectedDeviceId = connectedDevice ? connectedDevice.id : null;
+        const connectedDeviceName = connectedDevice ? connectedDevice.name : null;
+
+        // Create modal
+        const modal = window.ModalManager.createCenterModal({
+            id: 'printer-management-modal',
+            title: "Printer Management",
+            content: `
+                <div class="p-5">
+                    <div id="printer-error-container" class="mb-4 hidden p-3 bg-red-50 text-red-700 rounded-lg"></div>
+                    
+                    <div class="mb-5">
+                        <p class="text-sm text-gray-600 leading-relaxed">
+                            Configure printers for different order channels. You can assign specific printers for KOT (Kitchen Order Ticket) and bills.
+                        </p>
+                    </div>
+                    
+                    <div class="mb-5">
+                        <div class="flex items-center">
+                            <div class="w-3 h-3 rounded-full ${currentlyConnected ? 'bg-green-500' : 'bg-gray-300'} mr-2"></div>
+                            <span class="text-sm ${currentlyConnected ? 'text-green-600' : 'text-gray-500'} font-medium">
+                                ${currentlyConnected ? 'Printer Connected' : 'No Printer Connected'}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <!-- Printer List -->
+                    <div id="printer-list" class="mb-5 space-y-4">
+                        ${currentlyConnected && connectedDevice ? `
+                        <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200 shadow-sm">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center">
+                                    <div class="w-10 h-10 bg-gradient-to-br from-green-100 to-green-200 rounded-lg flex items-center justify-center mr-3 shadow-sm">
+                                        <i class="ph ph-printer text-green-600 text-xl"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-medium text-gray-800 flex items-center">
+                                            ${connectedDeviceName || 'Connected Printer'}
+                                            <span class="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full flex items-center">
+                                                <i class="ph ph-plug text-green-600 mr-1 text-xs"></i>Connected Now
+                                            </span>
+                                        </h4>
+                                        <p class="text-xs text-gray-500">${connectedDeviceId || 'Unknown ID'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        ${!managedPrinters.length && !currentlyConnected ? `
+                            <div class="text-center py-8 bg-gradient-to-br from-gray-50 to-white rounded-lg border border-dashed border-gray-300">
+                                <div class="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm">
+                                    <i class="ph ph-printer text-gray-400 text-3xl"></i>
+                                </div>
+                                <p class="text-gray-500 mb-1">No printers configured</p>
+                                <p class="text-xs text-gray-400">Connect a Bluetooth printer to get started</p>
+                            </div>
+                        ` : ''}
+                        
+                        ${managedPrinters.map((printer, index) => {
+                // Determine if this printer is connected - check both id and name
+                const isPrinterConnected = currentlyConnected && (
+                    (connectedDeviceId && printer.deviceId === connectedDeviceId) ||
+                    (connectedDeviceName && printer.deviceName === connectedDeviceName)
+                );
+
+                // Skip if this is already shown as the connected printer
+                if (isPrinterConnected && currentlyConnected && connectedDevice) {
+                    return '';
+                }
+
+                // Format date added or last connected date
+                let dateInfo = '';
+                if (printer.lastConnected) {
+                    const lastConnectedDate = new Date(printer.lastConnected);
+                    const now = new Date();
+                    const diffMs = now - lastConnectedDate;
+                    const diffMins = Math.round(diffMs / 60000);
+                    const diffHours = Math.round(diffMs / 3600000);
+                    const diffDays = Math.round(diffMs / 86400000);
+
+                    if (diffMins < 1) {
+                        dateInfo = `Connected just now`;
+                    } else if (diffMins < 60) {
+                        dateInfo = `Connected ${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+                    } else if (diffHours < 24) {
+                        dateInfo = `Connected ${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+                    } else {
+                        dateInfo = `Connected ${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+                    }
+                } else if (printer.dateAdded) {
+                    const addedDate = new Date(printer.dateAdded);
+                    dateInfo = `Added on ${addedDate.toLocaleDateString()}`;
+                }
+
+                return `
+                                <div class="printer-item bg-gradient-to-br from-white to-gray-50 border ${isPrinterConnected ? 'border-green-300 ring-1 ring-green-300' : 'border-gray-200'} rounded-lg shadow-sm p-4 transition-all hover:shadow-md" data-printer-id="${printer.id}">
+                                    <div class="flex justify-between items-start mb-3">
+                                        <div class="flex items-center">
+                                            <div class="w-10 h-10 bg-gradient-to-br from-red-50 to-red-100 rounded-lg flex items-center justify-center mr-3 shadow-sm">
+                                                <i class="ph ph-printer text-red-500 text-xl"></i>
+                                            </div>
+                                            <div>
+                                                <h4 class="font-medium text-gray-800">${printer.name || 'Unnamed Printer'}</h4>
+                                                <p class="text-xs text-gray-500">${printer.deviceId || 'Unknown ID'}</p>
+                                                ${dateInfo ? `<p class="text-xs text-gray-500 italic">${dateInfo}</p>` : ''}
+                                            </div>
+                                            ${printer.isDefault ? `<span class="ml-2 px-2 py-0.5 bg-gradient-to-r from-red-100 to-red-50 text-red-700 text-xs rounded-full flex items-center"><i class="ph ph-star-fill text-amber-500 mr-1 text-xs"></i>Default</span>` : ''}
+                                            ${isPrinterConnected ? `<span class="ml-2 px-2 py-0.5 bg-gradient-to-r from-green-100 to-green-50 text-green-700 text-xs rounded-full flex items-center"><i class="ph ph-plug text-green-500 mr-1 text-xs"></i>Connected</span>` : ''}
+                                        </div>
+                                        <div class="flex space-x-1">
+                                            <button class="printer-edit-btn p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors" data-printer-id="${printer.id}" title="Edit printer">
+                                                <i class="ph ph-pencil-simple"></i>
+                                            </button>
+                                            <button class="printer-remove-btn p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100 transition-colors" data-printer-id="${printer.id}" title="Remove printer">
+                                                <i class="ph ph-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Assignments -->
+                                    <div class="mt-3 pt-3 border-t border-gray-200">
+                                        <h5 class="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                                            <i class="ph ph-link text-gray-400 mr-1.5"></i>
+                                            Channel Assignments
+                                        </h5>
+                                        ${printer.assignments && printer.assignments.length > 0 ? `
+                                            <div class="flex flex-wrap gap-2">
+                                                ${printer.assignments.map(assignment => `
+                                                    <div class="inline-flex items-center px-2 py-1 bg-gradient-to-r from-gray-100 to-gray-50 text-xs rounded-md border border-gray-100 shadow-sm">
+                                                        <span class="font-medium">${assignment.channel}</span>
+                                                        <span class="mx-1 text-gray-400">•</span>
+                                                        <span class="text-${assignment.printType === 'all' ? 'blue' : assignment.printType === 'kot' ? 'green' : 'orange'}-500">
+                                                            ${assignment.printType === 'all' ? 'All' : assignment.printType === 'kot' ? 'KOT' : 'Bill'}
+                                                        </span>
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        ` : `
+                                            <p class="text-xs text-gray-500 flex items-center">
+                                                <i class="ph ph-info text-gray-400 mr-1"></i>
+                                                No channel assignments
+                                            </p>
+                                        `}
+                                    </div>
+                                </div>
+                            `;
+            }).join('')}
+                    </div>
+                    
+                    <!-- Add Printer Button -->
+                    <button id="add-printer-btn" class="w-full py-3 border border-dashed border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 hover:shadow-sm transition-all flex items-center justify-center gap-2 bg-gradient-to-r from-white to-gray-50">
+                        <i class="ph ph-plus-circle"></i>
+                        Add New Printer
+                    </button>
+                </div>
+            `,
+            actions: `
+                <div class="flex justify-end px-5 py-4 bg-gradient-to-r from-gray-50 to-white border-t border-gray-100">
+                    <button id="close-printer-management-btn" class="px-4 py-2 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-600">
+                        <i class="ph ph-x"></i>
+                        Close
+                    </button>
+                </div>
+            `,
+            size: 'lg',
+            onShown: (modalControl) => {
+                const errorContainer = document.getElementById('printer-error-container');
+                const addPrinterBtn = document.getElementById('add-printer-btn');
+                const closePrinterManagementBtn = document.getElementById('close-printer-management-btn');
+
+                // Add printer event handler
+                addPrinterBtn.addEventListener('click', () => {
+                    showAddPrinterModal(modalControl);
+                });
+
+                // Close button event handler
+                closePrinterManagementBtn.addEventListener('click', () => {
+                    modalControl.close();
+                });
+
+                // Edit printer event handlers
+                document.querySelectorAll('.printer-edit-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const printerId = btn.getAttribute('data-printer-id');
+                        showEditPrinterModal(printerId, modalControl);
+                    });
+                });
+
+                // Remove printer event handlers
+                document.querySelectorAll('.printer-remove-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const printerId = btn.getAttribute('data-printer-id');
+                        removePrinter(printerId, modalControl);
+                    });
+                });
+            }
+        });
+    };
+
+    // Show add printer modal
+    const showAddPrinterModal = (parentModalControl) => {
+        // Get all available order channels
+        const orderChannels = ['All Channels', 'Default'];
+
+        // Add channels from price variants
+        if (seller?.priceVariants && Array.isArray(seller.priceVariants)) {
+            seller.priceVariants.forEach(variant => {
+                if (variant.title && variant.title !== 'Default' && !orderChannels.includes(variant.title)) {
+                    orderChannels.push(variant.title);
+                }
+            });
+        }
+
+        // Create modal
+        const modal = window.ModalManager.createCenterModal({
+            id: 'add-printer-modal',
+            title: "Add Printer",
+            content: `
+                <div class="p-5 pt-4">
+                    <div id="add-printer-error-container" class="mb-4 hidden p-3 bg-red-50 text-red-700 rounded-lg"></div>
+                    
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">
+                            <i class="ph ph-tag text-gray-400 mr-1.5"></i>
+                            Printer Name
+                        </label>
+                        <input
+                            type="text"
+                            id="printer-name-input"
+                            class="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-gradient-to-r from-white to-gray-50 shadow-sm"
+                            placeholder="e.g. Kitchen Printer"
+                        />
+                    </div>
+                    
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="block text-sm font-medium text-gray-700">
+                                <i class="ph ph-bluetooth text-gray-400 mr-1.5"></i>
+                                Bluetooth Device
+                            </label>
+                            <button id="select-device-btn" class="text-xs text-red-500 hover:text-red-600 flex items-center gap-1 transition-colors">
+                                <i class="ph ph-scan"></i>
+                                Select Device
+                            </button>
+                        </div>
+                        <div id="selected-device-container" class="border rounded-lg p-4 flex items-center justify-between bg-gradient-to-r from-gray-50 to-white shadow-sm">
+                            <div id="no-device-selected" class="text-gray-500 text-sm flex items-center">
+                                <i class="ph ph-bluetooth-x text-gray-400 mr-2"></i>
+                                No device selected
+                            </div>
+                            <div id="device-info" class="hidden">
+                                <div class="flex items-center">
+                                    <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center mr-2 shadow-sm">
+                                        <i class="ph ph-bluetooth text-blue-500"></i>
+                                    </div>
+                                    <div>
+                                        <div id="device-name" class="font-medium"></div>
+                                        <div id="device-id" class="text-xs text-gray-500"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="flex items-center p-2 hover:bg-gray-50 rounded-md cursor-pointer transition-colors">
+                            <input
+                                type="checkbox"
+                                id="is-default-printer-input"
+                                class="w-4 h-4 text-red-600 rounded focus:ring-red-500"
+                            />
+                            <div class="ml-2">
+                                <div class="text-sm text-gray-700 font-medium">Set as default printer</div>
+                                <div class="text-xs text-gray-500">This printer will be used when no specific printer is assigned</div>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div class="mb-5">
+                        <label class="flex items-center p-2 hover:bg-gray-50 rounded-md cursor-pointer transition-colors">
+                            <input
+                                type="checkbox"
+                                id="add-assignments-input"
+                                class="w-4 h-4 text-red-600 rounded focus:ring-red-500"
+                            />
+                            <div class="ml-2">
+                                <div class="text-sm text-gray-700 font-medium">Add channel assignments</div>
+                                <div class="text-xs text-gray-500">Configure which channels and print types use this printer</div>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div id="assignments-container" class="hidden space-y-4 p-4 border border-gray-200 rounded-lg bg-gradient-to-r from-gray-50 to-white shadow-sm">
+                        <div id="assignments-list" class="space-y-4">
+                            <div class="assignment-entry grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 mb-1.5 flex items-center">
+                                        <i class="ph ph-storefront text-gray-400 mr-1"></i>
+                                        Channel
+                                    </label>
+                                    <select class="assignment-channel w-full px-3 py-2 border rounded-lg text-sm bg-white shadow-sm focus:ring-2 focus:ring-red-500 focus:outline-none">
+                                        ${orderChannels.map(channel => `
+                                            <option value="${channel}">${channel}</option>
+                                        `).join('')}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 mb-1.5 flex items-center">
+                                        <i class="ph ph-printer text-gray-400 mr-1"></i>
+                                        Print Type
+                                    </label>
+                                    <select class="assignment-type w-full px-3 py-2 border rounded-lg text-sm bg-white shadow-sm focus:ring-2 focus:ring-red-500 focus:outline-none">
+                                        <option value="all">All</option>
+                                        <option value="kot">KOT Only</option>
+                                        <option value="bill">Bill Only</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button id="add-assignment-btn" class="w-full py-2 border border-dashed border-gray-300 text-gray-600 rounded-md hover:bg-gray-50 hover:shadow-sm transition-all flex items-center justify-center text-sm gap-1">
+                            <i class="ph ph-plus-circle"></i>
+                            Add Another Assignment
+                        </button>
+                    </div>
+                </div>
+            `,
+            actions: `
+                <div class="flex justify-end px-5 py-4 space-x-3 bg-gradient-to-r from-gray-50 to-white border-t border-gray-100">
+                    <button id="cancel-add-printer-btn" class="px-4 py-2 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-600">
+                        <i class="ph ph-x"></i>
+                        Cancel
+                    </button>
+                    <button id="save-add-printer-btn" class="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-md hover:from-red-600 hover:to-red-700 transition-colors flex items-center gap-2 shadow-sm">
+                        <i class="ph ph-check"></i>
+                        Add Printer
+                    </button>
+                </div>
+            `,
+            size: 'md',
+            onShown: (modalControl) => {
+                const errorContainer = document.getElementById('add-printer-error-container');
+                const printerNameInput = document.getElementById('printer-name-input');
+                const selectDeviceBtn = document.getElementById('select-device-btn');
+                const deviceInfoDiv = document.getElementById('device-info');
+                const noDeviceSelectedDiv = document.getElementById('no-device-selected');
+                const deviceNameDiv = document.getElementById('device-name');
+                const deviceIdDiv = document.getElementById('device-id');
+                const isDefaultPrinterInput = document.getElementById('is-default-printer-input');
+                const addAssignmentsInput = document.getElementById('add-assignments-input');
+                const assignmentsContainer = document.getElementById('assignments-container');
+                const assignmentsList = document.getElementById('assignments-list');
+                const addAssignmentBtn = document.getElementById('add-assignment-btn');
+                const cancelButton = document.getElementById('cancel-add-printer-btn');
+                const saveButton = document.getElementById('save-add-printer-btn');
+
+                let selectedDevice = null;
+
+                // Show/hide assignments based on checkbox
+                addAssignmentsInput.addEventListener('change', () => {
+                    assignmentsContainer.classList.toggle('hidden', !addAssignmentsInput.checked);
+                });
+
+                // Add assignment button event handler
+                addAssignmentBtn.addEventListener('click', () => {
+                    const assignmentEntry = document.createElement('div');
+                    assignmentEntry.className = 'assignment-entry grid grid-cols-2 gap-4 relative';
+                    assignmentEntry.innerHTML = `
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">
+                                Channel
+                            </label>
+                            <select class="assignment-channel w-full px-3 py-2 border rounded-md text-sm">
+                                ${orderChannels.map(channel => `
+                                    <option value="${channel}">${channel}</option>
+                                `).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">
+                                Print Type
+                            </label>
+                            <div class="flex">
+                                <select class="assignment-type w-full px-3 py-2 border rounded-md text-sm">
+                                    <option value="all">All</option>
+                                    <option value="kot">KOT Only</option>
+                                    <option value="bill">Bill Only</option>
+                                </select>
+                                <button class="remove-assignment-btn ml-2 p-1 text-gray-400 hover:text-red-500 rounded hover:bg-gray-100">
+                                    <i class="ph ph-x"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+
+                    assignmentsList.appendChild(assignmentEntry);
+
+                    // Add event listener to the remove button
+                    assignmentEntry.querySelector('.remove-assignment-btn').addEventListener('click', () => {
+                        assignmentEntry.remove();
+                    });
+                });
+
+                // Select device button event handler
+                selectDeviceBtn.addEventListener('click', async () => {
+                    try {
+                        errorContainer.classList.add('hidden');
+
+                        if (!window.BluetoothPrinting) {
+                            throw new Error('Bluetooth printing service not available');
+                        }
+
+                        const bluetoothPrinting = window.BluetoothPrinting;
+
+                        // Check if the browser supports Web Bluetooth
+                        if (!bluetoothPrinting.isSupported()) {
+                            throw new Error('Web Bluetooth is not supported in this browser');
+                        }
+
+                        // Request a Bluetooth device
+                        const device = await navigator.bluetooth.requestDevice({
+                            acceptAllDevices: true,
+                            optionalServices: [
+                                '000018f0-0000-1000-8000-00805f9b34fb',  // Common printer service
+                                '00001101-0000-1000-8000-00805f9b34fb',  // Serial Port Profile
+                                '00001800-0000-1000-8000-00805f9b34fb',  // Generic Access Service
+                                '00001801-0000-1000-8000-00805f9b34fb',  // Generic Attribute Service
+                                '0000180a-0000-1000-8000-00805f9b34fb',  // Device Information Service
+                                '0000ffff-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                                '0000fff0-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                                '0000ff00-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                                '0000fe00-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                                '00010000-0000-1000-8000-00805f9b34fb',  // Vendor specific service
+                                '00000000-0000-1000-8000-00805f9b34fb'   // Vendor specific service
+                            ]
+                        });
+
+                        // Set the selected device
+                        selectedDevice = {
+                            id: device.id,
+                            name: device.name || 'Unknown Device'
+                        };
+
+                        // Update the UI
+                        deviceNameDiv.textContent = selectedDevice.name;
+                        deviceIdDiv.textContent = selectedDevice.id;
+                        deviceInfoDiv.classList.remove('hidden');
+                        noDeviceSelectedDiv.classList.add('hidden');
+
+                        // Set printer name if empty
+                        if (!printerNameInput.value) {
+                            printerNameInput.value = selectedDevice.name;
+                        }
+
+                    } catch (error) {
+                        console.error('Error selecting device:', error);
+                        errorContainer.textContent = `Error: ${error.message}`;
+                        errorContainer.classList.remove('hidden');
+                    }
+                });
+
+                // Cancel button event handler
+                cancelButton.addEventListener('click', () => {
+                    modalControl.close();
+                });
+
+                // Save button event handler
+                saveButton.addEventListener('click', async () => {
+                    try {
+                        // Basic validation
+                        if (!printerNameInput.value.trim()) {
+                            errorContainer.textContent = 'Please enter a printer name';
+                            errorContainer.classList.remove('hidden');
+                            return;
+                        }
+
+                        if (!selectedDevice) {
+                            errorContainer.textContent = 'Please select a Bluetooth device';
+                            errorContainer.classList.remove('hidden');
+                            return;
+                        }
+
+                        // Collect assignments if enabled
+                        const assignments = [];
+                        if (addAssignmentsInput.checked) {
+                            const assignmentEntries = assignmentsList.querySelectorAll('.assignment-entry');
+                            assignmentEntries.forEach(entry => {
+                                const channelSelect = entry.querySelector('.assignment-channel');
+                                const typeSelect = entry.querySelector('.assignment-type');
+
+                                if (channelSelect && typeSelect) {
+                                    assignments.push({
+                                        channel: channelSelect.value,
+                                        printType: typeSelect.value
+                                    });
+                                }
+                            });
+                        }
+
+                        // Create the printer object
+                        const printer = {
+                            name: printerNameInput.value.trim(),
+                            deviceId: selectedDevice.id,
+                            deviceName: selectedDevice.name,
+                            assignments: assignments,
+                            dateAdded: new Date().toISOString()
+                        };
+
+                        // Add the printer to the managed printers list
+                        if (window.BluetoothPrinting) {
+                            const bluetoothPrinting = window.BluetoothPrinting;
+                            bluetoothPrinting.addPrinter(printer, isDefaultPrinterInput.checked);
+
+                            // Show success message
+                            window.ModalManager.showToast('Printer added successfully');
+
+                            // Close the modal
+                            modalControl.close();
+
+                            // Refresh the parent modal
+                            parentModalControl.close();
+                            handlePrinterManagement();
+                        } else {
+                            throw new Error('Bluetooth printing service not available');
+                        }
+                    } catch (error) {
+                        console.error('Error saving printer:', error);
+                        errorContainer.textContent = `Error: ${error.message}`;
+                        errorContainer.classList.remove('hidden');
+                    }
+                });
+            }
+        });
+    };
+
+    // Show edit printer modal
+    const showEditPrinterModal = (printerId, parentModalControl) => {
+        // Get the printer from BluetoothPrinting
+        const bluetoothPrinting = window.BluetoothPrinting;
+        if (!bluetoothPrinting) {
+            window.ModalManager.showToast('Bluetooth printing service not available', 'error');
+            return;
+        }
+
+        const printers = bluetoothPrinting.getSavedPrinters();
+        const printer = printers.find(p => p.id === printerId);
+
+        if (!printer) {
+            window.ModalManager.showToast('Printer not found', 'error');
+            return;
+        }
+
+        // Get all available order channels
+        const orderChannels = ['All Channels', 'Default'];
+
+        // Add channels from price variants
+        if (seller?.priceVariants && Array.isArray(seller.priceVariants)) {
+            seller.priceVariants.forEach(variant => {
+                if (variant.title && variant.title !== 'Default' && !orderChannels.includes(variant.title)) {
+                    orderChannels.push(variant.title);
+                }
+            });
+        }
+
+        // Create modal
+        const modal = window.ModalManager.createCenterModal({
+            id: 'edit-printer-modal',
+            title: "Edit Printer",
+            content: `
+                <div class="p-5 pt-4">
+                    <div id="edit-printer-error-container" class="mb-4 hidden p-3 bg-red-50 text-red-700 rounded-lg"></div>
+                    
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">
+                            <i class="ph ph-tag text-gray-400 mr-1.5"></i>
+                            Printer Name
+                        </label>
+                        <input
+                            type="text"
+                            id="edit-printer-name-input"
+                            class="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-gradient-to-r from-white to-gray-50 shadow-sm"
+                            value="${printer.name || ''}"
+                            placeholder="e.g. Kitchen Printer"
+                        />
+                    </div>
+                    
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="block text-sm font-medium text-gray-700">
+                                <i class="ph ph-bluetooth text-gray-400 mr-1.5"></i>
+                                Bluetooth Device
+                            </label>
+                        </div>
+                        <div id="selected-device-container" class="border rounded-lg p-4 flex items-center justify-between bg-gradient-to-r from-gray-50 to-white shadow-sm">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center mr-2 shadow-sm">
+                                    <i class="ph ph-bluetooth text-blue-500"></i>
+                                </div>
+                                <div>
+                                    <div class="font-medium">${printer.deviceName || 'Unknown Device'}</div>
+                                    <div class="text-xs text-gray-500">${printer.deviceId || ''}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="flex items-center p-2 hover:bg-gray-50 rounded-md cursor-pointer transition-colors">
+                            <input
+                                type="checkbox"
+                                id="edit-is-default-printer-input"
+                                class="w-4 h-4 text-red-600 rounded focus:ring-red-500"
+                                ${printer.isDefault ? 'checked' : ''}
+                            />
+                            <div class="ml-2">
+                                <div class="text-sm text-gray-700 font-medium">Set as default printer</div>
+                                <div class="text-xs text-gray-500">This printer will be used when no specific printer is assigned</div>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div class="mb-5">
+                        <h5 class="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                            <i class="ph ph-link text-gray-400 mr-1.5"></i>
+                            Channel Assignments
+                        </h5>
+                    </div>
+                    
+                    <div id="edit-assignments-container" class="space-y-4 p-4 border border-gray-200 rounded-lg bg-gradient-to-r from-gray-50 to-white shadow-sm">
+                        <div id="edit-assignments-list" class="space-y-4">
+                            ${(printer.assignments || []).map((assignment, index) => `
+                                <div class="assignment-entry grid grid-cols-2 gap-4 relative" data-index="${index}">
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1.5 flex items-center">
+                                            <i class="ph ph-storefront text-gray-400 mr-1"></i>
+                                            Channel
+                                        </label>
+                                        <select class="assignment-channel w-full px-3 py-2 border rounded-lg text-sm bg-white shadow-sm focus:ring-2 focus:ring-red-500 focus:outline-none">
+                                            ${orderChannels.map(channel => `
+                                                <option value="${channel}" ${assignment.channel === channel ? 'selected' : ''}>${channel}</option>
+                                            `).join('')}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1.5 flex items-center">
+                                            <i class="ph ph-printer text-gray-400 mr-1"></i>
+                                            Print Type
+                                        </label>
+                                        <div class="flex">
+                                            <select class="assignment-type w-full px-3 py-2 border rounded-lg text-sm bg-white shadow-sm focus:ring-2 focus:ring-red-500 focus:outline-none">
+                                                <option value="all" ${assignment.printType === 'all' ? 'selected' : ''}>All</option>
+                                                <option value="kot" ${assignment.printType === 'kot' ? 'selected' : ''}>KOT Only</option>
+                                                <option value="bill" ${assignment.printType === 'bill' ? 'selected' : ''}>Bill Only</option>
+                                            </select>
+                                            <button class="remove-assignment-btn ml-2 p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-gray-100 transition-colors">
+                                                <i class="ph ph-x"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        
+                        <button id="edit-add-assignment-btn" class="w-full py-2 border border-dashed border-gray-300 text-gray-600 rounded-md hover:bg-gray-50 hover:shadow-sm transition-all flex items-center justify-center text-sm gap-1">
+                            <i class="ph ph-plus-circle"></i>
+                            Add Assignment
+                        </button>
+                    </div>
+                </div>
+            `,
+            actions: `
+                <div class="flex justify-end px-5 py-4 space-x-3 bg-gradient-to-r from-gray-50 to-white border-t border-gray-100">
+                    <button id="cancel-edit-printer-btn" class="px-4 py-2 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-600">
+                        <i class="ph ph-x"></i>
+                        Cancel
+                    </button>
+                    <button id="save-edit-printer-btn" class="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-md hover:from-red-600 hover:to-red-700 transition-colors flex items-center gap-2 shadow-sm">
+                        <i class="ph ph-check"></i>
+                        Save Changes
+                    </button>
+                </div>
+            `,
+            size: 'md',
+            onShown: (modalControl) => {
+                const errorContainer = document.getElementById('edit-printer-error-container');
+                const printerNameInput = document.getElementById('edit-printer-name-input');
+                const isDefaultPrinterInput = document.getElementById('edit-is-default-printer-input');
+                const assignmentsList = document.getElementById('edit-assignments-list');
+                const addAssignmentBtn = document.getElementById('edit-add-assignment-btn');
+                const cancelButton = document.getElementById('cancel-edit-printer-btn');
+                const saveButton = document.getElementById('save-edit-printer-btn');
+
+                // Add assignment button event handler
+                addAssignmentBtn.addEventListener('click', () => {
+                    const assignmentEntry = document.createElement('div');
+                    assignmentEntry.className = 'assignment-entry grid grid-cols-2 gap-4 relative';
+                    assignmentEntry.innerHTML = `
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1.5 flex items-center">
+                                <i class="ph ph-storefront text-gray-400 mr-1"></i>
+                                Channel
+                            </label>
+                            <select class="assignment-channel w-full px-3 py-2 border rounded-lg text-sm bg-white shadow-sm focus:ring-2 focus:ring-red-500 focus:outline-none">
+                                ${orderChannels.map(channel => `
+                                    <option value="${channel}">${channel}</option>
+                                `).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1.5 flex items-center">
+                                <i class="ph ph-printer text-gray-400 mr-1"></i>
+                                Print Type
+                            </label>
+                            <div class="flex">
+                                <select class="assignment-type w-full px-3 py-2 border rounded-lg text-sm bg-white shadow-sm focus:ring-2 focus:ring-red-500 focus:outline-none">
+                                    <option value="all">All</option>
+                                    <option value="kot">KOT Only</option>
+                                    <option value="bill">Bill Only</option>
+                                </select>
+                                <button class="remove-assignment-btn ml-2 p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-gray-100 transition-colors">
+                                    <i class="ph ph-x"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+
+                    assignmentsList.appendChild(assignmentEntry);
+
+                    // Add event listener to the remove button
+                    assignmentEntry.querySelector('.remove-assignment-btn').addEventListener('click', () => {
+                        assignmentEntry.remove();
+                    });
+                });
+
+                // Add event listeners to existing remove buttons
+                document.querySelectorAll('.remove-assignment-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        btn.closest('.assignment-entry').remove();
+                    });
+                });
+
+                // Cancel button event handler
+                cancelButton.addEventListener('click', () => {
+                    modalControl.close();
+                });
+
+                // Save button event handler
+                saveButton.addEventListener('click', async () => {
+                    try {
+                        // Basic validation
+                        if (!printerNameInput.value.trim()) {
+                            errorContainer.textContent = 'Please enter a printer name';
+                            errorContainer.classList.remove('hidden');
+                            return;
+                        }
+
+                        // Collect assignments
+                        const assignments = [];
+                        const assignmentEntries = assignmentsList.querySelectorAll('.assignment-entry');
+                        assignmentEntries.forEach(entry => {
+                            const channelSelect = entry.querySelector('.assignment-channel');
+                            const typeSelect = entry.querySelector('.assignment-type');
+
+                            if (channelSelect && typeSelect) {
+                                assignments.push({
+                                    channel: channelSelect.value,
+                                    printType: typeSelect.value
+                                });
+                            }
+                        });
+
+                        // Create the update object
+                        const updates = {
+                            name: printerNameInput.value.trim(),
+                            assignments: assignments,
+                            isDefault: isDefaultPrinterInput.checked,
+                            dateModified: new Date().toISOString()
+                        };
+
+                        // Update the printer
+                        bluetoothPrinting.updatePrinter(printerId, updates);
+
+                        // Show success message
+                        window.ModalManager.showToast('Printer updated successfully');
+
+                        // Close the modal
+                        modalControl.close();
+
+                        // Refresh the parent modal
+                        parentModalControl.close();
+                        handlePrinterManagement();
+                    } catch (error) {
+                        console.error('Error updating printer:', error);
+                        errorContainer.textContent = `Error: ${error.message}`;
+                        errorContainer.classList.remove('hidden');
+                    }
+                });
+            }
+        });
+    };
+
+    // Remove a printer
+    const removePrinter = (printerId, parentModalControl) => {
+        // Get the printer service
+        const bluetoothPrinting = window.BluetoothPrinting;
+        if (!bluetoothPrinting) {
+            window.ModalManager.showToast('Bluetooth printing service not available', 'error');
+            return;
+        }
+
+        // Get the printer details
+        const printers = bluetoothPrinting.getSavedPrinters();
+        const printer = printers.find(p => p.id === printerId);
+
+        if (!printer) {
+            window.ModalManager.showToast('Printer not found', 'error');
+            return;
+        }
+
+        // Confirm deletion with a modal
+        const confirmModal = window.ModalManager.createCenterModal({
+            id: 'confirm-delete-printer-modal',
+            title: "Remove Printer",
+            content: `
+                <div class="p-5">
+                    <div class="flex items-center justify-center mb-5">
+                        <div class="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center">
+                            <i class="ph ph-warning-circle text-red-500 text-3xl"></i>
+                        </div>
+                    </div>
+                    
+                    <h3 class="text-lg font-medium text-gray-800 mb-2 text-center">Are you sure?</h3>
+                    
+                    <p class="text-gray-600 text-center mb-4">
+                        You're about to remove the printer <span class="font-medium text-gray-800">${printer.name || 'Unnamed printer'}</span>.
+                        ${printer.isDefault ? '<span class="text-red-500">This is your default printer.</span>' : ''}
+                    </p>
+                    
+                    <div class="bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-100 rounded-lg p-4 mb-4">
+                        <div class="flex items-start">
+                            <div class="flex-shrink-0 mt-0.5">
+                                <i class="ph ph-info text-amber-500 text-lg"></i>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm text-amber-700">
+                                    Any printer assignments to order channels will be removed. This action cannot be undone.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `,
+            actions: `
+                <div class="flex justify-end px-5 py-4 space-x-3 bg-gradient-to-r from-gray-50 to-white border-t border-gray-100">
+                    <button id="cancel-delete-printer-btn" class="px-4 py-2 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-600">
+                        <i class="ph ph-x"></i>
+                        Cancel
+                    </button>
+                    <button id="confirm-delete-printer-btn" class="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-md hover:from-red-600 hover:to-red-700 transition-colors flex items-center gap-2 shadow-sm">
+                        <i class="ph ph-trash"></i>
+                        Remove Printer
+                    </button>
+                </div>
+            `,
+            size: 'sm',
+            onShown: (modalControl) => {
+                const cancelButton = document.getElementById('cancel-delete-printer-btn');
+                const confirmButton = document.getElementById('confirm-delete-printer-btn');
+
+                // Cancel button event handler
+                cancelButton.addEventListener('click', () => {
+                    modalControl.close();
+                });
+
+                // Confirm button event handler
+                confirmButton.addEventListener('click', () => {
+                    try {
+                        // Remove the printer
+                        const result = bluetoothPrinting.removePrinter(printerId);
+
+                        if (result) {
+                            window.ModalManager.showToast('Printer removed successfully');
+
+                            // Close modals
+                            modalControl.close();
+
+                            // Refresh the parent modal
+                            parentModalControl.close();
+                            handlePrinterManagement();
+                        } else {
+                            window.ModalManager.showToast('Failed to remove printer', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error removing printer:', error);
+                        window.ModalManager.showToast(`Error: ${error.message}`, 'error');
+                    }
+                });
+            }
+        });
     };
 
     // Render the dashboard

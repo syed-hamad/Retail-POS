@@ -13,6 +13,9 @@
     <!-- Add Babel Standalone -->
     <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
 
+    <!-- Add html2canvas for receipt printing -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
     <script src="https://cdn.jsdelivr.net/npm/@phosphor-icons/web"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -298,6 +301,9 @@
     <!-- Load our modular Scripts -->
     <script type="text/babel" src="js/utils.js"></script>
     <!-- BluetoothPrinting.js is now loaded in a single place with version parameter -->
+    <!-- PrintTemplate.js must be loaded before BluetoothPrinting.js -->
+    <script type="text/babel" src="js/utils/PrintTemplate.js?v=20240529_113500"></script>
+    <script type="text/babel" src="js/utils/BluetoothPrinting.js?v=20240529_113500"></script>
     <script>
         // Check if BluetoothPrinting initialized properly
         document.addEventListener('DOMContentLoaded', function () {
@@ -369,8 +375,6 @@
 
     <!-- Ensure ModalManager is loaded before any component that might use it -->
     <script src="js/components/ModalManager.js"></script>
-    <!-- Load BluetoothPrinting with version parameter to force refresh -->
-    <script type="text/babel" src="js/utils/BluetoothPrinting.js?v=20240529_113500"></script>
     <script>
         // Ensure BluetoothPrinting is properly initialized
         (function () {
