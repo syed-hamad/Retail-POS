@@ -359,7 +359,8 @@ class PrintTemplate {
             commands.push(monochromeData[i]);
         }
 
-        // Add cut at the end
+        // Add feed and cut at the end
+        commands.push(0x1B, 0x64, 0x02); // Feed 2 line
         commands.push(0x1D, 0x56, 0x41, 0); // Partial cut
 
         return new Uint8Array(commands);
