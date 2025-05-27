@@ -272,25 +272,20 @@ class BluetoothPrinting {
         console.log("Printer data size:", data.byteLength, "bytes");
 
         const MAX_RETRIES = 3;
-        const RETRY_DELAY_MS = 500; // Increased retry delay
-        const INTER_CHUNK_DELAY_MS = 100; // Increased delay between chunks
+        const RETRY_DELAY_MS = 300; // Increased retry delay
+        const INTER_CHUNK_DELAY_MS = 20; // Increased delay between chunks
         const DEFAULT_CHUNK_SIZE = 300; // Smaller chunk size for better reliability
 
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
                 // Get the best chunk size, but don't exceed our default
-                const CHUNK_SIZE = (this.characteristic?.service?.device?.gatt?.server?.maxGATTCharacteristicWriteSize)
-                    ? Math.min(this.characteristic.service.device.gatt.server.maxGATTCharacteristicWriteSize, DEFAULT_CHUNK_SIZE)
-                    : DEFAULT_CHUNK_SIZE;
+                const maxSize = this.characteristic?.service?.device?.gatt?.server?.maxGATTCharacteristicWriteSize;
+                const CHUNK_SIZE = maxSize ? Math.min(maxSize, DEFAULT_CHUNK_SIZE) : DEFAULT_CHUNK_SIZE;
+                console.log("Max size:", maxSize, "Chunk size:", CHUNK_SIZE);
 
                 // Break data into chunks and send with delays between chunks
                 for (let i = 0; i < data.length; i += CHUNK_SIZE) {
                     const chunk = data.slice(i, i + CHUNK_SIZE);
-
-                    // Log progress for debugging
-                    if (i % 1000 === 0 || i + CHUNK_SIZE >= data.length) {
-                        console.log(`Sending chunk ${i}-${i + chunk.length} of ${data.length} bytes`);
-                    }
 
                     // Choose write method based on characteristic properties
                     if (this.characteristic.properties.writeWithoutResponse) {

@@ -1474,9 +1474,6 @@ function Dashboard() {
                     <div class="space-y-4">
                         <div class="flex justify-between items-center">
                             <h3 class="text-lg font-medium">Live Preview</h3>
-                            <button id="preview-fullscreen-btn" class="p-2 text-red-500 hover:bg-red-50 rounded-full">
-                                <i class="ph ph-arrows-out"></i>
-                            </button>
                         </div>
                         
                         <div class="bg-gray-50 p-3 rounded-md text-sm text-gray-700 flex items-start">
@@ -1514,7 +1511,6 @@ function Dashboard() {
                 const saveBtn = document.getElementById('save-template-btn');
                 const errorContainer = document.getElementById('print-template-error-container');
                 const livePreviewContainer = document.getElementById('live-preview-container');
-                const previewFullscreenBtn = document.getElementById('preview-fullscreen-btn');
 
                 let currentTemplateType = 'bill';
                 let templates = {};
@@ -1994,31 +1990,6 @@ function Dashboard() {
                     }
                 }
 
-                // Preview template in a standalone modal
-                function previewTemplate() {
-                    window.ModalManager.createCenterModal({
-                        id: 'preview-modal',
-                        title: `Preview: ${currentTemplateType.toUpperCase()} Template`,
-                        content: `
-                            <div class="p-4 bg-white">
-                                <div class="border-2 border-dashed border-gray-300 p-4 rounded-lg">
-                                    ${generatePreviewHTML(currentTemplateType)}
-                                </div>
-                            </div>
-                        `,
-                        actions: `
-                            <div class="flex justify-end p-4">
-                                <button id="close-preview-btn" class="px-4 py-2 bg-red-500 text-white rounded-md">Close</button>
-                            </div>
-                        `,
-                        onShown: (previewModalControl) => {
-                            document.getElementById('close-preview-btn').addEventListener('click', () => {
-                                previewModalControl.close();
-                            });
-                        }
-                    });
-                }
-
                 // Save template
                 async function saveTemplate() {
                     try {
@@ -2060,121 +2031,6 @@ function Dashboard() {
                 refreshPreviewBtn.addEventListener('click', updateLivePreview);
                 resetBtn.addEventListener('click', resetToDefault);
                 saveBtn.addEventListener('click', saveTemplate);
-                previewFullscreenBtn.addEventListener('click', showFullscreenPreview);
-
-                // Show fullscreen preview in a side modal
-                function showFullscreenPreview() {
-                    // Generate the preview HTML once to ensure consistency
-                    const previewHtml = generatePreviewHTML(currentTemplateType);
-
-                    window.ModalManager.createSideDrawerModal({
-                        id: 'fullscreen-preview-modal',
-                        title: `${currentTemplateType.toUpperCase()} Template Preview`,
-                        content: `
-                            <div class="p-4 bg-white">
-                                <!-- Mobile handle bar - only visible on mobile -->
-                                <div class="lg:hidden w-full flex justify-center mb-2">
-                                    <div class="w-12 h-1 bg-gray-300 rounded-full"></div>
-                                </div>
-                                
-                                <!-- Content -->
-                                <div class="flex flex-col lg:flex-row gap-4">
-                                    <div class="w-full lg:w-1/2">
-                                        <div class="border-2 border-dashed border-gray-300 p-4 rounded-lg">
-                                            ${previewHtml}
-                                        </div>
-                                    </div>
-                                    <div class="w-full lg:w-1/2 mt-4 lg:mt-0">
-                                        <div class="bg-gray-50 p-4 rounded-lg">
-                                            <h3 class="font-medium text-gray-700 mb-2">What You're Seeing</h3>
-                                            <p class="text-sm text-gray-600 mb-3">This is a preview of how your ${currentTemplateType} will look when printed.</p>
-                                            
-                                            <h4 class="font-medium text-gray-700 mt-4 mb-1">Applied Settings</h4>
-                                            <ul class="text-sm text-gray-600 list-disc pl-5 space-y-1">
-                                                <li>Paper width: 58mm (standard thermal receipt)</li>
-                                                <li>Font: Courier (standard receipt font)</li>
-                                                <li>${templates[currentTemplateType].sections.length} template sections</li>
-                                                <li>Formatting includes alignment, font size, and styles</li>
-                                                <li>All variables will be replaced with actual values when printing</li>
-                                            </ul>
-                                            
-                                            <h4 class="font-medium text-gray-700 mt-4 mb-1">When Printing</h4>
-                                            <p class="text-sm text-gray-600">The actual printed receipt will have proper spacing and formatting for thermal printers.</p>
-                                            
-                                            <div class="mt-5 pt-5 border-t border-gray-200">
-                                                <div class="flex flex-col sm:flex-row sm:justify-between gap-2">
-                                                    <button id="print-test-button" class="px-4 py-2 border rounded-md hover:bg-gray-50 flex justify-center items-center">
-                                                        <i class="ph ph-printer mr-1"></i> Print Test
-                                                    </button>
-                                                    <button id="continue-editing-btn" class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 flex justify-center items-center">
-                                                        Continue Editing
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        `,
-                        width: '95%',
-                        customClass: 'rounded-t-xl lg:rounded-l-xl lg:rounded-tr-none',
-                        onShown: (previewModalControl) => {
-                            // Continue editing button closes the preview
-                            document.getElementById('continue-editing-btn').addEventListener('click', () => {
-                                previewModalControl.close();
-                            });
-
-                            // Print test button would show a preview using browser printing
-                            const printTestBtn = document.getElementById('print-test-button');
-                            if (printTestBtn) {
-                                printTestBtn.addEventListener('click', async () => {
-                                    try {
-                                        // Check if BluetoothPrinting is available for browser printing
-                                        if (!window.BluetoothPrinting || !window.PrintTemplate) {
-                                            window.ModalManager.showToast('Printing service not available', 'error');
-                                            return;
-                                        }
-
-                                        // Create a mock test order
-                                        const testOrder = {
-                                            id: 'TEST-' + Math.floor(Math.random() * 10000),
-                                            billNo: 'TEST-' + Math.floor(Math.random() * 10000),
-                                            date: new Date(),
-                                            tableId: 'Test',
-                                            priceVariant: 'Dine-in',
-                                            items: [
-                                                { title: 'Test Item 1', quantity: 2, price: 299.50 },
-                                                { title: 'Test Item 2', quantity: 1, price: 199.00 }
-                                            ],
-                                            discount: 50,
-                                            charges: [
-                                                { name: 'Service Charge', value: 30 }
-                                            ],
-                                            total: 479.00,
-                                            payMode: 'CASH'
-                                        };
-
-                                        // Generate HTML using PrintTemplate directly
-                                        const currentTemplate = templates[currentTemplateType];
-                                        const template = new window.PrintTemplate({
-                                            orderData: testOrder,
-                                            type: currentTemplateType,
-                                            templateData: currentTemplate
-                                        });
-                                        const receiptHtml = template.toHTML();
-
-                                        // Use BluetoothPrinting for browser printing
-                                        await window.BluetoothPrinting.browserPrint(receiptHtml, false);
-
-                                    } catch (error) {
-                                        console.error('Test print error:', error);
-                                        window.ModalManager.showToast('Error generating preview: ' + error.message, 'error');
-                                    }
-                                });
-                            }
-                        }
-                    });
-                }
 
                 // Add this right after templates initialization in onShown
                 // Debug logging for template initialization

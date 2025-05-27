@@ -253,10 +253,8 @@ class PrintTemplate {
             backgroundColor: 'white'
         });
 
-        // Get image data
-        const imageDataUrl = canvasResult.toDataURL('image/png');
-
         // Preview image in new tab
+        const imageDataUrl = canvasResult.toDataURL('image/png');
         const previewWindow = window.open();
         previewWindow.document.write(`<img src="${imageDataUrl}" alt="Receipt Preview">`);
 
@@ -269,10 +267,12 @@ class PrintTemplate {
         // Initialize printer
         commands.push(0x1B, 0x40); // ESC @ - Initialize printer
 
-        // Convert the canvas to 1-bit monochrome bitmap data
+        // Get image data
         const imageData = ctx.getImageData(0, 0, width, height);
         const pixels = imageData.data;
         const widthBytes = Math.ceil(width / 8);
+
+        // Pre-allocate the buffer for better performance
         const monochromeData = new Uint8Array(widthBytes * height);
 
         // Convert RGBA to 1-bit monochrome with improved contrast
@@ -294,6 +294,7 @@ class PrintTemplate {
             }
         }
 
+        // OPTIMIZATION: Use more efficient raster bit image command
         // GS v 0 - Print raster bit image
         commands.push(0x1D, 0x76, 0x30, 0);
 
@@ -306,8 +307,7 @@ class PrintTemplate {
             commands.push(monochromeData[i]);
         }
 
-        // Add feed and cut at the end
-        commands.push(0x1B, 0x64, 4); // Feed 4 lines
+        // Add cut at the end
         commands.push(0x1D, 0x56, 0x41, 0); // Partial cut
 
         return new Uint8Array(commands);
