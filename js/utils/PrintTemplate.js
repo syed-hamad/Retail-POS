@@ -145,7 +145,7 @@ class PrintTemplate {
      */
     toHTML() {
         // Generate the content HTML
-        let contentHtml = `<div class="printer-container w-full max-w-[58mm] mx-auto p-0">`;
+        let contentHtml = `<div class="printer-container w-full max-w-[58mm] mx-auto p-0 text-black">`;
 
         this.sections.forEach(section => {
             const sectionHtml = section.toHTML();
@@ -323,7 +323,7 @@ class PrintTemplate {
         }
 
         // Feed paper and cut
-        commands.push(0x1B, 0x64, 0x05); // Feed 5 lines
+        commands.push(0x1B, 0x64, 0x02); // Feed 5 lines
         commands.push(0x1D, 0x56, 0x41, 0x10); // Paper cut
 
         // Log command length for debugging
