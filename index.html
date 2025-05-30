@@ -13,8 +13,11 @@
     <!-- Add Babel Standalone for React -->
     <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
 
-    <!-- Add html2canvas for receipt printing -->
-    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <!-- Add modern-screenshot for screenshotting -->
+    <script type="module">
+        import * as modernScreenshot from 'https://unpkg.com/modern-screenshot?module';
+        window.modernScreenshot = modernScreenshot; // Make it available globally
+    </script>
 
     <script src="https://cdn.jsdelivr.net/npm/@phosphor-icons/web"></script>
     <script src="https://cdn.tailwindcss.com"></script>

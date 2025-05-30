@@ -145,7 +145,7 @@ class PrintTemplate {
      */
     toHTML() {
         // Generate the content HTML
-        let contentHtml = `<div class="printer-container w-full max-w-[58mm] mx-auto">`;
+        let contentHtml = `<div class="printer-container w-full max-w-[58mm] mx-auto p-0">`;
 
         this.sections.forEach(section => {
             const sectionHtml = section.toHTML();
@@ -161,27 +161,6 @@ class PrintTemplate {
         return `
             <html>
                 <head>
-                    <title>Print Preview</title>
-                    <style>
-                        @media print {
-                            @page { 
-                                size: 58mm auto;
-                                margin: 0;
-                            }
-                            body { 
-                                width: 58mm;
-                            }
-                        }
-                        
-                        body {
-                            font-family: monospace;
-                            line-height: 1;
-                            font-size: 10px;
-                            width: 58mm;
-                            margin: 0 auto;
-                            padding: 1px;
-                        }
-                    </style>
                     <script src="https://cdn.tailwindcss.com"></script>
                 </head>
                 <body>${contentHtml}</body>
@@ -201,27 +180,23 @@ class PrintTemplate {
         const iframe = document.createElement('iframe');
         iframe.style.visibility = 'hidden';
         iframe.style.position = 'absolute';
-        iframe.style.width = '58mm'; // The HTML content is designed for 58mm
-        iframe.style.height = 'auto'; // Let height adjust to content
         document.body.appendChild(iframe);
 
-        // Write HTML content to iframe
+        // Write HTML content to iframe with additional styles to remove margins
         iframe.contentDocument.open();
         iframe.contentDocument.write(htmlContent);
         iframe.contentDocument.close();
 
-        // Wait for iframe content to load
+        // Wait for iframe content to load any images
         await new Promise(resolve => {
             iframe.onload = resolve;
             setTimeout(resolve, 1000); // Fallback timeout
         });
 
-        // Create canvas and get context
-        const canvas = document.createElement('canvas');
-        const receiptContent = iframe.contentDocument.body;
+        // Get the printer container element directly
+        const receiptContent = iframe.contentDocument.querySelector('.printer-container');
 
         // Force a layout calculation to ensure accurate dimensions
-        receiptContent.style.width = '58mm';
         receiptContent.style.margin = '0';
         receiptContent.style.padding = '0';
 
@@ -229,86 +204,26 @@ class PrintTemplate {
         await new Promise(resolve => setTimeout(resolve, 100));
 
         // Get the content dimensions after layout is stable
-        const contentWidth = receiptContent.scrollWidth;
-        const contentHeight = receiptContent.scrollHeight;
+        const width = receiptContent.offsetWidth;
+        const height = receiptContent.offsetHeight;
 
-        console.log(`Receipt content dimensions: ${contentWidth}x${contentHeight}`);
+        console.log(`Receipt content dimensions: ${width}x${height}`);
 
-        // Increase the width to match standard 58mm thermal printer (384 dots)
-        // Most 58mm thermal printers have a print width of 48mm (384 dots at 8 dots/mm)
-        const width = 384;
-
-        // Calculate height based on content with proper scaling
-        // Use a fixed scale factor that maintains the aspect ratio
-        const scaleFactor = width / contentWidth;
-        const height = Math.ceil(contentHeight * scaleFactor);
-
-        console.log(`Canvas dimensions: ${width}x${height} (scale: ${scaleFactor})`);
-
-        canvas.width = width;
-        canvas.height = height;
-
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, width, height);
-
-        // Apply the scale to maintain aspect ratio
-        ctx.scale(scaleFactor, scaleFactor);
-
-        // Use html2canvas to render the content to canvas
-        // Check if html2canvas is available
-        if (typeof html2canvas === 'undefined') {
-            console.error('html2canvas library is required but not loaded');
-            throw new Error('html2canvas library is required');
+        // Check if modern-screenshot is available
+        if (typeof modernScreenshot === 'undefined') {
+            console.error('modern-screenshot library is required but not loaded');
+            throw new Error('modern-screenshot library is required');
         }
 
-        const canvasResult = await html2canvas(receiptContent, {
-            canvas: canvas,
-            width: contentWidth,
-            height: contentHeight,
-            scale: 1, // We're already handling scaling above
-            useCORS: true,
-            backgroundColor: 'white',
-            logging: true, // Enable logging for debugging
-            onclone: (clonedDoc) => {
-                // Ensure the cloned document has proper styling
-                const clonedBody = clonedDoc.body;
-                clonedBody.style.width = '58mm';
-                clonedBody.style.margin = '0';
-                clonedBody.style.padding = '0';
-            }
+        // Capture the receipt content as PNG - capture only the container, not the body
+        const pngDataUrl = await modernScreenshot.domToPng(receiptContent, {
+            width: width,
+            height: height,
+            backgroundColor: '#FFFFFF',
         });
 
-        // // Preview image in new tab with both the image and HTML for comparison
-        // const imageDataUrl = canvasResult.toDataURL('image/png');
-        // const previewWindow = window.open();
-        // previewWindow.document.write(`
-        //     <html>
-        //     <head>
-        //         <title>Receipt Preview</title>
-        //         <style>
-        //             body { display: flex; flex-direction: column; align-items: center; }
-        //             .preview-container { display: flex; gap: 20px; margin-top: 20px; }
-        //             .preview-section { border: 1px solid #ccc; padding: 10px; }
-        //         </style>
-        //     </head>
-        //     <body>
-        //         <h2>Receipt Preview</h2>
-        //         <div class="preview-container">
-        //             <div class="preview-section">
-        //                 <h3>Canvas Render</h3>
-        //                 <img src="${imageDataUrl}" alt="Receipt Preview">
-        //             </div>
-        //             <div class="preview-section">
-        //                 <h3>HTML Render</h3>
-        //                 <div style="width: 58mm; border: 1px dashed #ccc;">
-        //                     ${receiptContent.innerHTML}
-        //                 </div>
-        //             </div>
-        //         </div>
-        //     </body>
-        //     </html>
-        // `);
+        // Open preview window
+        this._openPreviewWindow(pngDataUrl, receiptContent);
 
         // Clean up
         document.body.removeChild(iframe);
@@ -319,26 +234,74 @@ class PrintTemplate {
         // Initialize printer
         commands.push(0x1B, 0x40); // ESC @ - Initialize printer
 
-        // Get image data
-        const imageData = ctx.getImageData(0, 0, width, height);
+        // Set print density and print speed to maximum density
+        commands.push(0x1D, 0x28, 0x4B, 0x02, 0x00, 0x32, 0x04); // GS ( K pL pH fn m (density=4, highest)
+
+        // Set print density to highest level for darker print
+        commands.push(0x1D, 0x7C, 0x08); // GS | n - Set print density to maximum (8)
+
+        // Create a temporary canvas to process the image
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = pngDataUrl;
+        });
+
+        // Calculate optimal printer width in pixels (standard thermal printer is 384px)
+        const printerWidthPx = 384;
+
+        // Create canvas with full printer width
+        const canvas = document.createElement('canvas');
+
+        // Use the content width we already have for scaling calculation
+        const scaleFactor = printerWidthPx / width;
+
+        canvas.width = printerWidthPx;
+        canvas.height = Math.round(height * scaleFactor);
+
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Draw image scaled to fill width
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        // Apply contrast enhancement
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const pixels = imageData.data;
-        const widthBytes = Math.ceil(width / 8);
+
+        // Enhance contrast for better printing
+        for (let i = 0; i < pixels.length; i += 4) {
+            // Get grayscale value
+            const avg = (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
+
+            // Apply extreme contrast for very dark prints
+            const newVal = avg < 200 ? 0 : 255; // Binary threshold for maximum contrast
+
+            pixels[i] = pixels[i + 1] = pixels[i + 2] = newVal;
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+
+        // Calculate bytes per line for the printer
+        const widthBytes = Math.ceil(canvas.width / 8);
 
         // Pre-allocate the buffer for better performance
-        const monochromeData = new Uint8Array(widthBytes * height);
+        const monochromeData = new Uint8Array(widthBytes * canvas.height);
 
         // Convert RGBA to 1-bit monochrome with improved contrast
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                const pixelIndex = (y * width + x) * 4;
+        for (let y = 0; y < canvas.height; y++) {
+            for (let x = 0; x < canvas.width; x++) {
+                const pixelIndex = (y * canvas.width + x) * 4;
                 // Calculate grayscale value with better weighting for human perception
                 const grayscale =
                     0.299 * pixels[pixelIndex] +
                     0.587 * pixels[pixelIndex + 1] +
                     0.114 * pixels[pixelIndex + 2];
 
-                // Use a lower threshold to make more pixels print (darker output)
-                if (grayscale < 180) { // Higher threshold = more black pixels
+                // Use a much higher threshold for significantly darker print
+                if (grayscale < 220) { // Much higher threshold = much darker print
                     const byteIndex = y * widthBytes + Math.floor(x / 8);
                     const bitIndex = 7 - (x % 8); // MSB first
                     monochromeData[byteIndex] |= (1 << bitIndex);
@@ -352,16 +315,19 @@ class PrintTemplate {
 
         // Set image dimensions
         commands.push(widthBytes & 0xFF, (widthBytes >> 8) & 0xFF); // xL, xH - width bytes
-        commands.push(height & 0xFF, (height >> 8) & 0xFF); // yL, yH - height pixels
+        commands.push(canvas.height & 0xFF, (canvas.height >> 8) & 0xFF); // yL, yH - height pixels
 
         // Add the monochrome image data
         for (let i = 0; i < monochromeData.length; i++) {
             commands.push(monochromeData[i]);
         }
 
-        // Add feed and cut at the end
-        commands.push(0x1B, 0x64, 0x02); // Feed 2 line
-        commands.push(0x1D, 0x56, 0x41, 0); // Partial cut
+        // Feed paper and cut
+        commands.push(0x1B, 0x64, 0x05); // Feed 5 lines
+        commands.push(0x1D, 0x56, 0x41, 0x10); // Paper cut
+
+        // Log command length for debugging
+        console.log(`Generated ESC/POS commands: ${commands.length} bytes`);
 
         return new Uint8Array(commands);
     }
@@ -378,7 +344,7 @@ class PrintTemplate {
             // Basic business info
             businessName: `${seller.businessName || 'Your Business'}`,
             logo: seller.logo ?
-                `<div class="text-center"><img src="${seller.logo}" alt="Logo" class="max-w-[45mm] max-h-[15mm] mx-auto"></div>` :
+                `<div class="text-center"><img src="${seller.logo}" alt="Logo" class="max-w-[320px] max-h-[60px] mx-auto"></div>` :
                 '<div class="text-center"><i class="ph ph-storefront text-2xl"></i></div>',
             phone: seller.phone ? `${seller.phone}` : '',
             address: seller.address ? `${seller.address}` : '',
@@ -618,6 +584,44 @@ class PrintTemplate {
         }
 
         return sections;
+    }
+
+    /**
+     * Opens a preview window showing both PNG and HTML renders of the receipt
+     * @param {string} pngDataUrl - The PNG data URL of the rendered receipt
+     * @param {HTMLElement} receiptContent - The HTML content of the receipt
+     * @private
+     */
+    async _openPreviewWindow(pngDataUrl, receiptContent) {
+        const previewWindow = window.open();
+        previewWindow.document.write(`
+            <html>
+            <head>
+                <title>Receipt Preview</title>
+                <script src="https://cdn.tailwindcss.com"></script>
+                <style>
+                    body { display: flex; flex-direction: column; align-items: center; }
+                    .preview-container { display: flex; gap: 20px; margin-top: 20px; }
+                    .preview-section { border: 1px solid #ccc; padding: 10px; }
+                </style>
+            </head>
+            <body>
+                <h2>Receipt Preview</h2>
+                <div class="preview-container">
+                    <div class="preview-section">
+                        <h3>PNG Render (Used for Printing)</h3>
+                        <img src="${pngDataUrl}" alt="Receipt Preview">
+                    </div>
+                    <div class="preview-section">
+                        <h3>HTML Render</h3>
+                        <div style="border: 1px dashed #ccc;">
+                            ${receiptContent.innerHTML}
+                        </div>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `);
     }
 }
 
