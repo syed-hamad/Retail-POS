@@ -344,7 +344,7 @@ class PrintTemplate {
             // Basic business info
             businessName: `${seller.businessName || 'Your Business'}`,
             logo: seller.logo ?
-                `<div class="text-center"><img src="${seller.logo}" alt="Logo" class="max-w-[320px] max-h-[60px] mx-auto"></div>` :
+                `<div class="text-center"><img src="${seller.logo}" alt="Logo" class="max-w-[200px] max-h-[60px] mx-auto"></div>` :
                 '<div class="text-center"><i class="ph ph-storefront text-2xl"></i></div>',
             phone: seller.phone ? `${seller.phone}` : '',
             address: seller.address ? `${seller.address}` : '',
@@ -427,7 +427,7 @@ class PrintTemplate {
      * @private
      */
     _generateBillItemsList(items) {
-        let html = `<div class="flex w-full font-bold border-b border-dashed border-gray-400">
+        let html = `<div class="flex w-full font-bold border-b border-dashed border-gray-400 text-xs m-0 p-0">
             <div class="w-[10%]">Qty</div>
             <div class="w-[70%]">Item</div>
             <div class="w-[20%] text-right">Amt</div>
@@ -458,15 +458,14 @@ class PrintTemplate {
      * @private
      */
     _generateKOTItemsList(items) {
-        let html = `<div class="text-center font-bold text-xs">KITCHEN ORDER</div>
-        <div class="border-t border-dashed border-gray-400 mb-0.5"></div>`;
+        let html = ``;
 
         items.forEach(item => {
             const quantity = parseFloat(item.quantity || item.qnt || 1);
 
             html += `<div class="flex text-xs">
-                <div class="w-5 font-bold">${quantity}x</div>
-                <div class="flex-1 font-bold">${item.title || 'Unknown Item'}</div>
+                <div class="w-[10%] font-bold">${quantity}x</div>
+                <div class="w-[90%] font-bold">${item.title || 'Unknown Item'}</div>
             </div>`;
 
             if (item.instructions) {
@@ -476,7 +475,6 @@ class PrintTemplate {
             }
         });
 
-        html += '<div class="border-t border-dashed border-gray-400 mt-0.5"></div>';
         return html;
     }
 
